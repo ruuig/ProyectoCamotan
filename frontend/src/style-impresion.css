@@ -1,0 +1,134 @@
+/*
+ * Hoja de impresion de fichas clinicas.
+ *
+ * Carta, margenes de 1.5 cm, blanco y negro. Se imprime desde el navegador o
+ * se guarda como PDF: funciona sin conexion, no necesita un navegador sin
+ * cabeza en el servidor y corre en los equipos que ya tiene el centro.
+ */
+
+@media print {
+  @page {
+    size: letter;
+    margin: 1.5cm;
+  }
+
+  /* Fuera todo lo que no es el documento: menus, botones, avisos. */
+  body * {
+    visibility: hidden;
+  }
+
+  .hoja-impresion,
+  .hoja-impresion * {
+    visibility: visible;
+  }
+
+  .hoja-impresion {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    /* Blanco y negro: el establecimiento imprime en laser monocromatica. */
+    color: #000;
+    background: #fff;
+    font-size: 10pt;
+    line-height: 1.35;
+  }
+
+  .no-imprimir {
+    display: none !important;
+  }
+
+  /* Una seccion no se parte entre dos paginas. */
+  .bloque-impresion {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .salto-pagina {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .hoja-impresion table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .hoja-impresion th,
+  .hoja-impresion td {
+    border: 1px solid #000;
+    padding: 2pt 4pt;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .hoja-impresion h1 {
+    font-size: 13pt;
+  }
+
+  .hoja-impresion h2 {
+    font-size: 11pt;
+    border-bottom: 1px solid #000;
+    margin-top: 8pt;
+  }
+
+  /* El encabezado y el pie se repiten en cada pagina. */
+  .encabezado-impresion {
+    display: table-header-group;
+  }
+
+  .pie-impresion {
+    display: table-footer-group;
+  }
+
+  a {
+    text-decoration: none;
+    color: #000;
+  }
+
+  /* Las casillas se dibujan con caracteres, no con imagenes: siempre salen. */
+  .casilla::before {
+    content: '☐ ';
+  }
+
+  .casilla-marcada::before {
+    content: '☒ ';
+  }
+}
+
+/* Fuera de impresion la hoja se ve como una vista previa en pantalla. */
+.hoja-impresion {
+  background: #fff;
+  color: var(--tinta);
+}
+
+/* La vista previa en pantalla se parece al papel: mismas tablas y títulos. */
+.hoja-impresion table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.hoja-impresion th,
+.hoja-impresion td {
+  border: 1px solid #000;
+  padding: 2pt 4pt;
+  text-align: left;
+  vertical-align: top;
+}
+
+.hoja-impresion th {
+  font-weight: 700;
+}
+
+.hoja-impresion h2 {
+  font-weight: 700;
+  border-bottom: 1px solid #000;
+  margin-top: 10pt;
+}
+
+/* Tablas anchas de la bodega (BRES, balance): menos relleno para que quepan
+   en carta. Gana sobre la regla general de arriba, también al imprimir. */
+.hoja-impresion .tabla-compacta th,
+.hoja-impresion .tabla-compacta td {
+  padding: 1pt 2pt;
+}

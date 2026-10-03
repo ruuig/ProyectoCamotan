@@ -1,0 +1,220 @@
+/*
+  Lenguaje visual del sistema: botones, campos, paneles, tablas y franjas de
+  cifras. Clases con prefijo b- para no chocar con las de Tailwind. Nació en
+  la bodega y se usa en todo el sistema; se carga una vez en main.js.
+*/
+
+/* --- Marco con pestañas ----------------------------------------------------- */
+.b-hoja { background: #fff; border: 2px solid #CBD5E1; border-radius: 18px; overflow: hidden; }
+.b-cuerpo { padding: 20px 24px 28px; }
+@media (max-width: 640px) { .b-cuerpo { padding: 16px; } }
+
+.b-carpetas { display: flex; gap: 4px; padding: 12px 20px 0; background: #EEF2F7; border-bottom: 2px solid #CBD5E1; overflow-x: auto; }
+.b-carpeta {
+  position: relative; top: 2px; display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; white-space: nowrap;
+  font-weight: 700; font-size: 15px; color: #475569; background: #E2E8F0; border: 2px solid #CBD5E1; border-bottom: none;
+  border-radius: 12px 12px 0 0; transition: background .15s, color .15s;
+}
+.b-carpeta:hover { background: #F4F6FA; color: #14244A; }
+.b-carpeta.activa { background: #fff; color: #172A5A; box-shadow: inset 0 3px 0 #172A5A; }
+.b-contador { min-width: 24px; padding: 1px 7px; border-radius: 6px; font-size: 12px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.b-contador.rojo { background: #FBE3EA; color: #922845; }
+.b-contador.ambar { background: #FDF0D5; color: #8A5A06; }
+.b-contador.gris { background: #E2E8F0; color: #334155; }
+
+/* --- Cabecera ------------------------------------------------------------------ */
+.b-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; }
+.b-titulo { font-size: 30px; font-weight: 600; line-height: 1.1; color: #14244A; }
+.b-antetitulo { font-size: 14px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748B; }
+.b-volver { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 14px; font-weight: 700; color: #475569; }
+.b-volver:hover { color: #172A5A; }
+.b-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* --- Botones ------------------------------------------------------------------- */
+.b-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; padding: 0 20px; border-radius: 12px;
+  font-weight: 700; font-size: 15px; white-space: nowrap; transition: background .15s, box-shadow .15s, color .15s; cursor: pointer;
+}
+.b-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+.b-btn:disabled { opacity: .5; cursor: not-allowed; }
+.b-btn.primario { background: #172A5A; color: #fff; box-shadow: 0 2px 0 #0B163A, 0 6px 14px -6px rgba(23,42,90,.6); }
+.b-btn.primario:hover:not(:disabled) { background: #1F3A7A; }
+.b-btn.primario:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 1px 0 #0B163A; }
+.b-btn.secundario { background: #fff; color: #172A5A; border: 2px solid #172A5A; }
+.b-btn.secundario:hover:not(:disabled) { background: #EEF2FF; }
+.b-btn.peligro { background: #fff; color: #A52A2A; border: 2px solid #C03535; }
+.b-btn.peligro:hover:not(:disabled) { background: #FDECEC; }
+.b-btn.exito { background: #1E8E5E; color: #fff; box-shadow: 0 2px 0 #13603F; }
+.b-btn.exito:hover:not(:disabled) { background: #22A06B; }
+.b-btn.chico { height: 36px; padding: 0 14px; border-radius: 9px; font-size: 13px; }
+.b-btn.chico svg { width: 16px; height: 16px; }
+
+/* --- Selector segmentado ------------------------------------------------------ */
+.b-segmentado { display: inline-flex; padding: 4px; background: #F1F5F9; border-radius: 12px; }
+.b-segmentado button, .b-segmentado a { padding: 8px 16px; border-radius: 9px; font-weight: 700; font-size: 14px; color: #475569; white-space: nowrap; }
+.b-segmentado button:hover, .b-segmentado a:hover { color: #14244A; }
+.b-segmentado .on { background: #fff; color: #172A5A; box-shadow: 0 1px 3px rgba(15,23,42,.18); }
+
+/* --- Pasos (cierre del mes) ---------------------------------------------------- */
+.b-pasos { display: flex; gap: 0; border: 2px solid #E2E8F0; border-radius: 14px; overflow: hidden; }
+.b-paso { flex: 1 1 0; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-right: 2px solid #E2E8F0; color: #475569; min-width: 0; }
+.b-paso:last-child { border-right: none; }
+.b-paso:hover { background: #F8FAFC; }
+.b-paso .num { display: grid; place-items: center; flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; border: 2px solid #94A3B8; font-weight: 700; font-size: 14px; }
+.b-paso .txt { min-width: 0; line-height: 1.2; }
+.b-paso .txt b { display: block; font-size: 15px; color: #14244A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b-paso .txt small { font-size: 12px; font-weight: 600; color: #64748B; }
+.b-paso.on { background: #F1F5FA; box-shadow: inset 0 -4px 0 #172A5A; }
+.b-paso.on .num { background: #172A5A; border-color: #172A5A; color: #fff; }
+.b-paso.listo .num { background: #1E8E5E; border-color: #1E8E5E; color: #fff; }
+
+/* --- Franja de cifras --------------------------------------------------------- */
+.b-franja { display: flex; flex-wrap: wrap; border: 2px solid #E2E8F0; border-radius: 14px; overflow: hidden; }
+.b-cifra { flex: 1 1 0; display: flex; align-items: baseline; gap: 10px; padding: 12px 22px; border-right: 2px solid #E2E8F0; text-align: left; white-space: nowrap; }
+.b-cifra:last-child { border-right: none; }
+.b-cifra { color: #14244A; }
+.b-cifra .n { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.b-cifra .e { font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .05em; }
+button.b-cifra:hover { background: #F8FAFC; }
+button.b-cifra.on { background: #FFF7ED; box-shadow: inset 0 -4px 0 #EA580C; }
+@media (max-width: 900px) { .b-cifra { flex-basis: 45%; border-bottom: 2px solid #E2E8F0; } }
+
+/* --- Campos ------------------------------------------------------------------- */
+.b-etiqueta { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #475569; }
+.b-campo {
+  width: 100%; height: 46px; padding: 0 14px; border: 2px solid #CBD5E1; border-radius: 10px; background: #fff; font-size: 15px; color: #14244A;
+  transition: border-color .15s, box-shadow .15s;
+}
+textarea.b-campo { height: auto; min-height: 80px; padding: 10px 14px; }
+.b-campo:focus { outline: none; border-color: #172A5A; box-shadow: 0 0 0 3px #DCE4F5; }
+.b-campo.num { text-align: right; font-variant-numeric: tabular-nums; }
+.b-buscar { position: relative; }
+.b-buscar svg { position: absolute; left: 13px; top: 50%; width: 20px; height: 20px; margin-top: -10px; color: #64748B; pointer-events: none; }
+.b-buscar .b-campo { padding-left: 42px; }
+/* Sin flechas en campos numéricos */
+.b-campo::-webkit-outer-spin-button, .b-campo::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.b-campo[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* --- Paneles ------------------------------------------------------------------ */
+.b-panel { border: 2px solid #E2E8F0; border-radius: 16px; background: #fff; }
+.b-panel-cabeza { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 2px solid #E2E8F0; }
+.b-panel-titulo { font-size: 17px; font-weight: 700; color: #14244A; }
+.b-panel-cuerpo { padding: 16px 18px; }
+.b-subtitulo { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #64748B; }
+.b-aviso { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-radius: 12px; font-weight: 600; }
+.b-aviso.error { background: #FDECEC; color: #8C1D1D; border: 2px solid #F3BDBD; }
+.b-aviso.ok { background: #EAF7F0; color: #145C3C; border: 2px solid #B5E2CB; }
+.b-aviso.atencion { background: #FFF7E6; color: #7A4F05; border: 2px solid #F5D58A; }
+.b-vacio { padding: 40px 16px; text-align: center; color: #64748B; font-weight: 600; }
+
+/* --- Tabla -------------------------------------------------------------------- */
+.b-tabla-marco { border: 2px solid #E2E8F0; border-radius: 14px; overflow: auto; background: #fff; }
+.b-tabla { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.b-tabla th { position: sticky; top: 0; z-index: 1; padding: 10px 12px; background: #F1F5F9; border-bottom: 2px solid #E2E8F0; text-align: left; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #475569; white-space: nowrap; }
+.b-tabla td { padding: 9px 12px; border-bottom: 1px solid #EEF2F6; color: #1E293B; }
+.b-tabla tr:last-child td { border-bottom: none; }
+.b-tabla tbody tr:hover td { background: #F8FAFC; }
+.b-tabla .n { text-align: right; white-space: nowrap; }
+.b-tabla .cero { color: #CBD5E1; }
+.b-tabla .fuerte { font-weight: 700; color: #14244A; }
+
+/* --- Fila de insumo con lomo -------------------------------------------------- */
+.b-fila {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 8px 14px 8px 0; background: #fff; border: 2px solid #E2E8F0;
+  border-radius: 14px; overflow: hidden; text-align: left; transition: border-color .15s, box-shadow .15s;
+}
+.b-fila:hover { border-color: #94A3B8; }
+.b-fila.sel { border-color: var(--cat); box-shadow: 0 0 0 3px var(--cat-fondo); }
+.b-lomo {
+  align-self: stretch; flex-shrink: 0; width: 46px; margin: -8px 0; display: grid; place-items: center; color: #fff;
+  background: var(--cat); box-shadow: inset -6px 0 0 rgba(255,255,255,.18), inset -7px 0 0 rgba(0,0,0,.08);
+}
+.b-lomo svg { width: 24px; height: 24px; }
+
+/* Etiqueta de estante (categoría en un encabezado) */
+.b-estante {
+  position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px 7px 30px; font-weight: 700; font-size: 13px; color: #fff;
+  background: var(--cat-tinta); clip-path: polygon(14px 0, 100% 0, 100% 100%, 14px 100%, 0 50%); border-radius: 0 8px 8px 0;
+}
+.b-estante .ojal { position: absolute; left: 13px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: #fff; }
+.b-estante svg { width: 18px; height: 18px; }
+
+/* Ficha de categoría para filtrar */
+.b-ficha-cat {
+  display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 11px 0 4px; border: 2px solid #E2E8F0; border-radius: 10px;
+  font-weight: 700; font-size: 13px; color: #334155; background: #fff; white-space: nowrap;
+}
+.b-ficha-cat .ic { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--cat); color: #fff; }
+.b-ficha-cat .ic svg { width: 17px; height: 17px; }
+.b-ficha-cat:hover { border-color: var(--cat); }
+.b-ficha-cat.on { border-color: var(--cat); background: var(--cat-fondo); color: var(--cat-tinta); }
+
+/* --- Pedido ------------------------------------------------------------------- */
+.b-pedido { display: inline-flex; flex-direction: column; align-items: center; padding: 4px 10px 5px; border: 2px dashed #EA580C; border-radius: 10px; background: #FFF7ED; }
+.b-pedido .t { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #C2410C; }
+.b-pedido .v { font-weight: 700; font-size: 17px; color: #7C2D12; font-variant-numeric: tabular-nums; }
+
+/* --- Recibo de cálculo -------------------------------------------------------- */
+.b-recibo { padding: 14px 16px; background: #FFFDF7; border: 1px solid #E7E5E4; border-radius: 4px; font-variant-numeric: tabular-nums;
+  background-image: repeating-linear-gradient(0deg, transparent 0 27px, #F1EFEA 27px 28px); }
+.b-recibo div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; color: #44403C; }
+.b-recibo dd { font-weight: 700; color: #1C1917; }
+.b-recibo .total { margin-top: 6px; padding-top: 8px; border-top: 2px dashed #A8A29E; font-size: 17px; }
+.b-recibo .total dt { font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #9A3412; }
+.b-recibo .total dd { color: #9A3412; font-size: 20px; }
+
+/* --- Lote como boleto --------------------------------------------------------- */
+.b-boleto {
+  position: relative; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 10px 12px 10px 22px;
+  background: #fff; border: 2px solid #CBD5E1; border-radius: 10px;
+  -webkit-mask: radial-gradient(circle 6px at 0 50%, transparent 6px, #000 6.5px); mask: radial-gradient(circle 6px at 0 50%, transparent 6px, #000 6.5px);
+}
+.b-boleto::before { content: ''; position: absolute; left: 12px; top: 8px; bottom: 8px; border-left: 2px dotted #CBD5E1; }
+.b-boleto .codigo { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #14244A; }
+.b-boleto .cant { font-weight: 700; font-variant-numeric: tabular-nums; color: #334155; }
+.b-boleto.vacio { border-style: dashed; background: #F8FAFC; }
+.b-boleto.vacio .codigo { color: #94A3B8; font-family: inherit; }
+a.b-boleto:hover, button.b-boleto:hover { border-color: #64748B; }
+
+/* --- Sello de vencimiento ----------------------------------------------------- */
+.b-sello { display: inline-flex; flex-direction: column; align-items: center; min-width: 52px; padding: 2px 6px; border: 3px double currentColor; border-radius: 6px; line-height: 1.05; font-weight: 700; }
+.b-sello .m { font-size: 10px; letter-spacing: .14em; }
+.b-sello .a { font-size: 16px; }
+.b-sello.verde { color: #16794F; }
+.b-sello.amarillo { color: #B7710A; }
+.b-sello.rojo { color: #D32F2F; }
+.b-sello.vencido { color: #7F1D1D; background: repeating-linear-gradient(-45deg, transparent 0 4px, rgba(127,29,29,.18) 4px 6px); text-decoration: line-through; }
+.b-sello.sin_fecha { color: #94A3B8; border-style: dashed; border-width: 2px; }
+
+/* --- Estado (texto con marco) ------------------------------------------------- */
+.b-estado { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.b-estado.disponible { background: #E3F5EC; color: #145C3C; }
+.b-estado.cuarentena { background: #FDF0D5; color: #7A4F05; }
+.b-estado.retirado, .b-estado.vencido { background: #FBE3E3; color: #8C1D1D; }
+.b-estado.agotado, .b-estado.dado_de_baja { background: #EEF2F6; color: #475569; }
+
+/* --- Ficha de filtro (sí/no) -------------------------------------------------- */
+.b-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border: 2px solid #E2E8F0; border-radius: 10px;
+  background: #fff; font-weight: 700; font-size: 13px; color: #334155; white-space: nowrap; transition: border-color .15s, background .15s;
+}
+.b-chip:hover { border-color: #94A3B8; }
+.b-chip.on { border-color: #172A5A; background: #EEF2FA; color: #172A5A; }
+.b-chip .n { font-variant-numeric: tabular-nums; color: #64748B; font-weight: 600; }
+
+/* --- Formularios en secciones -------------------------------------------------- */
+.b-form-seccion { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; padding: 22px 0; border-top: 2px solid #EEF2F6; }
+.b-form-seccion:first-of-type { border-top: none; padding-top: 4px; }
+.b-form-seccion > header h2 { font-size: 16px; font-weight: 700; color: #14244A; }
+.b-form-seccion > header p { margin-top: 4px; font-size: 13px; color: #64748B; }
+@media (max-width: 900px) { .b-form-seccion { grid-template-columns: 1fr; gap: 12px; } }
+.b-rejilla { display: grid; gap: 16px 18px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.b-rejilla > * { grid-column: span 12; }
+@media (min-width: 640px) {
+  .b-rejilla .c3 { grid-column: span 3; } .b-rejilla .c4 { grid-column: span 4; } .b-rejilla .c5 { grid-column: span 5; }
+  .b-rejilla .c6 { grid-column: span 6; } .b-rejilla .c7 { grid-column: span 7; } .b-rejilla .c8 { grid-column: span 8; }
+  .b-rejilla .c9 { grid-column: span 9; } .b-rejilla .c12 { grid-column: span 12; }
+}
+.b-ayuda-error { margin-top: 4px; font-size: 13px; font-weight: 600; color: #B42318; }
+.b-campo.invalido { border-color: #D64545; }
+.b-opcional { font-weight: 600; text-transform: none; letter-spacing: 0; color: #94A3B8; }

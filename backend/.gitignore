@@ -1,0 +1,3 @@
+# Las reglas generales están en el .gitignore de la raíz.
+.env
+node_modules/

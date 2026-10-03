@@ -1,0 +1,1107 @@
+// Sistema de gestion clinica - Centro de Salud de Camotan, Chiquimula
+//
+// Los @map / @@map traducen a snake_case porque la vista materializada
+// consumo_diario de la especificacion consulta movimiento_insumo, lote_id y
+// registrado_en. Sin ellos esa vista no compila contra la base generada.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Establecimiento {
+  id           Int      @id @default(autoincrement())
+  codigo       String   @unique
+  nombre       String
+  municipio    String
+  departamento String
+  tipo         String // centro_salud_a | centro_salud_b | puesto_salud
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now()) @map("creado_en")
+
+  usuarios                  Usuario[]
+  configLogistica           ConfiguracionLogistica?
+  demandaNoAtendida         DemandaNoAtendida[]
+  inventariosFisicos        InventarioFisico[]
+  informesBres              Bres[]
+  retirosSanitarios         RetiroSanitario[]
+  oficiosBaja               OficioBaja[]
+  pacientes                 Paciente[]
+  clinicas                  Clinica[]
+  insumos                   Insumo[]
+  signos                    SignoPeligro[]
+  atenciones                Atencion[]
+  alertas                   Alerta[]
+  correlativos              CorrelativoExpediente[]
+  lugares                   LugarPoblado[]
+  ubicaciones               Ubicacion[]
+  traslados                 Traslado[]
+  inventarioCierreHistorico InventarioCierreHistorico[]
+
+  @@map("establecimiento")
+}
+
+model Usuario {
+  id                Int      @id @default(autoincrement())
+  establecimientoId Int      @map("establecimiento_id")
+  usuario           String   @unique
+  passwordHash      String   @map("password_hash")
+  nombre            String
+  dpi               String?  @unique // solo identificador, NO es secreto
+  rol               String // admin | preconsulta | medico | farmacia | bodega
+  esDirector        Boolean  @default(false) @map("es_director")
+  activo            Boolean  @default(true)
+  totpSecret        String?  @map("totp_secret")
+  creadoEn          DateTime @default(now()) @map("creado_en")
+
+  establecimiento      Establecimiento          @relation(fields: [establecimientoId], references: [id])
+  bitacora             Bitacora[]
+  dispensaciones       Dispensacion[]
+  movimientos          MovimientoInsumo[]
+  signosEditados       SignoPeligro[]           @relation("SignoActualizadoPor")
+  alertasGestionadas   Alerta[]                 @relation("AlertaEstadoPor")
+  lotesEstado          Lote[]                   @relation("LoteEstadoPor")
+  configLogistica      ConfiguracionLogistica[] @relation("ConfigLogisticaPor")
+  demandasRegistradas  DemandaNoAtendida[]      @relation("DemandaRegistradaPor")
+  inventariosIniciados InventarioFisico[]       @relation("InventarioIniciadoPor")
+  inventariosCerrados  InventarioFisico[]       @relation("InventarioCerradoPor")
+  inventariosAutoriza  InventarioFisico[]       @relation("InventarioAutorizadoPor")
+  conteos              ConteoFisico[]           @relation("ConteoPor")
+  bresGenerados        Bres[]                   @relation("BresGeneradoPor")
+  retirosRegistrados   RetiroSanitario[]        @relation("RetiroRegistradoPor")
+  retiroPacientes      RetiroPaciente[]         @relation("RetiroPacientePor")
+  oficiosSolicitados   OficioBaja[]             @relation("OficioSolicitadoPor")
+  oficiosAutorizados   OficioBaja[]             @relation("OficioAutorizadoPor")
+  notasCorreccion      NotaCorreccion[]         @relation("NotaRegistradaPor")
+  seccionesFicha       SeccionPaciente[]        @relation("SeccionActualizadaPor")
+  cambiosFicha         CambioFicha[]            @relation("CambioFichaPor")
+  archivosSubidos      ArchivoPaciente[]        @relation("ArchivoSubidoPor")
+  traslados            Traslado[]               @relation("TrasladoEntregadoPor")
+  reportesServicio     ReporteServicio[]        @relation("ReporteCapturadoPor")
+  operaciones          OperacionIdempotente[]
+  atencionesAtendidas  Atencion[]               @relation("AtencionAtendidaPor")
+  constanciasEntrega   ConstanciaEntrega[]      @relation("ConstanciaRegistradaPor")
+
+  @@index([establecimientoId, rol])
+  @@map("usuario")
+}
+
+model Paciente {
+  id                Int      @id @default(autoincrement())
+  establecimientoId Int      @map("establecimiento_id")
+  cui               String?  @unique
+  // Correlativo que genera el sistema: AAAA-NNNNN, legible y sin sufijos al azar.
+  expediente        String
+  // Numero del expediente fisico de quienes ya existian antes del sistema.
+  expedientePapel   String?  @map("expediente_papel")
+  nombres           String
+  apellidos         String
+  fechaNacimiento   DateTime @map("fecha_nacimiento")
+  sexo              String // M | F
+  // Se conserva el texto libre para no perder lo ya escrito; el dato vivo es
+  // lugarPobladoId, que apunta al catalogo del municipio.
+  comunidad         String
+  lugarPobladoId    Int?     @map("lugar_poblado_id")
+  telefono          String?
+
+  // --- Edad aproximada (el paciente no conoce su fecha de nacimiento) ------
+  fechaNacimientoEstimada Boolean @default(false) @map("fecha_nacimiento_estimada")
+
+  // --- Ficha completa: todo opcional, se llena cuando hay tiempo -----------
+  departamentoNacimiento String?  @map("departamento_nacimiento")
+  municipioNacimiento    String?  @map("municipio_nacimiento")
+  domicilio              String?
+  municipioResidencia    String?  @map("municipio_residencia")
+  // Campos de las fichas clinicas oficiales (ver MD/fichas.md).
+  departamentoResidencia String?  @map("departamento_residencia")
+  celular                String?
+  noInscritoRenap        Boolean? @map("no_inscrito_renap")
+  edadMadre              Int?     @map("edad_madre")
+  // Escolaridad como la pregunta la ficha de adulto; el codigo SIGSA se deriva.
+  nivelEscolar           String?  @map("nivel_escolar")
+  trabajoEspecifique     String?  @map("trabajo_especifique")
+  pueblo                 String?
+  comunidadLinguistica   String?  @map("comunidad_linguistica")
+  // Sin registrar es null: nunca se asume "No".
+  migrante               Boolean?
+  origenMigracion        String?  @map("origen_migracion")
+  escolaridad            String?
+  estudiaActualmente     Boolean? @map("estudia_actualmente")
+  desercionEscolar       Boolean? @map("desercion_escolar")
+  ultimoGradoAprobado    String?  @map("ultimo_grado_aprobado")
+  aniosRepetidos         Int?     @map("anios_repetidos")
+  motivoNoEstudia        String?  @map("motivo_no_estudia")
+  trabaja                Boolean?
+  profesionOficio        String?  @map("profesion_oficio")
+  estadoCivil            String?  @map("estado_civil")
+  religion               String?
+  correo                 String?
+  redesSociales          String?  @map("redes_sociales")
+  discapacidad           String?
+
+  // --- Responsable o referente adulto (obligatorio en menores de 18) -------
+  responsableNombre     String? @map("responsable_nombre")
+  responsableParentesco String? @map("responsable_parentesco")
+  responsableTelefono   String? @map("responsable_telefono")
+  responsableDpi        String? @map("responsable_dpi")
+
+  // --- Datos sensibles: solo rol medico y administrador, con bitacora ------
+  orientacionSexual    String? @map("orientacion_sexual")
+  identidadGenero      String? @map("identidad_genero")
+  antecedenteViolencia String? @map("antecedente_violencia")
+  antecedenteMaltrato  String? @map("antecedente_maltrato")
+  ideasSuicidas        String? @map("ideas_suicidas")
+  problemasJudiciales  String? @map("problemas_judiciales")
+
+  // Marca de ficha incompleta: se recalcula al guardar.
+  fichaCompleta Boolean  @default(false) @map("ficha_completa")
+  idiomaMaterno String   @default("espanol") @map("idioma_materno")
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en")
+
+  establecimiento   Establecimiento     @relation(fields: [establecimientoId], references: [id])
+  condiciones       CondicionPaciente[]
+  atenciones        Atencion[]
+  antropometrias    Antropometria[]
+  embarazos         EpisodioEmbarazo[]
+  lugarPoblado      LugarPoblado?       @relation(fields: [lugarPobladoId], references: [id])
+  demandaNoAtendida DemandaNoAtendida[]
+  retiros           RetiroPaciente[]
+  secciones         SeccionPaciente[]
+  cambiosFicha      CambioFicha[]
+  archivos          ArchivoPaciente[]
+
+  // El expediente es correlativo interno: unico por establecimiento, no global.
+  @@unique([establecimientoId, expediente])
+  @@index([establecimientoId, apellidos, nombres])
+  @@index([establecimientoId, comunidad])
+  @@map("paciente")
+}
+
+/// Catalogos oficiales del formulario FOR-SIGSA-3CS v3.0 (noviembre 2017).
+///
+/// Van en una sola tabla con discriminador en vez de quince tablas casi
+/// identicas: los valores solo cambian cuando el MSPAS publica una version
+/// nueva del formulario, y asi se actualizan en un solo lugar.
+///
+/// El codigo es el mismo del formulario oficial, para que la exportacion a
+/// SIGSA no tenga que traducir nada.
+/// Episodio de embarazo: tiene principio y fin.
+///
+/// Como casilla del paciente se quedaba marcada para siempre y seguia dando
+/// prioridad en la cola anios despues del parto.
+model EpisodioEmbarazo {
+  id                 Int       @id @default(autoincrement())
+  pacienteId         Int       @map("paciente_id")
+  fechaUltimaRegla   DateTime? @map("fecha_ultima_regla")
+  semanasAlRegistrar Int?      @map("semanas_al_registrar")
+  fechaProbableParto DateTime? @map("fecha_probable_parto")
+  estado             String    @default("activo") // activo | finalizado
+  abiertoEn          DateTime  @default(now()) @map("abierto_en")
+  cerradoEn          DateTime? @map("cerrado_en")
+  motivoCierre       String?   @map("motivo_cierre")
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@index([pacienteId, estado])
+  @@map("episodio_embarazo")
+}
+
+model CatalogoSigsa {
+  id       Int     @id @default(autoincrement())
+  catalogo String // pueblo | comunidad_linguistica | escolaridad | ...
+  codigo   String // codigo del formulario oficial, tal cual
+  etiqueta String
+  orden    Int     @default(0)
+  activo   Boolean @default(true)
+
+  @@unique([catalogo, codigo])
+  @@index([catalogo, orden])
+  @@map("catalogo_sigsa")
+}
+
+/// Lugares poblados del municipio. No se siembra con datos inventados: solo
+/// con las comunidades que ya aparecen en los pacientes, y el resto se carga
+/// por CSV desde Administracion.
+model LugarPoblado {
+  id                 Int      @id @default(autoincrement())
+  establecimientoId  Int      @map("establecimiento_id")
+  nombre             String
+  categoria          String // aldea | caserio | barrio | colonia | otro
+  territorio         String?
+  sector             String?
+  // Minutos de viaje al centro de salud; los registra el personal.
+  tiempoViajeMinutos Int?     @map("tiempo_viaje_minutos")
+  activo             Boolean  @default(true)
+  creadoEn           DateTime @default(now()) @map("creado_en")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  pacientes       Paciente[]
+
+  // Un mismo nombre existe en aldeas distintas: hay un Descombro en La Lima
+  // y otro en Lela Obraje. Lo que identifica al lugar es nombre + aldea.
+  @@unique([establecimientoId, nombre, sector])
+  @@index([establecimientoId, activo])
+  @@map("lugar_poblado")
+}
+
+model CorrelativoExpediente {
+  establecimientoId Int      @map("establecimiento_id")
+  anio              Int
+  ultimo            Int      @default(0)
+  actualizadoEn     DateTime @updatedAt @map("actualizado_en")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+
+  @@id([establecimientoId, anio])
+  @@map("correlativo_expediente")
+}
+
+model CondicionPaciente {
+  id           Int       @id @default(autoincrement())
+  pacienteId   Int       @map("paciente_id")
+  tipo         String // embarazo | menor_5 | adulto_mayor | discapacidad
+  vigenteDesde DateTime  @default(now()) @map("vigente_desde")
+  vigenteHasta DateTime? @map("vigente_hasta")
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@index([pacienteId])
+  @@map("condicion_paciente")
+}
+
+model Clinica {
+  id                Int     @id @default(autoincrement())
+  establecimientoId Int     @map("establecimiento_id")
+  nombre            String
+  disponible        Boolean @default(true)
+  activa            Boolean @default(true)
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  atenciones      Atencion[]
+
+  @@index([establecimientoId, activa, disponible])
+  @@map("clinica")
+}
+
+model SignoPeligro {
+  id                Int      @id @default(autoincrement())
+  establecimientoId Int      @map("establecimiento_id")
+  codigo            String
+  descripcion       String
+  grupoEtario       String   @map("grupo_etario") // todos | menor_5 | embarazada | adulto_mayor
+  // Etapa de vida de la ficha a la que pertenece el signo. Null aplica a todas.
+  etapa             String?
+  gravedadSugerida  String   @map("gravedad_sugerida") // urgente | moderado
+  orden             Int      @default(0)
+  activo            Boolean  @default(true)
+  creadoEn          DateTime @default(now()) @map("creado_en")
+  actualizadoEn     DateTime @updatedAt @map("actualizado_en")
+  actualizadoPor    Int?     @map("actualizado_por")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  editor          Usuario?        @relation("SignoActualizadoPor", fields: [actualizadoPor], references: [id])
+
+  @@unique([establecimientoId, codigo])
+  @@index([establecimientoId, activo, orden])
+  @@map("signo_peligro")
+}
+
+model Antropometria {
+  id                Int      @id @default(autoincrement())
+  pacienteId        Int      @map("paciente_id")
+  atencionId        Int?     @map("atencion_id") // null si se tomo en jornada extramural
+  fecha             DateTime @default(now())
+  edadMeses         Int      @map("edad_meses")
+  peso              Decimal  @db.Decimal(5, 2)
+  unidadPeso        String   @default("kg") @map("unidad_peso")
+  talla             Decimal  @db.Decimal(5, 2)
+  perimetroCefalico Decimal? @map("perimetro_cefalico") @db.Decimal(4, 1)
+  perimetroBraquial Decimal? @map("perimetro_braquial") @db.Decimal(4, 1) // MUAC
+  zPesoEdad         Decimal? @map("z_peso_edad") @db.Decimal(4, 2)
+  zTallaEdad        Decimal? @map("z_talla_edad") @db.Decimal(4, 2)
+  zPesoTalla        Decimal? @map("z_peso_talla") @db.Decimal(4, 2)
+  zImcEdad          Decimal? @map("z_imc_edad") @db.Decimal(4, 2)
+  clasificacion     String?
+  // Medicion que quien captura confirmo pese a ser biologicamente improbable.
+  // Se conserva porque el dato se tomo, pero no clasifica ni genera alertas.
+  improbable        Boolean  @default(false)
+  motivoImprobable  String?  @map("motivo_improbable")
+
+  paciente Paciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  atencion Atencion? @relation(fields: [atencionId], references: [id])
+
+  @@index([pacienteId, fecha])
+  @@index([clasificacion])
+  @@map("antropometria")
+}
+
+model ReferenciaOms {
+  id        Int     @id @default(autoincrement())
+  indicador String // peso_edad | talla_edad | peso_talla | imc_edad
+  sexo      String // M | F
+  x         Decimal @db.Decimal(6, 2) // edad en meses, o talla en cm segun indicador
+  l         Decimal @db.Decimal(10, 6)
+  m         Decimal @db.Decimal(10, 6)
+  s         Decimal @db.Decimal(10, 6)
+
+  @@unique([indicador, sexo, x])
+  @@map("referencia_oms")
+}
+
+model Atencion {
+  id                Int       @id @default(autoincrement())
+  establecimientoId Int       @map("establecimiento_id")
+  pacienteId        Int       @map("paciente_id")
+  clinicaId         Int?      @map("clinica_id")
+  estado            String    @default("en_espera") // en_espera|en_atencion|atendido|ausente
+  gravedad          String // urgente | moderado | leve
+  puntaje           Int       @default(0)
+  ausencias         Int       @default(0)
+  // Se captura al tomar los signos vitales, no al abrir la atencion.
+  motivoConsulta    String?   @map("motivo_consulta")
+  registradaEn      DateTime  @default(now()) @map("registrada_en")
+  reingresoEn       DateTime? @map("reingreso_en")
+  llamadaEn         DateTime? @map("llamada_en")
+  iniciadaEn        DateTime? @map("iniciada_en")
+  cerradaEn         DateTime? @map("cerrada_en")
+  // Diagnostico principal (el primero de diagnosticos), copiado aqui porque
+  // es lo que leen los informes.
+  diagnosticoCie    String?   @map("diagnostico_cie")
+  diagnosticoTxt    String?   @map("diagnostico_txt")
+  tratamiento       String?
+  proximaCita       DateTime? @map("proxima_cita")
+
+  // Hoja de evolucion del medico.
+  historiaEnfermedad String? @map("historia_enfermedad")
+  examenFisico       String? @map("examen_fisico")
+
+  // Datos del SIGSA 3CS de la visita, con los codigos del formulario.
+  tipoConsulta       Int?    @map("tipo_consulta") @db.SmallInt
+  controlSigsa       Int?    @map("control_sigsa") @db.SmallInt
+  semanasGestacion   Int?    @map("semanas_gestacion") @db.SmallInt
+  referenciaViene    Int?    @map("referencia_viene") @db.SmallInt
+  referenciaFue      Int?    @map("referencia_fue") @db.SmallInt
+  referidoA          String? @map("referido_a")
+  lugarNotificacion  Int?    @map("lugar_notificacion") @db.SmallInt
+  numeroNotificacion String? @map("numero_notificacion")
+  acompanante        String?
+
+  // "Mas de la ficha (opcional)".
+  examenSitios        Json?   @map("examen_sitios")
+  otrosProblemas      String? @map("otros_problemas")
+  laboratorios        String?
+  orientacionIntegral String? @map("orientacion_integral")
+
+  establecimiento Establecimiento       @relation(fields: [establecimientoId], references: [id])
+  paciente        Paciente              @relation(fields: [pacienteId], references: [id])
+  clinica         Clinica?              @relation(fields: [clinicaId], references: [id])
+  // Medico que cerro la consulta: responsable de la consulta en el SIGSA-4.
+  atendidaPor     Int?                  @map("atendida_por")
+  medico          Usuario?              @relation("AtencionAtendidaPor", fields: [atendidaPor], references: [id])
+  constancias     ConstanciaEntrega[]
+  preconsulta     Preconsulta?
+  prescripciones  Prescripcion[]
+  antropometrias  Antropometria[]
+  correcciones    NotaCorreccion[]
+  diagnosticos    DiagnosticoAtencion[]
+
+  @@index([establecimientoId, estado, puntaje(sort: Desc)])
+  @@index([registradaEn])
+  @@index([pacienteId, registradaEn])
+  @@map("atencion")
+}
+
+model Preconsulta {
+  id               Int      @id @default(autoincrement())
+  atencionId       Int      @unique @map("atencion_id")
+  // El peso se guarda siempre en kilogramos; la unidad dice como se capturo,
+  // para poder mostrar la equivalencia y que quien peso pueda verificarla.
+  peso             Decimal? @db.Decimal(5, 2)
+  unidadPeso       String   @default("kg") @map("unidad_peso")
+  talla            Decimal? @db.Decimal(5, 2)
+  temperatura      Decimal? @db.Decimal(4, 1)
+  presionSis       Int?     @map("presion_sis")
+  presionDia       Int?     @map("presion_dia")
+  frecCardiaca     Int?     @map("frec_cardiaca")
+  frecRespiratoria Int?     @map("frec_respiratoria")
+  satOxigeno       Int?     @map("sat_oxigeno")
+  signosPeligro    String[] @map("signos_peligro")
+  registradaEn     DateTime @default(now()) @map("registrada_en")
+
+  atencion Atencion @relation(fields: [atencionId], references: [id], onDelete: Cascade)
+
+  @@map("preconsulta")
+}
+
+model Insumo {
+  id                 Int      @id @default(autoincrement())
+  establecimientoId  Int      @map("establecimiento_id")
+  codigoMspas        String?  @map("codigo_mspas")
+  codigoInterno      String   @map("codigo_interno")
+  // El MSPAS identifica por Denominacion Comun Internacional: el nombre
+  // generico mas la forma farmaceutica y la concentracion.
+  nombreGenerico     String   @map("nombre_generico")
+  nombreComercial    String?  @map("nombre_comercial")
+  formaFarmaceutica  String?  @map("forma_farmaceutica")
+  concentracion      String?
+  componente         String?
+  // Categorias del centro, con su color (bodega.service CATEGORIAS).
+  categoria          String // medicamentos|suplementos|planificacion_familiar|medico_quirurgico|laboratorio|tuberculosis
+  presentacion       String
+  unidadMedida       String   @map("unidad_medida")
+  unidadEntrega      String   @map("unidad_entrega")
+  perecedero         Boolean  @default(true)
+  cadenaFrio         Boolean  @default(false) @map("cadena_frio")
+  // Minimo fijo heredado. Los niveles reales salen del PMDR; se conserva
+  // como respaldo mientras un insumo no tenga historia suficiente.
+  stockMinimo        Int      @default(0) @map("stock_minimo")
+  codigoBarras       String?  @map("codigo_barras")
+  costoReferencia    Decimal? @map("costo_referencia") @db.Decimal(12, 4)
+  // Unidades de entrega por caja o paquete: la distribucion redondea a esto.
+  unidadesPorEmpaque Int      @default(1) @map("unidades_por_empaque")
+  // Orden del balance y del BRES del centro.
+  ordenFormulario    Int?     @map("orden_formulario")
+  activo             Boolean  @default(true)
+
+  establecimiento           Establecimiento             @relation(fields: [establecimientoId], references: [id])
+  lotes                     Lote[]
+  prescripciones            Prescripcion[]
+  demandaNoAtendida         DemandaNoAtendida[]
+  renglonesBres             BresRenglon[]
+  alias                     InsumoAlias[]
+  renglonesReporte          ReporteServicioRenglon[]
+  inventarioCierreHistorico InventarioCierreHistorico[]
+
+  // El codigo MSPAS es nacional y se repite entre establecimientos.
+  @@unique([establecimientoId, codigoMspas])
+  @@index([establecimientoId, nombreGenerico])
+  @@index([componente])
+  @@map("insumo")
+}
+
+model Lote {
+  id               Int       @id @default(autoincrement())
+  insumoId         Int       @map("insumo_id")
+  numeroLote       String    @map("numero_lote")
+  fechaVence       DateTime  @map("fecha_vence")
+  fechaFabricacion DateTime? @map("fecha_fabricacion") @db.Date
+  cantidadInicial  Int       @map("cantidad_inicial")
+  cantidadActual   Int       @map("cantidad_actual")
+  recibidoEn       DateTime  @default(now()) @map("recibido_en")
+
+  // Procedencia y datos que exige la auditoria.
+  fabricante        String?
+  registroSanitario String?  @map("registro_sanitario")
+  costoUnitario     Decimal? @map("costo_unitario") @db.Decimal(12, 4)
+  origen            String   @default("despacho") // despacho|donacion|traslado|prestamo
+  actaDonacion      String?  @map("acta_donacion")
+  ubicacion         String?
+
+  // disponible|cuarentena|retirado|vencido|agotado|dado_de_baja
+  estado       String    @default("disponible")
+  motivoEstado String?   @map("motivo_estado")
+  estadoEn     DateTime? @map("estado_en")
+  estadoPor    Int?      @map("estado_por")
+
+  // Verificacion de recepcion del procedimiento AL-MFA.
+  cantidadDocumento    Int?     @map("cantidad_documento")
+  verifCantidad        Boolean? @map("verif_cantidad")
+  verifEtiquetado      Boolean? @map("verif_etiquetado")
+  verifEmpaque         Boolean? @map("verif_empaque")
+  verifAspecto         Boolean? @map("verif_aspecto")
+  observacionRecepcion String?  @map("observacion_recepcion")
+
+  insumo          Insumo             @relation(fields: [insumoId], references: [id])
+  movimientos     MovimientoInsumo[]
+  usuarioEstado   Usuario?           @relation("LoteEstadoPor", fields: [estadoPor], references: [id])
+  conteos         ConteoFisico[]
+  retiros         RetiroLote[]
+  retiroPacientes RetiroPaciente[]
+  oficiosBaja     OficioBaja[]
+
+  @@unique([insumoId, numeroLote])
+  @@index([fechaVence])
+  @@index([insumoId, fechaVence])
+  @@index([estado, fechaVence])
+  @@map("lote")
+}
+
+model Prescripcion {
+  id           Int      @id @default(autoincrement())
+  atencionId   Int      @map("atencion_id")
+  insumoId     Int      @map("insumo_id")
+  cantidad     Int
+  indicaciones String?
+  creadaEn     DateTime @default(now()) @map("creada_en")
+
+  atencion          Atencion            @relation(fields: [atencionId], references: [id])
+  insumo            Insumo              @relation(fields: [insumoId], references: [id])
+  dispensaciones    Dispensacion[]
+  demandaNoAtendida DemandaNoAtendida[]
+
+  @@index([atencionId])
+  @@index([insumoId])
+  @@map("prescripcion")
+}
+
+model Dispensacion {
+  id             Int      @id @default(autoincrement())
+  prescripcionId Int      @map("prescripcion_id")
+  cantidad       Int
+  parcial        Boolean  @default(false)
+  anulada        Boolean  @default(false)
+  usuarioId      Int      @map("usuario_id")
+  registradaEn   DateTime @default(now()) @map("registrada_en")
+
+  prescripcion Prescripcion       @relation(fields: [prescripcionId], references: [id])
+  usuario      Usuario            @relation(fields: [usuarioId], references: [id])
+  movimientos  MovimientoInsumo[]
+
+  @@index([prescripcionId])
+  @@index([registradaEn])
+  @@map("dispensacion")
+}
+
+model MovimientoInsumo {
+  id              Int      @id @default(autoincrement())
+  loteId          Int      @map("lote_id")
+  // ingreso|entrega|consumo_interno|traslado|reajuste|baja
+  tipo            String
+  // Causa del catalogo oficial. Obligatoria en los reajustes.
+  causa           String?
+  servicio        String?
+  cantidad        Int
+  saldoResultante Int      @map("saldo_resultante")
+  dispensacionId  Int?     @map("dispensacion_id")
+  trasladoId      Int?     @map("traslado_id")
+  usuarioId       Int      @map("usuario_id")
+  motivo          String?
+  registradoEn    DateTime @default(now()) @map("registrado_en")
+
+  lote         Lote          @relation(fields: [loteId], references: [id])
+  dispensacion Dispensacion? @relation(fields: [dispensacionId], references: [id])
+  traslado     Traslado?     @relation(fields: [trasladoId], references: [id])
+  usuario      Usuario       @relation(fields: [usuarioId], references: [id])
+
+  @@index([loteId, registradoEn])
+  @@index([registradoEn])
+  @@index([tipo, registradoEn])
+  @@map("movimiento_insumo")
+}
+
+model Alerta {
+  id                Int       @id @default(autoincrement())
+  establecimientoId Int       @map("establecimiento_id")
+  tipo              String // vencimiento|existencia_baja|cita_vencida|patron_clinico|desnutricion|comunidad_sin_atencion
+  severidad         String // alta | media | baja
+  entidadTipo       String    @map("entidad_tipo") // lote | insumo | paciente | lugar_poblado
+  entidadId         Int       @map("entidad_id")
+  mensaje           String
+  // nueva: recien detectada. en_gestion: alguien ya actuo y quedo registrado,
+  // pero la causa sigue. resuelta: la pone el proceso que las genera.
+  estado            String    @default("nueva")
+  estadoPor         Int?      @map("estado_por")
+  estadoEn          DateTime? @map("estado_en")
+  accion            String?
+  generadaEn        DateTime  @default(now()) @map("generada_en")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  usuario         Usuario?        @relation("AlertaEstadoPor", fields: [estadoPor], references: [id])
+
+  @@index([estado, severidad])
+  @@index([entidadTipo, entidadId])
+  @@map("alerta")
+}
+
+/// Parametros logisticos que define el Area de Salud. Mientras `provisional`
+/// sea verdadero, toda cifra derivada se muestra marcada como provisional.
+model ConfiguracionLogistica {
+  establecimientoId       Int       @id @map("establecimiento_id")
+  mesesSolicitudRecepcion Decimal   @default(1) @map("meses_solicitud_recepcion") @db.Decimal(4, 2)
+  mesesFrecuenciaPedido   Decimal   @default(1) @map("meses_frecuencia_pedido") @db.Decimal(4, 2)
+  diaCorteBres            Int       @default(25) @map("dia_corte_bres")
+  diaInventarioFisico     Int       @default(28) @map("dia_inventario_fisico")
+  diasMaximoCuarentena    Int       @default(7) @map("dias_maximo_cuarentena")
+  // Parametros del BRES del centro (MD/Bodega.md seccion 7).
+  nivelMinimoMeses        Decimal   @default(2) @map("nivel_minimo_meses") @db.Decimal(4, 2)
+  nivelMaximoMeses        Decimal   @default(4) @map("nivel_maximo_meses") @db.Decimal(4, 2)
+  mesesPromedio           Int       @default(6) @map("meses_promedio")
+  formulaPedido           String    @default("centro") @map("formula_pedido")
+  semaforoRojoMeses       Int       @default(12) @map("semaforo_rojo_meses")
+  semaforoAmarilloMeses   Int       @default(18) @map("semaforo_amarillo_meses")
+  diaCorteReportes        Int       @default(25) @map("dia_corte_reportes")
+  encargadoBodega         String?   @map("encargado_bodega")
+  coordinadorMunicipal    String?   @map("coordinador_municipal")
+  // Cargo que va bajo cada firma, como en los formatos del centro.
+  cargoEncargadoBodega    String    @default("Encargado de Bodega") @map("cargo_encargado_bodega")
+  cargoCoordinador        String    @default("Coordinador Municipal de Salud") @map("cargo_coordinador")
+  provisional             Boolean   @default(true)
+  actualizadoPor          Int?      @map("actualizado_por")
+  actualizadoEn           DateTime? @map("actualizado_en")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  usuario         Usuario?        @relation("ConfigLogisticaPor", fields: [actualizadoPor], references: [id])
+
+  @@map("configuracion_logistica")
+}
+
+/// Lo que se recetó y no se pudo entregar por falta de existencia. Sin esto
+/// la demanda real es invisible y el sistema pide de menos justo lo que
+/// más falta.
+model DemandaNoAtendida {
+  id                Int      @id @default(autoincrement())
+  establecimientoId Int      @map("establecimiento_id")
+  insumoId          Int      @map("insumo_id")
+  prescripcionId    Int?     @map("prescripcion_id")
+  pacienteId        Int?     @map("paciente_id")
+  cantidad          Int
+  registradaEn      DateTime @default(now()) @map("registrada_en")
+  registradaPor     Int      @map("registrada_por")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  insumo          Insumo          @relation(fields: [insumoId], references: [id])
+  prescripcion    Prescripcion?   @relation(fields: [prescripcionId], references: [id])
+  paciente        Paciente?       @relation(fields: [pacienteId], references: [id])
+  usuario         Usuario         @relation("DemandaRegistradaPor", fields: [registradaPor], references: [id])
+
+  @@index([establecimientoId, insumoId, registradaEn])
+  @@map("demanda_no_atendida")
+}
+
+/// Inventario fisico mensual. El conteo es ciego: el saldo del sistema se
+/// congela al cerrar, nunca antes.
+model InventarioFisico {
+  id                Int       @id @default(autoincrement())
+  establecimientoId Int       @map("establecimiento_id")
+  periodo           String    @db.Char(7)
+  estado            String    @default("abierto") // abierto|cerrado
+  iniciadoPor       Int       @map("iniciado_por")
+  iniciadoEn        DateTime  @default(now()) @map("iniciado_en")
+  cerradoPor        Int?      @map("cerrado_por")
+  cerradoEn         DateTime? @map("cerrado_en")
+  autorizadoPor     Int?      @map("autorizado_por")
+  observaciones     String?
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  iniciador       Usuario         @relation("InventarioIniciadoPor", fields: [iniciadoPor], references: [id])
+  cerrador        Usuario?        @relation("InventarioCerradoPor", fields: [cerradoPor], references: [id])
+  autorizador     Usuario?        @relation("InventarioAutorizadoPor", fields: [autorizadoPor], references: [id])
+  conteos         ConteoFisico[]
+
+  @@unique([establecimientoId, periodo])
+  @@map("inventario_fisico")
+}
+
+model ConteoFisico {
+  id               Int      @id @default(autoincrement())
+  inventarioId     Int      @map("inventario_id")
+  loteId           Int      @map("lote_id")
+  cantidadContada  Int      @map("cantidad_contada")
+  saldoSistema     Int?     @map("saldo_sistema")
+  diferencia       Int?
+  reajusteAplicado Boolean  @default(false) @map("reajuste_aplicado")
+  contadoPor       Int      @map("contado_por")
+  contadoEn        DateTime @default(now()) @map("contado_en")
+
+  inventario InventarioFisico @relation(fields: [inventarioId], references: [id], onDelete: Cascade)
+  lote       Lote             @relation(fields: [loteId], references: [id])
+  usuario    Usuario          @relation("ConteoPor", fields: [contadoPor], references: [id])
+
+  @@unique([inventarioId, loteId])
+  @@map("conteo_fisico")
+}
+
+/// Balance, Requisicion y Envio de Suministros: el informe mensual con el que
+/// el servicio reporta y pide. Las cifras se congelan al generarlo.
+model Bres {
+  id                Int       @id @default(autoincrement())
+  establecimientoId Int       @map("establecimiento_id")
+  periodo           String    @db.Char(7)
+  estado            String    @default("borrador") // borrador|cerrado
+  generadoPor       Int       @map("generado_por")
+  generadoEn        DateTime  @default(now()) @map("generado_en")
+  cerradoEn         DateTime? @map("cerrado_en")
+  observaciones     String?
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  usuario         Usuario         @relation("BresGeneradoPor", fields: [generadoPor], references: [id])
+  renglones       BresRenglon[]
+
+  @@unique([establecimientoId, periodo])
+  @@map("bres")
+}
+
+model BresRenglon {
+  id                Int      @id @default(autoincrement())
+  bresId            Int      @map("bres_id")
+  insumoId          Int      @map("insumo_id")
+  saldoInicial      Int      @map("saldo_inicial")
+  entradas          Int
+  reajustes         Int
+  entregado         Int
+  consumoInterno    Int      @default(0) @map("consumo_interno")
+  noEntregado       Int      @map("no_entregado")
+  demandaReal       Int      @map("demanda_real")
+  saldoFinal        Int      @map("saldo_final")
+  existenciaBodega  Int?     @map("existencia_bodega")
+  pmdr              Decimal? @db.Decimal(12, 3)
+  med               Decimal? @db.Decimal(8, 2)
+  cantidadMinima    Int?     @map("cantidad_minima")
+  cantidadMaxima    Int?     @map("cantidad_maxima")
+  cantidadSolicitar Int?     @map("cantidad_solicitar")
+  mesesHistoria     Int      @default(0) @map("meses_historia")
+  observaciones     String?
+
+  bres   Bres   @relation(fields: [bresId], references: [id], onDelete: Cascade)
+  insumo Insumo @relation(fields: [insumoId], references: [id])
+
+  @@unique([bresId, insumoId])
+  @@map("bres_renglon")
+}
+
+/// Retiro sanitario: los lotes salen de circulacion de inmediato y el sistema
+/// arma la lista de quienes ya los recibieron.
+model RetiroSanitario {
+  id                Int       @id @default(autoincrement())
+  establecimientoId Int       @map("establecimiento_id")
+  referencia        String
+  motivo            String
+  emitidoEn         DateTime  @map("emitido_en") @db.Date
+  registradoPor     Int       @map("registrado_por")
+  registradoEn      DateTime  @default(now()) @map("registrado_en")
+  cerradoEn         DateTime? @map("cerrado_en")
+
+  establecimiento Establecimiento  @relation(fields: [establecimientoId], references: [id])
+  usuario         Usuario          @relation("RetiroRegistradoPor", fields: [registradoPor], references: [id])
+  lotes           RetiroLote[]
+  pacientes       RetiroPaciente[]
+
+  @@map("retiro_sanitario")
+}
+
+model RetiroLote {
+  id       Int @id @default(autoincrement())
+  retiroId Int @map("retiro_id")
+  loteId   Int @map("lote_id")
+
+  retiro RetiroSanitario @relation(fields: [retiroId], references: [id], onDelete: Cascade)
+  lote   Lote            @relation(fields: [loteId], references: [id])
+
+  @@unique([retiroId, loteId])
+  @@map("retiro_lote")
+}
+
+model RetiroPaciente {
+  id             Int       @id @default(autoincrement())
+  retiroId       Int       @map("retiro_id")
+  pacienteId     Int       @map("paciente_id")
+  loteId         Int       @map("lote_id")
+  cantidad       Int
+  entregadoEn    DateTime  @map("entregado_en")
+  localizado     Boolean   @default(false)
+  notas          String?
+  actualizadoEn  DateTime? @map("actualizado_en")
+  actualizadoPor Int?      @map("actualizado_por")
+
+  retiro   RetiroSanitario @relation(fields: [retiroId], references: [id], onDelete: Cascade)
+  paciente Paciente        @relation(fields: [pacienteId], references: [id])
+  lote     Lote            @relation(fields: [loteId], references: [id])
+  usuario  Usuario?        @relation("RetiroPacientePor", fields: [actualizadoPor], references: [id])
+
+  @@unique([retiroId, pacienteId, loteId])
+  @@map("retiro_paciente")
+}
+
+/// Oficio de baja. La baja no la aplica quien la solicita: el procedimiento
+/// pide oficio y autorizacion antes de sacar nada del inventario.
+model OficioBaja {
+  id                Int       @id @default(autoincrement())
+  establecimientoId Int       @map("establecimiento_id")
+  correlativo       String
+  loteId            Int       @map("lote_id")
+  cantidad          Int
+  causa             String // producto_vencido|producto_danado
+  detalle           String?
+  numeroTarjeta     String?   @map("numero_tarjeta")
+  precioUnitario    Decimal?  @map("precio_unitario") @db.Decimal(12, 4)
+  estado            String    @default("borrador") // borrador|autorizado|aplicado|anulado
+  solicitadoPor     Int       @map("solicitado_por")
+  solicitadoEn      DateTime  @default(now()) @map("solicitado_en")
+  autorizadoPor     Int?      @map("autorizado_por")
+  autorizadoEn      DateTime? @map("autorizado_en")
+  aplicadoEn        DateTime? @map("aplicado_en")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  lote            Lote            @relation(fields: [loteId], references: [id])
+  solicitante     Usuario         @relation("OficioSolicitadoPor", fields: [solicitadoPor], references: [id])
+  autorizador     Usuario?        @relation("OficioAutorizadoPor", fields: [autorizadoPor], references: [id])
+
+  @@unique([establecimientoId, correlativo])
+  @@map("oficio_baja")
+}
+
+/// Correccion sobre una consulta ya cerrada. No sobrescribe el dato original:
+/// deja constancia de que se corrigio, quien y cuando, para que el expediente
+/// pueda reconstruirse tal como estaba.
+model NotaCorreccion {
+  id            Int      @id @default(autoincrement())
+  atencionId    Int      @map("atencion_id")
+  campo         String
+  valorAnterior String?  @map("valor_anterior")
+  valorNuevo    String?  @map("valor_nuevo")
+  motivo        String
+  registradaPor Int      @map("registrada_por")
+  registradaEn  DateTime @default(now()) @map("registrada_en")
+
+  atencion Atencion @relation(fields: [atencionId], references: [id], onDelete: Cascade)
+  usuario  Usuario  @relation("NotaRegistradaPor", fields: [registradaPor], references: [id])
+
+  @@index([atencionId, registradaEn])
+  @@map("nota_correccion")
+}
+
+model Bitacora {
+  id           Int      @id @default(autoincrement())
+  usuarioId    Int      @map("usuario_id")
+  accion       String // crear|leer|actualizar|eliminar|exportar|login|...
+  entidad      String
+  entidadId    Int?     @map("entidad_id")
+  ip           String?
+  detalle      String?
+  registradaEn DateTime @default(now()) @map("registrada_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId, registradaEn])
+  @@index([entidad, entidadId])
+  @@map("bitacora")
+}
+
+// Respalda el idempotencyKey de la cola de escritura offline (IndexedDB).
+model OperacionIdempotente {
+  clave        String   @id
+  usuarioId    Int      @map("usuario_id")
+  endpoint     String
+  respuesta    Json?
+  registradaEn DateTime @default(now()) @map("registrada_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([registradaEn])
+  @@map("operacion_idempotente")
+}
+
+// --- Ficha del paciente por secciones ----------------------------------------
+
+model SeccionPaciente {
+  id             Int      @id @default(autoincrement())
+  pacienteId     Int      @map("paciente_id")
+  seccion        String
+  datos          Json     @default("{}")
+  actualizadoPor Int      @map("actualizado_por")
+  actualizadoEn  DateTime @default(now()) @map("actualizado_en")
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  usuario  Usuario  @relation("SeccionActualizadaPor", fields: [actualizadoPor], references: [id])
+
+  @@unique([pacienteId, seccion], map: "seccion_paciente_unica")
+  @@map("seccion_paciente")
+}
+
+model CambioFicha {
+  id            Int      @id @default(autoincrement())
+  pacienteId    Int      @map("paciente_id")
+  seccion       String
+  campo         String
+  valorAnterior Json?    @map("valor_anterior")
+  valorNuevo    Json?    @map("valor_nuevo")
+  sensible      Boolean  @default(false)
+  usuarioId     Int      @map("usuario_id")
+  registradoEn  DateTime @default(now()) @map("registrado_en")
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  usuario  Usuario  @relation("CambioFichaPor", fields: [usuarioId], references: [id])
+
+  @@index([pacienteId, seccion, registradoEn(sort: Desc)], map: "cambio_ficha_paciente_seccion")
+  @@map("cambio_ficha")
+}
+
+model ArchivoPaciente {
+  id         Int      @id @default(autoincrement())
+  pacienteId Int      @map("paciente_id")
+  tipo       String
+  nombre     String
+  tipoMime   String   @map("tipo_mime")
+  tamano     Int
+  contenido  Bytes
+  subidoPor  Int      @map("subido_por")
+  subidoEn   DateTime @default(now()) @map("subido_en")
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  usuario  Usuario  @relation("ArchivoSubidoPor", fields: [subidoPor], references: [id])
+
+  @@index([pacienteId, tipo], map: "archivo_paciente_paciente")
+  @@map("archivo_paciente")
+}
+
+// --- Hoja de evolucion --------------------------------------------------------
+
+model DiagnosticoAtencion {
+  id          Int     @id @default(autoincrement())
+  atencionId  Int     @map("atencion_id")
+  orden       Int     @db.SmallInt
+  descripcion String
+  cie         String?
+
+  atencion Atencion @relation(fields: [atencionId], references: [id], onDelete: Cascade)
+
+  @@unique([atencionId, orden], map: "diagnostico_atencion_orden")
+  @@index([cie], map: "diagnostico_atencion_cie")
+  @@map("diagnostico_atencion")
+}
+
+model Cie10 {
+  codigo      String  @id
+  descripcion String
+  sinonimos   String?
+  activo      Boolean @default(true)
+
+  @@map("cie10")
+}
+
+// --- Bodega: ubicaciones, traslados y reportes de servicios -------------------
+
+model InsumoAlias {
+  id               Int    @id @default(autoincrement())
+  insumoId         Int    @map("insumo_id")
+  alias            String
+  aliasNormalizado String @unique(map: "insumo_alias_unico") @map("alias_normalizado")
+
+  insumo Insumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+
+  @@index([insumoId], map: "insumo_alias_insumo")
+  @@map("insumo_alias")
+}
+
+model Ubicacion {
+  id                Int      @id @default(autoincrement())
+  establecimientoId Int      @map("establecimiento_id")
+  nombre            String
+  tipo              String // bodega|centro_salud|puesto_salud|centro_comunitario
+  comunidad         String?
+  orden             Int      @default(0)
+  activo            Boolean  @default(true)
+  creadoEn          DateTime @default(now()) @map("creado_en")
+
+  establecimiento Establecimiento   @relation(fields: [establecimientoId], references: [id])
+  traslados       Traslado[]
+  reportes        ReporteServicio[]
+
+  @@unique([establecimientoId, nombre], map: "ubicacion_nombre_unico")
+  @@map("ubicacion")
+}
+
+model Traslado {
+  id                Int      @id @default(autoincrement())
+  establecimientoId Int      @map("establecimiento_id")
+  numero            String
+  ubicacionId       Int      @map("ubicacion_id")
+  entregadoPor      Int      @map("entregado_por")
+  recibidoPor       String   @map("recibido_por")
+  observacion       String?
+  registradoEn      DateTime @default(now()) @map("registrado_en")
+
+  establecimiento Establecimiento    @relation(fields: [establecimientoId], references: [id])
+  ubicacion       Ubicacion          @relation(fields: [ubicacionId], references: [id])
+  usuario         Usuario            @relation("TrasladoEntregadoPor", fields: [entregadoPor], references: [id])
+  movimientos     MovimientoInsumo[]
+
+  @@unique([establecimientoId, numero], map: "traslado_numero_unico")
+  @@index([ubicacionId, registradoEn], map: "traslado_ubicacion_fecha")
+  @@map("traslado")
+}
+
+model ReporteServicio {
+  id           Int      @id @default(autoincrement())
+  ubicacionId  Int      @map("ubicacion_id")
+  periodo      String   @db.Char(7)
+  capturadoPor Int      @map("capturado_por")
+  capturadoEn  DateTime @default(now()) @map("capturado_en")
+  revisado     Boolean  @default(false)
+  observacion  String?
+  importado    Boolean  @default(false)
+
+  ubicacion Ubicacion                @relation(fields: [ubicacionId], references: [id])
+  usuario   Usuario                  @relation("ReporteCapturadoPor", fields: [capturadoPor], references: [id])
+  renglones ReporteServicioRenglon[]
+
+  @@unique([ubicacionId, periodo], map: "reporte_servicio_unico")
+  @@map("reporte_servicio")
+}
+
+model ReporteServicioRenglon {
+  id                 Int  @id @default(autoincrement())
+  reporteId          Int  @map("reporte_id")
+  insumoId           Int  @map("insumo_id")
+  saldoAnterior      Int  @map("saldo_anterior")
+  entradas           Int
+  entradasReportadas Int? @map("entradas_reportadas")
+  entregado          Int  @default(0)
+  noEntregado        Int  @default(0) @map("no_entregado")
+  saldoSiguiente     Int  @map("saldo_siguiente")
+  saldoReportado     Int? @map("saldo_reportado")
+  promedioAnotado    Int? @map("promedio_anotado")
+
+  reporte ReporteServicio @relation(fields: [reporteId], references: [id], onDelete: Cascade)
+  insumo  Insumo          @relation(fields: [insumoId], references: [id])
+
+  @@unique([reporteId, insumoId], map: "reporte_renglon_unico")
+  @@map("reporte_servicio_renglon")
+}
+
+/// Inventario de cierre mensual de la bodega tal como lo llevaba el centro en
+/// su Excel (INVENTARIOS CIERRE). Solo para los meses anteriores al sistema:
+/// desde la carga inicial el inventario de cierre sale de los movimientos.
+model InventarioCierreHistorico {
+  id                Int    @id @default(autoincrement())
+  establecimientoId Int    @map("establecimiento_id")
+  periodo           String @db.VarChar(7)
+  insumoId          Int    @map("insumo_id")
+  orden             Int
+  nombreOriginal    String @map("nombre_original")
+  saldoAnterior     Int    @map("saldo_anterior")
+  entradas          Int
+  entregado         Int
+  saldoActual       Int    @map("saldo_actual")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  insumo          Insumo          @relation(fields: [insumoId], references: [id])
+
+  @@unique([establecimientoId, periodo, insumoId])
+  @@index([establecimientoId, periodo])
+  @@map("inventario_cierre_historico")
+}
+
+/// Constancia de entrega: firma o huella de quien recibe los medicamentos en
+/// post-consulta (columna final del SIGSA-4). "papel" = firma en la hoja impresa.
+model ConstanciaEntrega {
+  id            Int      @id @default(autoincrement())
+  atencionId    Int      @map("atencion_id")
+  tipo          String // firma | huella | papel
+  quienRecibe   String   @map("quien_recibe") // paciente | responsable | otro
+  nombreRecibe  String?  @map("nombre_recibe")
+  imagen        Bytes?
+  registradaPor Int      @map("registrada_por")
+  registradaEn  DateTime @default(now()) @map("registrada_en")
+
+  atencion Atencion @relation(fields: [atencionId], references: [id])
+  usuario  Usuario  @relation("ConstanciaRegistradaPor", fields: [registradaPor], references: [id])
+
+  @@index([atencionId])
+  @@map("constancia_entrega")
+}

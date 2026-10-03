@@ -1,0 +1,313 @@
+<script setup>
+import { ref, computed, watch, onMounted } from 'vue';
+import { useRoute, useRouter, RouterLink } from 'vue-router';
+import bodega from '../../services/bodega';
+import servicio from '../../services/inventario';
+import Icono from '../../components/comunes/Icono.vue';
+import Pictograma from '../../components/bodega/diseno/Pictograma.vue';
+import SelloVence from '../../components/bodega/diseno/SelloVence.vue';
+import EstanteCategoria from '../../components/bodega/diseno/EstanteCategoria.vue';
+import { estiloCategoria, miles } from '../../components/bodega/diseno/PiezasBodega';
+import { fecha } from '../../dominio/bodega';
+
+/**
+ * Trazabilidad por lote: de dónde vino, cuánto entró y a dónde fue a parar
+ * cada unidad (pacientes, servicios, consumo interno, bajas), y cuánto queda.
+ * Es lo que se necesita contestar en minutos cuando llega una alerta.
+ */
+const route = useRoute();
+const router = useRouter();
+
+const texto = ref('');
+const resultados = ref([]);
+const buscando = ref(false);
+const datos = ref(null);
+const error = ref('');
+const detalle = ref('servicios');
+
+let espera = null;
+watch(texto, (t) => {
+  clearTimeout(espera);
+  if (t.trim().length < 2) {
+    resultados.value = [];
+    return;
+  }
+  espera = setTimeout(async () => {
+    buscando.value = true;
+    try {
+      resultados.value = (await bodega.buscarLotes(t.trim())).lotes;
+    } catch (fallo) {
+      error.value = fallo.message;
+    } finally {
+      buscando.value = false;
+    }
+  }, 250);
+});
+
+async function abrir(id) {
+  error.value = '';
+  try {
+    datos.value = await servicio.trazabilidad(id);
+    detalle.value = datos.value.servicios.length ? 'servicios' : datos.value.pacientes.length ? 'pacientes' : 'movimientos';
+  } catch (fallo) {
+    error.value = fallo.message;
+    datos.value = null;
+  }
+}
+
+function elegir(l) {
+  texto.value = '';
+  resultados.value = [];
+  router.replace({ query: { lote: l.id } });
+}
+
+watch(() => route.query.lote, (id) => { if (id) abrir(id); else datos.value = null; });
+onMounted(() => { if (route.query.lote) abrir(route.query.lote); });
+
+const sinLote = computed(() => datos.value?.lote.numeroLote === 'SIN-LOTE');
+
+/** Cuánto salió por cada camino, a partir de los movimientos del lote. */
+const recorrido = computed(() => {
+  if (!datos.value) return null;
+  const suma = (tipo) => datos.value.movimientos.filter((m) => m.tipo === tipo).reduce((s, m) => s + Math.abs(m.cantidad), 0);
+  const reajustes = datos.value.movimientos.filter((m) => m.tipo === 'reajuste').reduce((s, m) => s + m.cantidad, 0);
+  const entro = suma('ingreso');
+  const destinos = [
+    { clave: 'pacientes', titulo: 'Pacientes', sub: 'Post-consulta', cantidad: suma('entrega'), cuenta: new Set(datos.value.pacientes.map((p) => p.pacienteId)).size, unidad: 'pacientes', icono: 'pacientes', tono: 'azul' },
+    { clave: 'servicios', titulo: 'Servicios', sub: 'Traslados', cantidad: suma('traslado'), cuenta: new Set(datos.value.servicios.map((s) => s.ubicacionId)).size, unidad: 'servicios', icono: 'trasladar', tono: 'verde' },
+    { clave: 'interno', titulo: 'Consumo interno', sub: 'En el centro', cantidad: suma('consumo_interno'), icono: 'dispensacion', tono: 'gris' },
+    { clave: 'bajas', titulo: 'Bajas', sub: 'Vencido o dañado', cantidad: suma('baja'), icono: 'quitar', tono: 'rojo' },
+  ].filter((d) => d.cantidad > 0);
+  return { entro, destinos, reajustes, queda: datos.value.lote.cantidadActual };
+});
+
+const pct = (n) => (recorrido.value?.entro ? Math.round((n / recorrido.value.entro) * 100) : 0);
+
+/** Traslados agrupados por servicio. */
+const porServicio = computed(() => {
+  const mapa = new Map();
+  for (const s of datos.value?.servicios ?? []) {
+    const g = mapa.get(s.ubicacionId) ?? { ubicacion: s.ubicacion, cantidad: 0, traslados: [] };
+    g.cantidad += s.cantidad;
+    g.traslados.push(s);
+    mapa.set(s.ubicacionId, g);
+  }
+  return [...mapa.values()].sort((a, b) => b.cantidad - a.cantidad);
+});
+
+const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
+</script>
+
+<template>
+  <section>
+    <header class="b-cabecera">
+      <h1 class="b-titulo">Trazabilidad por lote</h1>
+      <div class="relative w-full sm:w-[420px]">
+        <label class="b-buscar block">
+          <Icono nombre="buscar" :tamano="20" />
+          <input v-model="texto" type="search" class="b-campo" placeholder="Número de lote o insumo" aria-label="Buscar lote" autocomplete="off" />
+        </label>
+        <ul v-if="resultados.length" class="resultados" role="listbox">
+          <li v-for="l in resultados" :key="l.id">
+            <button type="button" class="resultado" :style="estiloCategoria(l.insumo.categoria)" @click="elegir(l)">
+              <span class="cat-mini"><Pictograma :categoria="l.insumo.categoria" :grosor="2" /></span>
+              <span class="min-w-0 flex-1">
+                <span class="block font-mono font-semibold text-tinta">{{ l.numeroLote === 'SIN-LOTE' ? 'Sin lote' : l.numeroLote }}</span>
+                <span class="block truncate text-[13px] text-apagado">{{ l.insumo.nombreGenerico }}</span>
+              </span>
+              <span class="text-right text-[13px] font-semibold tabular-nums text-apagado">{{ miles(l.cantidadActual) }} de {{ miles(l.cantidadInicial) }}</span>
+            </button>
+          </li>
+        </ul>
+        <p v-else-if="texto.trim().length >= 2 && !buscando" class="resultados vacia">Ningún lote coincide.</p>
+      </div>
+    </header>
+
+    <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
+
+    <div v-if="!datos" class="b-panel inicio mt-5">
+      <Icono nombre="trazabilidad" :tamano="48" :grosor="1.4" class="text-[#94A3B8]" />
+      <p class="text-lg font-bold text-tinta">Busque un lote por su número o por el nombre del insumo</p>
+    </div>
+
+    <template v-else>
+      <div v-if="datos.retiroActivo" class="b-aviso error mt-4 items-center justify-between">
+        <span>Bajo retiro sanitario · {{ datos.retiroActivo.referencia }}</span>
+        <RouterLink :to="`/inventario/retiros/${datos.retiroActivo.id}`" class="b-btn peligro chico">Ver retiro</RouterLink>
+      </div>
+
+      <!-- El lote -->
+      <div class="lote mt-5" :style="estiloCategoria(datos.insumo.categoria)">
+        <div class="talon">
+          <span class="b-antetitulo">Lote</span>
+          <span class="numero">{{ sinLote ? 'Sin lote' : datos.lote.numeroLote }}</span>
+          <SelloVence :fecha="datos.lote.fechaVence" :semaforo="sinLote ? 'sin_fecha' : datos.lote.semaforo" />
+        </div>
+        <div class="min-w-0 flex-1 p-5">
+          <EstanteCategoria :categoria="datos.insumo.categoria" />
+          <h2 class="mt-2 text-[22px] font-semibold leading-tight text-tinta">{{ datos.insumo.nombreGenerico }}</h2>
+          <p class="mt-1 text-sm font-semibold text-apagado">
+            {{ datos.lote.origenEtiqueta }}<template v-if="datos.lote.fabricante"> · {{ datos.lote.fabricante }}</template>
+            · recibido {{ new Date(datos.lote.recibidoEn).toLocaleDateString('es-GT') }}
+          </p>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <span class="b-estado" :class="datos.lote.estado">{{ datos.lote.estadoEtiqueta }}</span>
+            <span class="cuadre" :class="datos.cuadra ? 'ok' : 'mal'">
+              <Icono :nombre="datos.cuadra ? 'correcto' : 'alerta'" :tamano="16" />
+              {{ datos.cuadra ? 'Cada unidad está explicada' : `Los movimientos suman ${miles(datos.saldoCalculado)}` }}
+            </span>
+          </div>
+        </div>
+        <RouterLink :to="`/inventario/lotes/${datos.lote.id}`" class="b-btn secundario chico m-5 self-start">Ficha del lote</RouterLink>
+      </div>
+
+      <!-- Recorrido -->
+      <div class="recorrido mt-5">
+        <div class="nodo origen">
+          <span class="b-subtitulo">Entró</span>
+          <b>{{ miles(recorrido.entro) }}</b>
+          <small>{{ datos.lote.origenEtiqueta }}</small>
+          <small v-if="datos.lote.recepcion.diferencia" class="text-[#B7710A]">{{ datos.lote.recepcion.diferencia > 0 ? '+' : '' }}{{ miles(datos.lote.recepcion.diferencia) }} contra el documento</small>
+        </div>
+
+        <div class="flecha" aria-hidden="true"><span /></div>
+
+        <div class="destinos">
+          <button
+            v-for="d in recorrido.destinos"
+            :key="d.clave"
+            type="button"
+            class="destino"
+            :class="[d.tono, detalle === d.clave ? 'on' : '']"
+            @click="detalle = d.clave === 'interno' || d.clave === 'bajas' ? 'movimientos' : d.clave"
+          >
+            <span class="ic"><Icono :nombre="d.icono" :tamano="20" :grosor="2" /></span>
+            <span class="min-w-0 flex-1 text-left">
+              <b class="block text-tinta">{{ d.titulo }}</b>
+              <small>{{ d.cuenta ? `${d.cuenta} ${d.unidad}` : d.sub }}</small>
+            </span>
+            <span class="text-right">
+              <b class="block tabular-nums text-tinta">{{ miles(d.cantidad) }}</b>
+              <small>{{ pct(d.cantidad) }} %</small>
+            </span>
+            <span class="barra"><span :style="{ width: `${pct(d.cantidad)}%` }" /></span>
+          </button>
+          <div v-if="recorrido.reajustes" class="destino gris">
+            <span class="ic"><Icono nombre="lapiz" :tamano="20" :grosor="2" /></span>
+            <span class="min-w-0 flex-1 text-left"><b class="block text-tinta">Reajustes</b><small>Correcciones de saldo</small></span>
+            <b class="tabular-nums text-tinta">{{ recorrido.reajustes > 0 ? '+' : '' }}{{ miles(recorrido.reajustes) }}</b>
+          </div>
+          <div class="destino queda">
+            <span class="ic"><Icono nombre="inventario" :tamano="20" :grosor="2" /></span>
+            <span class="min-w-0 flex-1 text-left"><b class="block text-tinta">Queda en bodega</b><small>{{ datos.lote.estadoEtiqueta }}</small></span>
+            <span class="text-right">
+              <b class="block tabular-nums text-tinta">{{ miles(recorrido.queda) }}</b>
+              <small>{{ pct(recorrido.queda) }} %</small>
+            </span>
+            <span class="barra"><span :style="{ width: `${pct(recorrido.queda)}%` }" /></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detalle -->
+      <section class="b-panel mt-5">
+        <header class="b-panel-cabeza">
+          <div class="b-segmentado" role="radiogroup" aria-label="Detalle">
+            <button v-for="p in [['servicios', `Servicios (${porServicio.length})`], ['pacientes', `Pacientes (${datos.pacientes.length})`], ['movimientos', `Movimientos (${datos.movimientos.length})`]]" :key="p[0]" type="button" role="radio" :aria-checked="detalle === p[0]" :class="detalle === p[0] ? 'on' : ''" @click="detalle = p[0]">{{ p[1] }}</button>
+          </div>
+        </header>
+
+        <ul v-if="detalle === 'servicios'" class="lista">
+          <li v-for="g in porServicio" :key="g.ubicacion" class="fila">
+            <span class="min-w-0 flex-1">
+              <b class="block text-tinta">{{ g.ubicacion }}</b>
+              <small>
+                <template v-for="(t, i) in g.traslados" :key="t.trasladoId">{{ i ? ' · ' : '' }}<RouterLink :to="`/imprimir/traslado/${t.trasladoId}`" target="_blank" class="font-mono hover:underline">{{ t.numero }}</RouterLink> {{ fecha(t.fecha) }}</template>
+                · recibió {{ g.traslados[0].recibidoPor }}
+              </small>
+            </span>
+            <b class="tabular-nums text-tinta">{{ miles(g.cantidad) }}</b>
+          </li>
+          <li v-if="!porServicio.length" class="b-vacio">Este lote no se ha trasladado a ningún servicio.</li>
+        </ul>
+
+        <ul v-else-if="detalle === 'pacientes'" class="lista">
+          <li v-for="p in datos.pacientes" :key="`${p.pacienteId}-${p.entregadoEn}`" class="fila">
+            <span class="min-w-0 flex-1">
+              <RouterLink :to="`/pacientes/${p.pacienteId}`" class="block font-bold text-tinta hover:underline">{{ p.nombreCompleto }}</RouterLink>
+              <small>Exp. {{ p.expediente }} · {{ p.comunidad }} · {{ fechaHora(p.entregadoEn) }}</small>
+            </span>
+            <b class="tabular-nums text-tinta">{{ miles(p.cantidad) }}</b>
+          </li>
+          <li v-if="!datos.pacientes.length" class="b-vacio">Este lote no se ha entregado a pacientes.</li>
+        </ul>
+
+        <ol v-else class="lista">
+          <li v-for="m in datos.movimientos" :key="m.id" class="fila">
+            <span class="punto" :class="m.cantidad > 0 ? 'entra' : 'sale'" />
+            <span class="min-w-0 flex-1">
+              <b class="block text-tinta">{{ m.etiqueta }}</b>
+              <small>{{ fechaHora(m.fecha) }} · {{ m.usuario }}<template v-if="m.motivo"> · {{ m.motivo }}</template></small>
+            </span>
+            <span class="text-right">
+              <b class="block tabular-nums" :class="m.cantidad > 0 ? 'text-[#1E8E5E]' : 'text-tinta'">{{ m.cantidad > 0 ? '+' : '' }}{{ miles(m.cantidad) }}</b>
+              <small>quedan {{ miles(m.saldoResultante) }}</small>
+            </span>
+          </li>
+        </ol>
+      </section>
+    </template>
+  </section>
+</template>
+
+<style scoped>
+.resultados { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); max-height: 380px; overflow-y: auto; padding: 4px; background: #fff; border: 2px solid #172A5A; border-radius: 12px; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, .35); }
+.resultados.vacia { padding: 14px; text-align: center; font-weight: 600; color: #64748B; }
+.resultado { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 4px 10px; border-radius: 8px; text-align: left; }
+.resultado:hover { background: #EEF2FF; }
+.cat-mini { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border-radius: 7px; background: var(--cat); color: #fff; }
+.cat-mini svg { width: 17px; height: 17px; }
+.inicio { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 56px 16px; text-align: center; }
+
+.lote { display: flex; flex-wrap: wrap; border: 2px solid #CBD5E1; border-radius: 16px; overflow: hidden; background: #fff; }
+.talon { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 200px; padding: 18px 20px; background: var(--cat-fondo); border-right: 2px dashed #CBD5E1; }
+.talon .numero { font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 600; color: #14244A; word-break: break-all; }
+.cuadre { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.cuadre.ok { color: #1E8E5E; }
+.cuadre.mal { color: #C03535; }
+
+.recorrido { display: grid; grid-template-columns: 220px 60px minmax(0, 1fr); align-items: center; }
+@media (max-width: 900px) { .recorrido { grid-template-columns: 1fr; gap: 12px; } .flecha { display: none; } }
+.nodo.origen { display: flex; flex-direction: column; gap: 2px; padding: 18px 20px; border: 2px solid #172A5A; border-radius: 14px; background: #F1F5FA; }
+.nodo b { font-size: 32px; font-weight: 700; line-height: 1.1; color: #14244A; font-variant-numeric: tabular-nums; }
+.nodo small, .destino small { display: block; font-size: 12px; font-weight: 600; color: #64748B; }
+.flecha { position: relative; height: 2px; background: #94A3B8; }
+.flecha span { position: absolute; right: -2px; top: -6px; border: 7px solid transparent; border-left: 10px solid #94A3B8; border-right: none; }
+.destinos { display: flex; flex-direction: column; gap: 8px; padding-left: 16px; border-left: 2px solid #CBD5E1; }
+.destino { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 14px 14px; border: 2px solid #E2E8F0; border-radius: 12px; background: #fff; overflow: hidden; }
+button.destino:hover { border-color: #94A3B8; }
+.destino.on { border-color: #172A5A; box-shadow: 0 0 0 3px #DCE4F5; }
+.destino::before { content: ''; position: absolute; left: -18px; top: 50%; width: 16px; height: 2px; background: #CBD5E1; }
+.destino .ic { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px; color: #fff; }
+.destino.azul .ic { background: #3D7BE0; }
+.destino.verde .ic { background: #22A06B; }
+.destino.gris .ic { background: #64748B; }
+.destino.rojo .ic { background: #C8456A; }
+.destino.queda { background: #F8FAFC; }
+.destino.queda .ic { background: #172A5A; }
+.barra { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: #EEF2F6; }
+.barra span { display: block; height: 100%; }
+.azul .barra span { background: #3D7BE0; }
+.verde .barra span { background: #22A06B; }
+.gris .barra span { background: #64748B; }
+.rojo .barra span { background: #C8456A; }
+.queda .barra span { background: #172A5A; }
+
+.lista { max-height: max(320px, calc(100vh - 560px)); overflow-y: auto; }
+.fila { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid #EEF2F6; }
+.fila:first-child { border-top: none; }
+.fila small { display: block; font-size: 12px; font-weight: 600; color: #64748B; }
+.punto { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; }
+.punto.entra { background: #22A06B; }
+.punto.sale { background: #fff; border: 2.5px solid #64748B; }
+</style>

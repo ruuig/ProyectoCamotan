@@ -1,0 +1,64 @@
+# =============================================================================
+# Secretos: nunca deben llegar al repositorio
+# =============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# =============================================================================
+# Datos reales de pacientes y del centro (datos personales y sensibles)
+# =============================================================================
+# Excel de pacientes entregado por el centro
+BASE DE DATOS PACIENTES*.xlsx
+# Respaldos de la base de datos
+bd/respaldos/
+*.dump
+*.backup
+*.sql.gz
+# Reportes de las importaciones: traen nombres y datos de pacientes y de la bodega
+bd/importacion/
+# Excel originales del centro (balance, BRES, inventario de cierre, semáforo).
+# Se conserva equivalencias.csv, que usan los scripts de importación.
+plantillas/*.xlsx
+plantillas/*.xls
+plantillas/*.xlsb
+Plantillas/*.xlsx
+Plantillas/*.xls
+Plantillas/*.xlsb
+# Documento de tesis y el texto extraído de él
+bd/Anteproyecto.pdf
+bd/_anteproyecto.txt
+
+# =============================================================================
+# Dependencias, compilación y cobertura
+# =============================================================================
+node_modules/
+dist/
+dist-ssr/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# =============================================================================
+# Registros y temporales
+# =============================================================================
+*.log
+logs/
+*.tmp
+*.local
+# Archivos de bloqueo que deja Excel o Word al abrir un documento
+~$*
+
+# =============================================================================
+# Sistema operativo y editores
+# =============================================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.sw?

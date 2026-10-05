@@ -8,6 +8,16 @@
 *.key
 
 # =============================================================================
+# Documentación, base de datos y plantillas: se quedan solo en la computadora
+# =============================================================================
+MD/
+*.md
+!README.md
+bd/
+plantillas/
+Plantillas/
+
+# =============================================================================
 # Datos reales de pacientes y del centro (datos personales y sensibles)
 # =============================================================================
 # Excel de pacientes entregado por el centro

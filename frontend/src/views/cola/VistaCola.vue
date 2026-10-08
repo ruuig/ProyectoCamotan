@@ -16,6 +16,9 @@ const cargando = ref(false);
 const desdeCache = ref(false);
 const minutosDeAntiguedad = ref(0);
 const confirmandoAusente = ref(null);
+// Atención abierta por error: se cancela con su motivo y sale de la cola.
+const cancelando = ref(null);
+const motivoCancelacion = ref('');
 
 const puedeRegistrar = computed(() => ['admin', 'preconsulta'].includes(auth.rol));
 
@@ -53,6 +56,18 @@ async function cambiar(id, estado) {
     await http.patch(`/atenciones/${id}/estado`, { estado });
     error.value = '';
     confirmandoAusente.value = null;
+    await cargar();
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
+
+async function cancelar(id) {
+  try {
+    await http.patch(`/atenciones/${id}/cancelar`, { motivo: motivoCancelacion.value.trim() });
+    error.value = '';
+    cancelando.value = null;
+    motivoCancelacion.value = '';
     await cargar();
   } catch (fallo) {
     error.value = fallo.message;
@@ -241,11 +256,36 @@ onUnmounted(() => clearInterval(temporizador));
             <button
               type="button"
               class="ml-auto text-sm font-medium text-slate-500 underline-offset-4 hover:text-urgente-600 hover:underline"
-              @click="confirmandoAusente = e.id"
+              @click="confirmandoAusente = e.id; cancelando = null"
             >
               No se presento
             </button>
+            <button
+              type="button"
+              class="text-sm font-medium text-slate-500 underline-offset-4 hover:text-urgente-600 hover:underline"
+              @click="cancelando = e.id; confirmandoAusente = null; motivoCancelacion = ''"
+            >
+              Cancelar atención
+            </button>
           </div>
+
+          <form
+            v-if="cancelando === e.id"
+            class="border-t-4 border-t-urgente-500 bg-slate-50 px-6 py-4"
+            @submit.prevent="cancelar(e.id)"
+          >
+            <label :for="`motivo-${e.id}`" class="font-medium text-urgente-700">
+              ¿Por qué se cancela la atención de {{ e.paciente.nombreCompleto }}?
+            </label>
+            <p class="mt-1 text-slate-600">Sale de la cola. Queda registrado quién la canceló y por qué.</p>
+            <input :id="`motivo-${e.id}`" v-model="motivoCancelacion" minlength="5" required placeholder="Ej.: se abrió por error" class="campo mt-2" />
+            <div class="mt-3 flex gap-3">
+              <button type="submit" class="rounded-xl bg-urgente-600 px-5 py-2.5 font-semibold text-white transition hover:bg-urgente-700" :disabled="motivoCancelacion.trim().length < 5">
+                Sí, cancelar atención
+              </button>
+              <button type="button" class="boton-secundario !py-2.5" @click="cancelando = null">No cancelar</button>
+            </div>
+          </form>
 
           <div
             v-if="confirmandoAusente === e.id"

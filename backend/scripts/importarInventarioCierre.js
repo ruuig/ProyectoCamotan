@@ -2,13 +2,13 @@
  * Carga el historial del inventario de cierre de la bodega (Excel
  * INVENTARIOS CIERRE del centro) para los meses anteriores al sistema.
  *
- *   python scripts/extraerInventarioCierre.py "../plantillas/INVENTARIOS CIERRE 2019.xlsx" <cierre.json>
+ *   python scripts/extraerInventarioCierre.py "../documentacion/Plantillas/INVENTARIOS CIERRE 2019.xlsx" <cierre.json>
  *   node scripts/importarInventarioCierre.js <cierre.json>             (solo revisa)
  *   node scripts/importarInventarioCierre.js <cierre.json> --aplicar   (escribe)
  *
  * Cada nombre del Excel se empareja con el catalogo: primero por sus alias,
  * luego por las equivalencias escritas a mano y al final por parecido. Los
- * que no se emparejan se reportan en bd/importacion/cierre/ y no se cargan.
+ * que no se emparejan se reportan en documentacion/bd/importacion/cierre/ y no se cargan.
  * Los valores se guardan tal como estan en el Excel, aunque no sumen.
  */
 
@@ -22,7 +22,7 @@ const { partirLinea } = require('../src/services/csvLugares.service');
 
 const [, , rutaDatos, bandera] = process.argv;
 const APLICAR = bandera === '--aplicar';
-const CARPETA = path.join(__dirname, '..', '..', 'bd', 'importacion', 'cierre');
+const CARPETA = path.join(__dirname, '..', '..', 'documentacion', 'bd', 'importacion', 'cierre');
 
 function csv(filas) {
   const celda = (v) => {
@@ -52,7 +52,7 @@ async function main() {
   const porAlias = new Map(alias.map((a) => [a.aliasNormalizado, a.insumoId]));
   for (const i of insumos) porAlias.set(normalizarAlias(i.nombreGenerico), i.id);
 
-  const rutaEquivalencias = path.join(__dirname, '..', '..', 'plantillas', 'equivalencias.csv');
+  const rutaEquivalencias = path.join(__dirname, '..', '..', 'documentacion', 'Plantillas', 'equivalencias.csv');
   const equivalencias = fs.existsSync(rutaEquivalencias)
     ? fs.readFileSync(rutaEquivalencias, 'utf8').replace(String.fromCharCode(0xFEFF), '').split(String.fromCharCode(10))
       .map((l) => l.trim()).slice(1).filter(Boolean).map((l) => partirLinea(l))
@@ -116,7 +116,7 @@ async function main() {
   console.log(`Renglones repetidos en un mismo mes: ${repetidos.length}`);
 
   if (!APLICAR) {
-    console.log('Revisión sin cambios. Reportes en bd/importacion/cierre/.');
+    console.log('Revisión sin cambios. Reportes en documentacion/bd/importacion/cierre/.');
     return;
   }
   const admin = await prisma.usuario.findFirst({ where: { establecimientoId: eid, rol: 'admin' } });

@@ -73,12 +73,19 @@ const recorrido = computed(() => {
   const reajustes = datos.value.movimientos.filter((m) => m.tipo === 'reajuste').reduce((s, m) => s + m.cantidad, 0);
   const entro = suma('ingreso');
   const destinos = [
-    { clave: 'pacientes', titulo: 'Pacientes', sub: 'Post-consulta', cantidad: suma('entrega'), cuenta: new Set(datos.value.pacientes.map((p) => p.pacienteId)).size, unidad: 'pacientes', icono: 'pacientes', tono: 'azul' },
+    { clave: 'pacientes', titulo: 'Pacientes', sub: 'Desde farmacia', cantidad: datos.value.cuenta?.aPacientes ?? suma('entrega'), cuenta: new Set(datos.value.pacientes.map((p) => p.pacienteId)).size, unidad: 'pacientes', icono: 'pacientes', tono: 'azul' },
     { clave: 'servicios', titulo: 'Servicios', sub: 'Traslados', cantidad: suma('traslado'), cuenta: new Set(datos.value.servicios.map((s) => s.ubicacionId)).size, unidad: 'servicios', icono: 'trasladar', tono: 'verde' },
     { clave: 'interno', titulo: 'Consumo interno', sub: 'En el centro', cantidad: suma('consumo_interno'), icono: 'dispensacion', tono: 'gris' },
     { clave: 'bajas', titulo: 'Bajas', sub: 'Vencido o dañado', cantidad: suma('baja'), icono: 'quitar', tono: 'rojo' },
   ].filter((d) => d.cantidad > 0);
-  return { entro, destinos, reajustes, queda: datos.value.lote.cantidadActual };
+  return {
+    entro,
+    destinos,
+    reajustes,
+    queda: datos.value.lote.cantidadActual,
+    enBodega: datos.value.lote.enBodega ?? datos.value.lote.cantidadActual,
+    enFarmacia: datos.value.lote.enFarmacia ?? 0,
+  };
 });
 
 const pct = (n) => (recorrido.value?.entro ? Math.round((n / recorrido.value.entro) * 100) : 0);
@@ -201,11 +208,20 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
             <span class="ic"><Icono nombre="inventario" :tamano="20" :grosor="2" /></span>
             <span class="min-w-0 flex-1 text-left"><b class="block text-tinta">Queda en bodega</b><small>{{ datos.lote.estadoEtiqueta }}</small></span>
             <span class="text-right">
-              <b class="block tabular-nums text-tinta">{{ miles(recorrido.queda) }}</b>
-              <small>{{ pct(recorrido.queda) }} %</small>
+              <b class="block tabular-nums text-tinta">{{ miles(recorrido.enBodega) }}</b>
+              <small>{{ pct(recorrido.enBodega) }} %</small>
             </span>
-            <span class="barra"><span :style="{ width: `${pct(recorrido.queda)}%` }" /></span>
+            <span class="barra"><span :style="{ width: `${pct(recorrido.enBodega)}%` }" /></span>
           </div>
+          <button v-if="recorrido.enFarmacia || datos.pasosFarmacia?.length" type="button" class="destino queda" :class="detalle === 'farmacia' ? 'on' : ''" @click="detalle = 'farmacia'">
+            <span class="ic"><Icono nombre="dispensacion" :tamano="20" :grosor="2" /></span>
+            <span class="min-w-0 flex-1 text-left"><b class="block text-tinta">Queda en farmacia</b><small>{{ datos.pasosFarmacia.length }} {{ datos.pasosFarmacia.length === 1 ? 'entrega de bodega' : 'entregas de bodega' }}</small></span>
+            <span class="text-right">
+              <b class="block tabular-nums text-tinta">{{ miles(recorrido.enFarmacia) }}</b>
+              <small>{{ pct(recorrido.enFarmacia) }} %</small>
+            </span>
+            <span class="barra"><span :style="{ width: `${pct(recorrido.enFarmacia)}%` }" /></span>
+          </button>
         </div>
       </div>
 
@@ -213,11 +229,27 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
       <section class="b-panel mt-5">
         <header class="b-panel-cabeza">
           <div class="b-segmentado" role="radiogroup" aria-label="Detalle">
-            <button v-for="p in [['servicios', `Servicios (${porServicio.length})`], ['pacientes', `Pacientes (${datos.pacientes.length})`], ['movimientos', `Movimientos (${datos.movimientos.length})`]]" :key="p[0]" type="button" role="radio" :aria-checked="detalle === p[0]" :class="detalle === p[0] ? 'on' : ''" @click="detalle = p[0]">{{ p[1] }}</button>
+            <button v-for="p in [['farmacia', `Bodega → farmacia (${datos.pasosFarmacia?.length ?? 0})`], ['servicios', `Servicios (${porServicio.length})`], ['pacientes', `Pacientes (${datos.pacientes.length})`], ['movimientos', `Movimientos (${datos.movimientos.length})`]]" :key="p[0]" type="button" role="radio" :aria-checked="detalle === p[0]" :class="detalle === p[0] ? 'on' : ''" @click="detalle = p[0]">{{ p[1] }}</button>
           </div>
         </header>
 
-        <ul v-if="detalle === 'servicios'" class="lista">
+        <ul v-if="detalle === 'farmacia'" class="lista">
+          <li v-for="(p, i) in datos.pasosFarmacia" :key="i" class="fila">
+            <span class="min-w-0 flex-1">
+              <b class="block text-tinta">{{ p.sentido === 'a_farmacia' ? 'De bodega a farmacia' : 'Devuelto de farmacia a bodega' }}</b>
+              <small>
+                {{ fechaHora(p.fecha) }} · {{ p.usuario }}
+                <template v-if="p.numero"> · documento <span class="font-mono">{{ p.numero }}</span></template>
+                <template v-if="p.recibidoPor"> · recibió {{ p.recibidoPor }}</template>
+                <template v-if="p.motivo && !p.numero"> · {{ p.motivo }}</template>
+              </small>
+            </span>
+            <b class="tabular-nums text-tinta">{{ p.sentido === 'a_farmacia' ? '' : '−' }}{{ miles(p.cantidad) }}</b>
+          </li>
+          <li v-if="!datos.pasosFarmacia?.length" class="b-vacio">Este lote no ha pasado a la farmacia.</li>
+        </ul>
+
+        <ul v-else-if="detalle === 'servicios'" class="lista">
           <li v-for="g in porServicio" :key="g.ubicacion" class="fila">
             <span class="min-w-0 flex-1">
               <b class="block text-tinta">{{ g.ubicacion }}</b>
@@ -235,7 +267,9 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
           <li v-for="p in datos.pacientes" :key="`${p.pacienteId}-${p.entregadoEn}`" class="fila">
             <span class="min-w-0 flex-1">
               <RouterLink :to="`/pacientes/${p.pacienteId}`" class="block font-bold text-tinta hover:underline">{{ p.nombreCompleto }}</RouterLink>
-              <small>Exp. {{ p.expediente }} · {{ p.comunidad }} · {{ fechaHora(p.entregadoEn) }}</small>
+              <small>Exp. {{ p.expediente }} · {{ p.comunidad }} · entregado {{ fechaHora(p.entregadoEn) }}<template v-if="p.entregadoPor"> por {{ p.entregadoPor }}</template></small>
+              <small v-if="p.medico || p.diagnostico">Recetó {{ p.medico ?? '—' }}<template v-if="p.diagnostico"> · {{ p.diagnostico }}</template><template v-if="p.indicaciones"> · {{ p.indicaciones }}</template></small>
+              <small v-if="p.anulada" class="text-[#B7710A]">Entrega anulada: volvió al lote</small>
             </span>
             <b class="tabular-nums text-tinta">{{ miles(p.cantidad) }}</b>
           </li>
@@ -247,7 +281,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
             <span class="punto" :class="m.cantidad > 0 ? 'entra' : 'sale'" />
             <span class="min-w-0 flex-1">
               <b class="block text-tinta">{{ m.etiqueta }}</b>
-              <small>{{ fechaHora(m.fecha) }} · {{ m.usuario }}<template v-if="m.motivo"> · {{ m.motivo }}</template></small>
+              <small>{{ m.ubicacionEtiqueta }} · {{ fechaHora(m.fecha) }} · {{ m.usuario }}<template v-if="m.motivo"> · {{ m.motivo }}</template></small>
             </span>
             <span class="text-right">
               <b class="block tabular-nums" :class="m.cantidad > 0 ? 'text-[#1E8E5E]' : 'text-tinta'">{{ m.cantidad > 0 ? '+' : '' }}{{ miles(m.cantidad) }}</b>

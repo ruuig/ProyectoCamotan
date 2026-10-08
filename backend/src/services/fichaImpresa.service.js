@@ -214,7 +214,11 @@ function bloqueImpresionClinica(ctx, columnaTratamiento) {
     diagnosticos[i]?.descripcion ?? '',
     diagnosticos[i]?.cie ?? '',
   ]);
-  const receta = (a.prescripciones ?? []).map((p) => `${p.insumo?.nombreGenerico ?? ''} ${p.insumo?.presentacion ?? ''}: ${p.cantidad}${p.indicaciones ? ` (${p.indicaciones})` : ''}`.trim());
+  const receta = [
+    ...(a.prescripciones ?? []).map((p) => `${p.insumo?.nombreGenerico ?? ''} ${p.insumo?.presentacion ?? ''}: ${p.cantidad}${p.indicaciones ? ` (${p.indicaciones})` : ''}`.trim()),
+    // Lo que el paciente consigue fuera tambien es parte del tratamiento.
+    ...(a.recetasExternas ?? []).map((r) => `${r.medicamento}${r.cantidad ? `: ${r.cantidad}` : ''}${r.indicaciones ? ` (${r.indicaciones})` : ''} [conseguir fuera]`),
+  ];
   return {
     titulo: 'Impresión clínica (diagnóstico), codificación y tratamiento',
     tabla: { columnas: ['Impresión clínica (diagnóstico)', 'CIE-10'], filas },

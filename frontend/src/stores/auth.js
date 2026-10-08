@@ -47,12 +47,24 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async iniciarSesion(usuario, password, codigoTotp) {
-      const datos = await http.post('/auth/login', {
+      // El token vencido no debe viajar con el inicio de sesion.
+      this.limpiarSesion();
+      const cuerpo = {
         usuario,
         password,
         // Solo viaja si el servidor lo pidio: los demas roles no lo usan.
         ...(codigoTotp ? { codigoTotp } : {}),
-      });
+      };
+      let datos;
+      try {
+        datos = await http.post('/auth/login', cuerpo);
+      } catch (fallo) {
+        // Si no llego al servidor, se intenta una vez mas: iniciar sesion no
+        // cambia nada si se repite.
+        if (fallo.codigo !== 'error_red') throw fallo;
+        await new Promise((r) => setTimeout(r, 400));
+        datos = await http.post('/auth/login', cuerpo);
+      }
       this.guardarSesion(datos.token, datos.usuario);
       return datos.usuario;
     },

@@ -4,7 +4,8 @@ import { useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import HojaImpresion from '../../components/comunes/HojaImpresion.vue';
 import { nombrePeriodo } from '../../dominio/bodega';
-import { establecimiento as cargarEstablecimiento, registrarImpresion, paginas, renglonesEnBlanco, textoInsumo } from '../../dominio/impresionBodega';
+import { miles } from '../../components/bodega/diseno/PiezasBodega';
+import { establecimiento as cargarEstablecimiento, registrarImpresion, firmasBodega, paginas, renglonesEnBlanco, textoInsumo } from '../../dominio/impresionBodega';
 
 /**
  * Balance consolidado impreso: insumos en filas, la bodega, post-consulta y
@@ -16,6 +17,8 @@ import { establecimiento as cargarEstablecimiento, registrarImpresion, paginas, 
 const route = useRoute();
 const datos = ref(null);
 const est = ref(null);
+const firmas = ref([]);
+firmasBodega().then((f) => { firmas.value = f; });
 const error = ref('');
 const enBlanco = route.query.blanco === '1';
 
@@ -45,7 +48,7 @@ const abreviar = (n) => n.replace('Centro Comunitario', 'C/C').replace('Post-con
     class="hoja-apaisada"
     :titulo="`Balance de medicamentos · ${enBlanco ? '' : nombrePeriodo(route.params.periodo)}`"
     :establecimiento="est"
-    :firmas="[{ etiqueta: 'Encargado de bodega' }, { etiqueta: 'Coordinador municipal' }]"
+    :firmas="firmas"
     imprimir-al-abrir
   >
     <section v-for="(hoja, h) in hojas" :key="h" :class="h > 0 ? 'salto-pagina' : ''">
@@ -74,12 +77,12 @@ const abreviar = (n) => n.replace('Centro Comunitario', 'C/C').replace('Post-con
             <td v-for="(s, i) in datos.servicios" :key="s.id" class="border border-slate-500 px-0.5 text-right">
               {{ v(f, (x) => x.servicios[i].entregado || '') }}
             </td>
-            <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => x.bres.B) }}</td>
-            <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => x.bres.C) }}</td>
-            <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => x.bres.D) }}</td>
-            <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => x.bres.E) }}</td>
-            <td class="border border-slate-500 px-1 text-right font-bold">{{ v(f, (x) => x.bres.H) }}</td>
-            <td class="border border-slate-500 px-1 text-right font-bold">{{ v(f, (x) => x.bres.M) }}</td>
+            <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => miles(x.bres.B)) }}</td>
+            <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => miles(x.bres.C)) }}</td>
+            <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => miles(x.bres.D)) }}</td>
+            <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => miles(x.bres.E)) }}</td>
+            <td class="border border-slate-500 px-1 text-right font-bold">{{ v(f, (x) => miles(x.bres.H)) }}</td>
+            <td class="border border-slate-500 px-1 text-right font-bold">{{ v(f, (x) => miles(x.bres.M)) }}</td>
           </tr>
         </tbody>
       </table>

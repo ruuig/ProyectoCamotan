@@ -10,12 +10,10 @@
 # =============================================================================
 # Documentación, base de datos y plantillas: se quedan solo en la computadora
 # =============================================================================
-MD/
+documentacion/
+Document/
 *.md
 !README.md
-bd/
-plantillas/
-Plantillas/
 
 # =============================================================================
 # Datos reales de pacientes y del centro (datos personales y sensibles)
@@ -23,23 +21,9 @@ Plantillas/
 # Excel de pacientes entregado por el centro
 BASE DE DATOS PACIENTES*.xlsx
 # Respaldos de la base de datos
-bd/respaldos/
 *.dump
 *.backup
 *.sql.gz
-# Reportes de las importaciones: traen nombres y datos de pacientes y de la bodega
-bd/importacion/
-# Excel originales del centro (balance, BRES, inventario de cierre, semáforo).
-# Se conserva equivalencias.csv, que usan los scripts de importación.
-plantillas/*.xlsx
-plantillas/*.xls
-plantillas/*.xlsb
-Plantillas/*.xlsx
-Plantillas/*.xls
-Plantillas/*.xlsb
-# Documento de tesis y el texto extraído de él
-bd/Anteproyecto.pdf
-bd/_anteproyecto.txt
 
 # =============================================================================
 # Dependencias, compilación y cobertura
@@ -72,3 +56,9 @@ desktop.ini
 .idea/
 *.suo
 *.sw?
+.claude/
+
+
+# Respaldos de la base de datos que hace el sistema
+backend/respaldos/
+*.sql.parcial

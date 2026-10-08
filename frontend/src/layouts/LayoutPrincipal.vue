@@ -33,7 +33,11 @@ const GRUPOS = [
   {
     titulo: 'Farmacia y bodega',
     enlaces: [
-      { ruta: '/dispensacion', etiqueta: 'Dispensación', icono: 'dispensacion', roles: ['admin', 'farmacia'] },
+      // Exacto: el control de farmacia vive dentro de /dispensacion y tiene su propio enlace.
+      { ruta: '/dispensacion', etiqueta: 'Dispensación', icono: 'dispensacion', roles: ['admin', 'farmacia'], exacto: true },
+      { ruta: '/dispensacion/control', etiqueta: 'Control de farmacia', icono: 'inventario', roles: ['admin', 'farmacia'] },
+      // Farmacia pide a bodega con requisición, como los demás servicios.
+      { ruta: '/inventario/requisiciones', etiqueta: 'Requisiciones', icono: 'trasladar', roles: ['farmacia'] },
       { ruta: '/inventario', etiqueta: 'Bodega', icono: 'inventario', roles: ['admin', 'bodega'] },
     ],
   },
@@ -132,7 +136,8 @@ onMounted(() => establecimiento.cargar());
             :to="enlace.ruta"
             class="mb-1 flex min-h-tocable items-center gap-3 rounded-control px-3 py-2.5
                    text-tinta-2 transition-colors hover:bg-linea-suave hover:text-tinta"
-            active-class="!bg-marino !font-bold !text-superficie"
+            :active-class="enlace.exacto ? '' : '!bg-marino !font-bold !text-superficie'"
+            exact-active-class="!bg-marino !font-bold !text-superficie"
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />
             <span class="truncate">{{ enlace.etiqueta }}</span>
@@ -180,7 +185,8 @@ onMounted(() => establecimiento.cargar());
             :to="enlace.ruta"
             class="mb-1 flex min-h-tocable items-center gap-3 rounded-control px-3 py-2.5
                    text-tinta-2 transition-colors hover:bg-linea-suave hover:text-tinta"
-            active-class="!bg-marino !font-bold !text-superficie"
+            :active-class="enlace.exacto ? '' : '!bg-marino !font-bold !text-superficie'"
+            exact-active-class="!bg-marino !font-bold !text-superficie"
             @click="menuAbierto = false"
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />

@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import HojaImpresion from '../../components/comunes/HojaImpresion.vue';
 import { SEMAFORO } from '../../dominio/bodega';
-import { establecimiento as cargarEstablecimiento, registrarImpresion } from '../../dominio/impresionBodega';
+import { establecimiento as cargarEstablecimiento, registrarImpresion, firmasBodega } from '../../dominio/impresionBodega';
 
 /**
  * Semáforo impreso, por color: insumo y, por cada lote, cantidad, número y
@@ -14,6 +14,8 @@ import { establecimiento as cargarEstablecimiento, registrarImpresion } from '..
 const route = useRoute();
 const datos = ref(null);
 const est = ref(null);
+const firmas = ref([]);
+firmasBodega().then((f) => { firmas.value = f.slice(0, 1); });
 const error = ref('');
 
 onMounted(async () => {
@@ -62,7 +64,7 @@ const mesVence = (v) => {
 
 <template>
   <HojaImpresion
-    :confidencial="false" v-if="datos" titulo="Semáforo de medicamentos" :establecimiento="est" :firmas="[{ etiqueta: 'Encargado de bodega', conNombre: true }]" imprimir-al-abrir>
+    :confidencial="false" v-if="datos" titulo="Semáforo de medicamentos" :establecimiento="est" :firmas="firmas" imprimir-al-abrir>
     <p class="leyenda bloque-impresion">
       <span class="muestra rojo">Rojo</span> menos de {{ datos.rangos.rojo }} meses
       <span class="muestra amarillo">Amarillo</span> de {{ datos.rangos.rojo }} a {{ datos.rangos.amarillo }} meses

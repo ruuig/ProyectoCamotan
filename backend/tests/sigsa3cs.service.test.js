@@ -24,7 +24,7 @@ describe('SIGSA-3CS: renglón de una consulta', () => {
       pueblo: '2', comunidadLinguistica: '6', discapacidad: '0', orientacionSexual: '1', escolaridad: '4',
       comunidad: 'Guior', municipio: 'Camotán', migrante: '', consulta: '1', control: '', fue: '1', referidoA: 'Oftalmología',
     });
-    expect(r.nacimiento).toEqual({ dia: 1, mes: 7, anio: 2009, edad: '' });
+    expect(r.nacimiento).toEqual({ dia: 1, mes: 7, anio: 2009, estimada: false });
     expect(r.diagnosticos.map((d) => d.cie)).toEqual(['T15.9', 'H10.9']);
     expect(r.tratamiento).toEqual([{ descripcion: 'Ibuprofeno 400 mg', presentacion: 'tableta', cantidad: 10 }]);
   });
@@ -33,11 +33,15 @@ describe('SIGSA-3CS: renglón de una consulta', () => {
     expect(renglonSigsa3cs(atencion, { sensibles: false }).orientacionSexual).toBe('');
   });
 
-  it('con fecha de nacimiento estimada se anota la edad, no una fecha inventada', () => {
-    expect(nacimiento({ fechaNacimiento: '1968-07-01T12:00:00Z', fechaNacimientoEstimada: true }, '2026-10-05T16:00:00Z'))
-      .toEqual({ dia: '', mes: '', anio: '', edad: '58 años' });
-    expect(nacimiento({ fechaNacimiento: '2025-10-01T12:00:00Z', fechaNacimientoEstimada: true }, '2026-10-05T16:00:00Z').edad).toBe('1 año');
-    expect(nacimiento({ fechaNacimiento: '2026-03-01T12:00:00Z', fechaNacimientoEstimada: true }, '2026-10-05T16:00:00Z').edad).toBe('7 meses');
+  it('con fecha estimada se anota la edad en una sola casilla, no una fecha inventada', () => {
+    const estimada = (fecha) => nacimiento({ fechaNacimiento: fecha, fechaNacimientoEstimada: true }, '2026-10-05T16:00:00Z');
+    // Los años van en la casilla del año.
+    expect(estimada('1968-07-01T12:00:00Z')).toEqual({ dia: '', mes: '', anio: 58, estimada: true });
+    expect(estimada('2025-10-01T12:00:00Z')).toEqual({ dia: '', mes: '', anio: 1, estimada: true });
+    // Los meses, en la del mes.
+    expect(estimada('2026-03-01T12:00:00Z')).toEqual({ dia: '', mes: 7, anio: '', estimada: true });
+    // Los días, en la del día.
+    expect(estimada('2026-09-25T16:00:00Z')).toEqual({ dia: 10, mes: '', anio: '', estimada: true });
   });
 
   it('marca con X al agrícola migrante', () => {

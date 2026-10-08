@@ -18,6 +18,7 @@ let tokenMedico;
 let tokenPre;
 let tokenAdmin;
 let establecimientoId;
+let farmaciaId;
 
 async function login(usuario) {
   const r = await request(app).post('/api/v1/auth/login').send({ usuario, password: 'Camotan2026!' });
@@ -47,13 +48,21 @@ async function nuevoInsumo(extra = {}) {
   return r.body.insumo;
 }
 
-async function recibirLote(insumoId, { cantidad, dias, numeroLote, ...extra }) {
+// Con aFarmacia, todo lo recibido pasa a la farmacia con un traslado, como
+// en el centro: farmacia solo entrega lo que tiene.
+async function recibirLote(insumoId, { cantidad, dias, numeroLote, aFarmacia = false, ...extra }) {
   const r = await farm(request(app).post(`/api/v1/insumos/${insumoId}/lotes`)).send({
     numeroLote: numeroLote ?? `L${Math.random().toString(36).slice(2, 8)}`,
     fechaVence: enDias(dias),
     cantidad,
     ...extra,
   });
+  if (aFarmacia && r.body.lote) {
+    const t = await farm(request(app).post('/api/v1/bodega/traslados')).send({
+      ubicacionId: farmaciaId, recibidoPor: 'Farmacia', renglones: [{ loteId: r.body.lote.id, cantidad }],
+    });
+    if (t.status !== 201) throw new Error(`No pasó a farmacia: ${JSON.stringify(t.body)}`);
+  }
   return r.body;
 }
 
@@ -134,10 +143,13 @@ async function limpiar() {
   await prisma.demandaNoAtendida.deleteMany({ where: { insumoId: { in: insumoIds } } });
   await prisma.demandaNoAtendida.deleteMany({ where: { pacienteId: { in: pacienteIds } } });
   await prisma.movimientoInsumo.deleteMany({ where: { loteId: { in: loteIds } } });
+  // Los traslados a farmacia de estas pruebas quedan sin renglones: se borran.
+  await prisma.traslado.deleteMany({ where: { establecimientoId, recibidoPor: 'Farmacia', movimientos: { none: {} } } });
   await prisma.dispensacion.deleteMany({
     where: { prescripcion: { atencionId: { in: atencionIds } } },
   });
   await prisma.prescripcion.deleteMany({ where: { atencionId: { in: atencionIds } } });
+  await prisma.recetaExterna.deleteMany({ where: { atencionId: { in: atencionIds } } });
   await prisma.lote.deleteMany({ where: { id: { in: loteIds } } });
   await prisma.insumo.deleteMany({ where: { id: { in: insumoIds } } });
   await prisma.antropometria.deleteMany({ where: { pacienteId: { in: pacienteIds } } });
@@ -158,6 +170,7 @@ beforeAll(async () => {
   ]);
   const u = await prisma.usuario.findUnique({ where: { usuario: 'farmacia' } });
   establecimientoId = u.establecimientoId;
+  farmaciaId = (await prisma.ubicacion.findFirst({ where: { establecimientoId, tipo: 'centro_salud' } })).id;
 });
 
 beforeEach(async () => {
@@ -397,7 +410,7 @@ describe('estados del lote', () => {
 
   it('al agotarse el lote pasa solo a agotado', async () => {
     const insumo = await nuevoInsumo();
-    const { lote } = await recibirLote(insumo.id, { cantidad: 5, dias: 400 });
+    const { lote } = await recibirLote(insumo.id, { aFarmacia: true, cantidad: 5, dias: 400 });
     const { prescripcion } = await nuevaPrescripcion(insumo.id, 5);
 
     await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -415,8 +428,8 @@ describe('estados del lote', () => {
 describe('entregas y demanda no atendida', () => {
   it('propone el lote que vence primero (PEPE)', async () => {
     const insumo = await nuevoInsumo();
-    const viejo = await recibirLote(insumo.id, { cantidad: 20, dias: 120 });
-    await recibirLote(insumo.id, { cantidad: 50, dias: 400 });
+    const viejo = await recibirLote(insumo.id, { aFarmacia: true, cantidad: 20, dias: 120 });
+    await recibirLote(insumo.id, { aFarmacia: true, cantidad: 50, dias: 400 });
 
     const { prescripcion } = await nuevaPrescripcion(insumo.id, 10);
     const r = await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -431,10 +444,10 @@ describe('entregas y demanda no atendida', () => {
   it('PEPE salta el lote en cuarentena aunque venza primero', async () => {
     const insumo = await nuevoInsumo();
     // El que vence primero está en cuarentena: no se puede entregar.
-    await recibirLote(insumo.id, {
+    await recibirLote(insumo.id, { aFarmacia: true,
       cantidad: 40, dias: 120, verificacion: { empaque: false },
     });
-    const bueno = await recibirLote(insumo.id, { cantidad: 40, dias: 400 });
+    const bueno = await recibirLote(insumo.id, { aFarmacia: true, cantidad: 40, dias: 400 });
 
     const { prescripcion } = await nuevaPrescripcion(insumo.id, 10);
     const r = await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -461,12 +474,13 @@ describe('entregas y demanda no atendida', () => {
 
     expect(r.status).toBe(201);
     expect(r.body.existencia.saldoTotal).toBe(0);
-    expect(r.body.avisos.join(' ')).toContain('Quedan 0');
+    expect(r.body.existencia.enFarmacia).toBe(0);
+    expect(r.body.avisos.join(' ')).toContain('En farmacia quedan 0');
   });
 
   it('registra la demanda no atendida cuando no alcanza', async () => {
     const insumo = await nuevoInsumo();
-    await recibirLote(insumo.id, { cantidad: 4, dias: 400 });
+    await recibirLote(insumo.id, { aFarmacia: true, cantidad: 4, dias: 400 });
 
     const { prescripcion } = await nuevaPrescripcion(insumo.id, 10);
     const r = await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -756,7 +770,7 @@ describe('inventario físico', () => {
 
   it('un lote recién agotado sigue entrando: hay que verificar que el cero es cero', async () => {
     const insumo = await nuevoInsumo();
-    const { lote } = await recibirLote(insumo.id, { cantidad: 5, dias: 400 });
+    const { lote } = await recibirLote(insumo.id, { aFarmacia: true, cantidad: 5, dias: 400 });
     const { prescripcion } = await nuevaPrescripcion(insumo.id, 5);
 
     await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -860,7 +874,7 @@ describe('BRES', () => {
 
   it('la demanda real es lo entregado más lo no entregado', async () => {
     const insumo = await nuevoInsumo();
-    await recibirLote(insumo.id, { cantidad: 20, dias: 400 });
+    await recibirLote(insumo.id, { aFarmacia: true, cantidad: 20, dias: 400 });
 
     const { prescripcion } = await nuevaPrescripcion(insumo.id, 15);
     await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -943,7 +957,7 @@ describe('BRES', () => {
 
   it('el registro diario de demanda se deriva de los movimientos', async () => {
     const insumo = await nuevoInsumo();
-    await recibirLote(insumo.id, { cantidad: 20, dias: 400 });
+    await recibirLote(insumo.id, { aFarmacia: true, cantidad: 20, dias: 400 });
     const { prescripcion } = await nuevaPrescripcion(insumo.id, 5);
     await farm(request(app).post('/api/v1/dispensaciones')).send({
       prescripcionId: prescripcion.id,
@@ -966,7 +980,7 @@ describe('BRES', () => {
 describe('trazabilidad', () => {
   it('desde el lote: movimientos y a quién llegó', async () => {
     const insumo = await nuevoInsumo();
-    const { lote } = await recibirLote(insumo.id, { cantidad: 30, dias: 400 });
+    const { lote } = await recibirLote(insumo.id, { aFarmacia: true, cantidad: 30, dias: 400 });
     const { prescripcion, paciente } = await nuevaPrescripcion(insumo.id, 6);
 
     await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -978,14 +992,25 @@ describe('trazabilidad', () => {
 
     expect(r.status).toBe(200);
     expect(r.body.cuadra).toBe(true);
-    expect(r.body.movimientos).toHaveLength(2);
+    // Ingreso a bodega, sale de bodega, entra a farmacia, entrega al paciente.
+    expect(r.body.movimientos.map((m) => [m.tipo, m.ubicacion, m.cantidad])).toEqual([
+      ['ingreso', 'bodega', 30],
+      ['paso_farmacia', 'bodega', -30],
+      ['paso_farmacia', 'farmacia', 30],
+      ['entrega', 'farmacia', -6],
+    ]);
+    expect(r.body.pasosFarmacia).toMatchObject([{ sentido: 'a_farmacia', cantidad: 30 }]);
+    expect(r.body.pasosFarmacia[0].numero).toMatch(/^TRA-/);
     expect(r.body.pacientes[0].pacienteId).toBe(paciente.id);
     expect(r.body.pacientes[0].cantidad).toBe(6);
+    expect(r.body.pacientes[0].entregadoPor).toBeTruthy();
+    // Donde esta cada unidad: 6 al paciente, 24 en farmacia, nada en bodega.
+    expect(r.body.cuenta).toMatchObject({ recibido: 30, aPacientes: 6, enFarmacia: 24, enBodega: 0, cuadra: true });
   });
 
   it('desde el paciente: qué recibió y en qué estado está cada lote', async () => {
     const insumo = await nuevoInsumo();
-    await recibirLote(insumo.id, { cantidad: 30, dias: 400 });
+    await recibirLote(insumo.id, { aFarmacia: true, cantidad: 30, dias: 400 });
     const { prescripcion, paciente } = await nuevaPrescripcion(insumo.id, 4);
 
     await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -1026,7 +1051,7 @@ describe('trazabilidad', () => {
 describe('retiro sanitario', () => {
   it('retira los lotes y arma la lista de pacientes a localizar', async () => {
     const insumo = await nuevoInsumo();
-    const { lote } = await recibirLote(insumo.id, { cantidad: 30, dias: 400 });
+    const { lote } = await recibirLote(insumo.id, { aFarmacia: true, cantidad: 30, dias: 400 });
     const { prescripcion, paciente } = await nuevaPrescripcion(insumo.id, 5);
 
     await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -1052,7 +1077,7 @@ describe('retiro sanitario', () => {
 
   it('el retiro se marca en la ficha del paciente', async () => {
     const insumo = await nuevoInsumo();
-    const { lote } = await recibirLote(insumo.id, { cantidad: 30, dias: 400 });
+    const { lote } = await recibirLote(insumo.id, { aFarmacia: true, cantidad: 30, dias: 400 });
     const { prescripcion, paciente } = await nuevaPrescripcion(insumo.id, 5);
 
     await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -1073,7 +1098,7 @@ describe('retiro sanitario', () => {
 
   it('no se cierra mientras quede alguien sin localizar', async () => {
     const insumo = await nuevoInsumo();
-    const { lote } = await recibirLote(insumo.id, { cantidad: 30, dias: 400 });
+    const { lote } = await recibirLote(insumo.id, { aFarmacia: true, cantidad: 30, dias: 400 });
     const { prescripcion } = await nuevaPrescripcion(insumo.id, 5);
 
     await farm(request(app).post('/api/v1/dispensaciones')).send({
@@ -1201,7 +1226,7 @@ describe('constancia de entrega y SIGSA-4', () => {
 
   it('tras entregar, el paciente queda por firmar; con su firma sale del pendiente y la firma va al SIGSA-4', async () => {
     const insumo = await nuevoInsumo();
-    await recibirLote(insumo.id, { cantidad: 50, dias: 400 });
+    await recibirLote(insumo.id, { aFarmacia: true, cantidad: 50, dias: 400 });
     const { atencion, prescripcion } = await nuevaPrescripcion(insumo.id, 10);
     await farm(request(app).post('/api/v1/dispensaciones')).send({ prescripcionId: prescripcion.id, cantidad: 10 });
 
@@ -1249,3 +1274,55 @@ describe('constancia de entrega y SIGSA-4', () => {
     expect(r.status).toBe(403);
   });
 });
+
+describe('Receta del medico', () => {
+  it('lo de laboratorio y material medico quirurgico no se receta ni aparece en la lista', async () => {
+    const reactivo = await nuevoInsumo({ categoria: 'laboratorio' });
+    const pastilla = await nuevoInsumo();
+    expect(reactivo.prescribible).toBe(false);
+    expect(pastilla.prescribible).toBe(true);
+
+    const lista = await med(request(app).get('/api/v1/insumos?prescribible=true'));
+    const ids = lista.body.insumos.map((i) => i.id);
+    expect(ids).toContain(pastilla.id);
+    expect(ids).not.toContain(reactivo.id);
+
+    const { atencion } = await nuevaPrescripcion(pastilla.id, 1);
+    const r = await med(request(app).post(`/api/v1/atenciones/${atencion.id}/prescripcion`)).send({ insumoId: reactivo.id, cantidad: 1 });
+    expect(r.status).toBe(400);
+    expect(r.body.error.codigo).toBe('insumo_no_prescribible');
+  });
+
+  it('bodega puede marcar que un insumo si se receta', async () => {
+    const guantes = await nuevoInsumo({ categoria: 'medico_quirurgico' });
+    const r = await farm(request(app).patch(`/api/v1/bodega/insumos/${guantes.id}/prescribible`)).send({ prescribible: true });
+    expect(r.status).toBe(200);
+    const lista = await med(request(app).get('/api/v1/insumos?prescribible=true'));
+    expect(lista.body.insumos.map((i) => i.id)).toContain(guantes.id);
+  });
+
+  it('receta para conseguir fuera: queda en la consulta y no pasa por farmacia', async () => {
+    const pastilla = await nuevoInsumo();
+    const { atencion } = await nuevaPrescripcion(pastilla.id, 1);
+    const r = await med(request(app).post(`/api/v1/atenciones/${atencion.id}/receta-externa`)).send({
+      medicamento: 'Loratadina 10 mg tableta', cantidad: 10, indicaciones: '1 diaria por 10 días',
+    });
+    expect(r.status).toBe(201);
+    expect(r.body.receta).toMatchObject({ medicamento: 'Loratadina 10 mg tableta', cantidad: 10 });
+
+    const consulta = await med(request(app).get(`/api/v1/atenciones/${atencion.id}`));
+    expect(consulta.body.atencion.recetasExternas.map((x) => x.medicamento)).toEqual(['Loratadina 10 mg tableta']);
+
+    // Farmacia no tiene nada que entregar de esto.
+    const pendientes = await farm(request(app).get('/api/v1/dispensaciones/pendientes'));
+    expect(JSON.stringify(pendientes.body)).not.toContain('Loratadina 10 mg tableta');
+  });
+
+  it('la receta de fuera exige el nombre del medicamento', async () => {
+    const pastilla = await nuevoInsumo();
+    const { atencion } = await nuevaPrescripcion(pastilla.id, 1);
+    const r = await med(request(app).post(`/api/v1/atenciones/${atencion.id}/receta-externa`)).send({ medicamento: ' ' });
+    expect(r.status).toBe(400);
+  });
+});
+

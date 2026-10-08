@@ -37,7 +37,7 @@ async function consolidadoDelMes(establecimientoId, mes) {
 
   const [atenciones, movimientos, lotes, establecimiento] = await Promise.all([
     prisma.atencion.findMany({
-      where: { establecimientoId, registradaEn: { gte: desde, lt: hasta } },
+      where: { establecimientoId, registradaEn: { gte: desde, lt: hasta }, estado: { not: 'cancelada' } },
       include: {
         paciente: { select: { fechaNacimiento: true, sexo: true, comunidad: true } },
       },

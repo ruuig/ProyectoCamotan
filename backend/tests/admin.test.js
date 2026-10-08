@@ -284,6 +284,84 @@ describe('usuarios', () => {
   });
 });
 
+describe('datos y acceso de un usuario', () => {
+  async function crear(sufijo, rol = 'medico') {
+    const r = await admin(request(app).post('/api/v1/admin/usuarios')).send({
+      usuario: `${MARCA.toLowerCase()}_${sufijo}`,
+      password: 'ContrasenaLarga2026',
+      nombre: 'Usuario de Prueba',
+      rol,
+      cargo: 'Auxiliar de enfermeria',
+    });
+    expect(r.status).toBe(201);
+    return r.body.usuario;
+  }
+
+  it('guarda el cargo al crear y lo devuelve en la lista', async () => {
+    const u = await crear('cargo');
+    expect(u.cargo).toBe('Auxiliar de enfermeria');
+
+    const lista = await admin(request(app).get('/api/v1/admin/usuarios'));
+    expect(lista.body.usuarios.find((x) => x.id === u.id).cargo).toBe('Auxiliar de enfermeria');
+  });
+
+  it('cambia nombre y cargo sin autorizacion y lo deja en bitacora', async () => {
+    const u = await crear('datos');
+    const r = await admin(request(app).patch(`/api/v1/admin/usuarios/${u.id}`)).send({
+      nombre: 'Dra. Ana Lopez',
+      cargo: 'Medico y cirujano',
+    });
+
+    expect(r.status).toBe(200);
+    expect(r.body.usuario).toMatchObject({ nombre: 'Dra. Ana Lopez', cargo: 'Medico y cirujano' });
+    const registro = await prisma.bitacora.findFirst({
+      where: { entidad: 'usuario', entidadId: u.id, accion: 'actualizar' },
+      orderBy: { id: 'desc' },
+    });
+    expect(registro.detalle).toContain('Medico y cirujano');
+  });
+
+  it('el medico no puede editar usuarios', async () => {
+    const u = await crear('ajeno');
+    const r = await medico(request(app).patch(`/api/v1/admin/usuarios/${u.id}`)).send({ cargo: 'x' });
+    expect(r.status).toBe(403);
+  });
+
+  it('cambiar el rol exige autorizacion del director', async () => {
+    const u = await crear('rol');
+    const sin = await admin(request(app).patch(`/api/v1/admin/usuarios/${u.id}/acceso`)).send({ rol: 'farmacia' });
+    expect(sin.status).toBe(400);
+
+    const con = await admin(request(app).patch(`/api/v1/admin/usuarios/${u.id}/acceso`)).send({
+      rol: 'farmacia',
+      autorizacion: DIRECTOR,
+    });
+    expect(con.status).toBe(200);
+    expect(con.body.usuario.rol).toBe('farmacia');
+  });
+
+  it('restablece la contrasena: la nueva sirve y la anterior ya no', async () => {
+    const u = await crear('clave');
+    const r = await admin(request(app).patch(`/api/v1/admin/usuarios/${u.id}/acceso`)).send({
+      password: 'ClaveNueva20261',
+      autorizacion: DIRECTOR,
+    });
+    expect(r.status).toBe(200);
+
+    expect((await login(`${MARCA.toLowerCase()}_clave`, 'ClaveNueva20261')).status).toBe(200);
+    expect((await login(`${MARCA.toLowerCase()}_clave`, 'ContrasenaLarga2026')).status).toBe(401);
+  });
+
+  it('el director no puede quitarse a si mismo la direccion', async () => {
+    const director = await prisma.usuario.findFirst({ where: { dpi: DIRECTOR.dpi } });
+    const r = await admin(request(app).patch(`/api/v1/admin/usuarios/${director.id}/acceso`)).send({
+      esDirector: false,
+      autorizacion: DIRECTOR,
+    });
+    expect(r.status).toBe(409);
+  });
+});
+
 describe('establecimiento', () => {
   it('modificarlo exige autorizacion y deja el cambio en bitacora', async () => {
     const original = await admin(request(app).get('/api/v1/admin/establecimiento'));
@@ -362,3 +440,60 @@ describe('segundo factor del administrador', () => {
     expect(r.status).toBe(403);
   });
 });
+
+describe('respaldos de la base de datos', () => {
+  let configAntes;
+  beforeAll(async () => {
+    configAntes = await prisma.configuracionRespaldo.findUnique({ where: { id: 1 } });
+  });
+  afterAll(async () => {
+    const { id, ...resto } = configAntes;
+    await prisma.configuracionRespaldo.update({ where: { id }, data: resto });
+  });
+
+  it('solo el administrador los ve', async () => {
+    expect((await medico(request(app).get('/api/v1/admin/respaldos'))).status).toBe(403);
+    const r = await admin(request(app).get('/api/v1/admin/respaldos'));
+    expect(r.status).toBe(200);
+    expect(r.body.configuracion).toHaveProperty('frecuencia');
+    expect(Array.isArray(r.body.respaldos)).toBe(true);
+  });
+
+  it('guarda el horario y rechaza valores fuera de rango', async () => {
+    const mala = await admin(request(app).put('/api/v1/admin/respaldos/configuracion')).send({
+      automatico: true, frecuencia: 'diaria', hora: 25, diaSemana: 1, conservar: 10,
+    });
+    expect(mala.status).toBe(400);
+    const r = await admin(request(app).put('/api/v1/admin/respaldos/configuracion')).send({
+      automatico: true, frecuencia: 'semanal', hora: 13, diaSemana: 5, conservar: 4,
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.configuracion).toMatchObject({ frecuencia: 'semanal', hora: 13, diaSemana: 5, conservar: 4 });
+    expect(r.body.configuracion.proximo).toBeTruthy();
+  });
+
+  it('descargar exige al director y entrega el SQL', async () => {
+    const sin = await admin(request(app).post('/api/v1/admin/respaldos/descargar')).send({});
+    expect(sin.status).toBe(400);
+    const mal = await admin(request(app).post('/api/v1/admin/respaldos/descargar')).send({
+      autorizacion: { ...DIRECTOR, password: 'incorrecta' },
+    });
+    expect(mal.status).toBe(403);
+
+    const r = await admin(request(app).post('/api/v1/admin/respaldos/descargar'))
+      .send({ autorizacion: DIRECTOR })
+      .buffer(true)
+      .parse((res, fin) => { let t = ''; res.on('data', (d) => { t += d; }); res.on('end', () => fin(null, t)); });
+    expect(r.status).toBe(200);
+    expect(r.headers['content-disposition']).toMatch(/camotan_\d{4}-\d{2}-\d{2}_\d{4}_manual\.sql/);
+    expect(r.body).toContain('PostgreSQL database dump');
+  }, 120000);
+
+  it('no entrega archivos fuera de la carpeta de respaldos', async () => {
+    const r = await admin(request(app).post('/api/v1/admin/respaldos/descargar')).send({
+      nombre: '../.env', autorizacion: DIRECTOR,
+    });
+    expect(r.status).toBe(404);
+  });
+});
+

@@ -1,6 +1,6 @@
 /**
  * Importacion del historial de la bodega desde los Excel del centro
- * (plantillas/): catalogo, alias, reportes de los servicios, BRES historicos
+ * (documentacion/Plantillas/): catalogo, alias, reportes de los servicios, BRES historicos
  * y existencia inicial con sus lotes.
  *
  * Funciones puras. El script que escribe en la base es

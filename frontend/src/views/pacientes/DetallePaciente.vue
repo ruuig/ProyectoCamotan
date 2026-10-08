@@ -45,6 +45,7 @@ const ESTADO_ATENCION = {
   en_espera: { texto: 'En espera', clase: 'text-advertencia' },
   en_atencion: { texto: 'En consulta', clase: 'text-mejora' },
   ausente: { texto: 'Ausente', clase: 'text-apagado' },
+  cancelada: { texto: 'Cancelada', clase: 'text-apagado' },
 };
 
 const GRAVEDAD = {
@@ -96,17 +97,37 @@ const distintivos = computed(() => {
 // --- Atención --------------------------------------------------------------
 
 async function abrirAtencion() {
+  // Preconsulta: la atención se abre al guardar la toma de signos.
+  if (auth.rol !== 'medico') {
+    router.push(`/preconsulta/nueva?paciente=${paciente.value.id}`);
+    return;
+  }
+  // El médico atiende sin preconsulta cuando no está cubierta: se abre ya.
   abriendo.value = true;
   error.value = '';
   try {
-    // El motivo se pregunta en la toma de signos vitales, que es el mismo
-    // momento en la práctica: aquí solo se abre la atención.
-    const datos = await servicio.crearAtencion({ pacienteId: paciente.value.id });
-    router.push(`/preconsulta/${datos.atencion.id}`);
+    await servicio.crearAtencion({ pacienteId: paciente.value.id });
+    await cargar();
   } catch (fallo) {
     error.value = fallo.message;
   } finally {
     abriendo.value = false;
+  }
+}
+
+// --- Cancelar una atención abierta por error ------------------------------------
+const cancelando = ref(false);
+const motivoCancelacion = ref('');
+
+async function cancelarAtencion() {
+  error.value = '';
+  try {
+    await servicio.cancelarAtencion(atencionAbierta.value.id, motivoCancelacion.value.trim());
+    cancelando.value = false;
+    motivoCancelacion.value = '';
+    await cargar();
+  } catch (fallo) {
+    error.value = fallo.message;
   }
 }
 
@@ -225,9 +246,18 @@ onMounted(() => {
     </dl>
 
     <!-- Lo que pide hacer algo -->
-    <div v-if="atencionAbierta" class="b-aviso ok mt-4">
-      Atención {{ ESTADO_ATENCION[atencionAbierta.estado].texto.toLowerCase() }}<template v-if="atencionAbierta.preconsulta"> · preconsulta registrada</template>
+    <div v-if="atencionAbierta" class="b-aviso ok mt-4 flex-wrap items-center justify-between gap-2">
+      <span>Atención {{ ESTADO_ATENCION[atencionAbierta.estado].texto.toLowerCase() }}<template v-if="atencionAbierta.preconsulta"> · preconsulta registrada</template></span>
+      <button v-if="puedeRegistrar && !cancelando" type="button" class="b-btn secundario chico" @click="cancelando = true">Cancelar atención</button>
     </div>
+    <form v-if="cancelando" class="b-panel mt-3 flex flex-wrap items-end gap-3 p-4" @submit.prevent="cancelarAtencion">
+      <div class="min-w-[16rem] flex-1">
+        <label for="motivo-cancelar" class="b-etiqueta">Por qué se cancela</label>
+        <input id="motivo-cancelar" v-model="motivoCancelacion" required minlength="5" placeholder="Ej.: se abrió por error, era otro paciente" class="b-campo" />
+      </div>
+      <button type="button" class="b-btn secundario" @click="cancelando = false">No cancelar</button>
+      <button type="submit" class="b-btn primario" :disabled="motivoCancelacion.trim().length < 5">Cancelar atención</button>
+    </form>
     <div v-if="insumos && insumos.conRetiroActivo > 0" class="b-aviso error mt-4 flex-col">
       <span>Recibió {{ insumos.conRetiroActivo }} {{ insumos.conRetiroActivo === 1 ? 'producto' : 'productos' }} bajo retiro sanitario</span>
       <ul class="text-sm">
@@ -293,7 +323,12 @@ onMounted(() => {
             <li v-for="e in insumos.entregas" :key="e.movimientoId">
               <span class="min-w-0 flex-1">
                 <b class="block truncate text-tinta">{{ e.insumo.nombreGenerico }}</b>
-                <small>Lote <span class="font-mono">{{ e.lote.numeroLote }}</span> · {{ fecha(e.fecha) }}</small>
+                <small>
+                  Lote <RouterLink :to="`/inventario/trazabilidad?lote=${e.lote.id}`" class="font-mono hover:underline">{{ e.lote.numeroLote }}</RouterLink>
+                  · {{ fecha(e.fecha) }}<template v-if="e.entregadoPor"> · entregó {{ e.entregadoPor }}</template>
+                </small>
+                <small v-if="e.medico || e.diagnostico">Recetó {{ e.medico ?? '—' }}<template v-if="e.diagnostico"> · {{ e.diagnostico }}</template></small>
+                <small v-if="e.anulada" class="text-[#B7710A]">Entrega anulada</small>
                 <small v-if="e.retiro" class="font-bold text-[#C03535]">Bajo retiro sanitario</small>
               </span>
               <b class="tabular-nums text-tinta">{{ e.cantidad }}</b>

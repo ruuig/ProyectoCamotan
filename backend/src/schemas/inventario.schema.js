@@ -16,6 +16,7 @@ const listarInsumos = z.object({
   categoria: z.enum(CATEGORIAS).optional(),
   // Para revisar solo lo que necesita decision.
   soloBajoMinimo: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  prescribible: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
 });
 
 const crearInsumo = z.object({
@@ -37,6 +38,8 @@ const crearInsumo = z.object({
   codigoBarras: z.string().trim().max(40).optional().nullable(),
   costoReferencia: z.coerce.number().min(0).optional().nullable(),
   unidadesPorEmpaque: z.coerce.number().int().min(1).max(10000).default(1),
+  // Si no se indica, se decide por la categoria.
+  prescribible: z.boolean().optional(),
 });
 
 /**
@@ -190,6 +193,7 @@ const configurarLogistica = z.object({
   semaforoRojoMeses: z.coerce.number().int().min(1).max(60).optional(),
   semaforoAmarilloMeses: z.coerce.number().int().min(2).max(72).optional(),
   diaCorteReportes: z.coerce.number().int().min(1).max(28).optional(),
+  lugaresReparto: z.coerce.number().int().min(1).max(200).optional(),
   encargadoBodega: z.string().trim().max(160).optional().nullable(),
   coordinadorMunicipal: z.string().trim().max(160).optional().nullable(),
   cargoEncargadoBodega: z.string().trim().min(2).max(160).optional(),

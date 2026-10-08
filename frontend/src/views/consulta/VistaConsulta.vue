@@ -27,6 +27,7 @@ const sync = useSincronizacionStore();
 const datos = ref(null);
 const insumos = ref([]);
 const prescripciones = ref([]);
+const recetasExternas = ref([]);
 const error = ref('');
 const erroresCampos = ref([]);
 const avisosReceta = ref([]);
@@ -53,7 +54,10 @@ const hoja = reactive({
   laboratorios: '',
   orientacionIntegral: '',
 });
-const receta = reactive({ insumoId: '', cantidad: '', indicaciones: '' });
+// En la receta se elige un insumo del centro o, si no lo hay, se escribe el
+// medicamento para que el paciente lo consiga fuera (externo).
+const receta = reactive({ insumo: null, externo: '', cantidad: '', indicaciones: '' });
+const busquedaReceta = ref('');
 const masDeLaFicha = ref(false);
 const sugerencia = ref(null);
 const tipoElegidoAMano = ref(false);
@@ -260,6 +264,7 @@ async function cargar() {
   try {
     datos.value = await servicio.obtener(route.params.id);
     prescripciones.value = datos.value.atencion.prescripciones ?? [];
+    recetasExternas.value = datos.value.atencion.recetasExternas ?? [];
     insumos.value = (await servicio.insumos()).insumos;
 
     const a = datos.value.atencion;
@@ -280,18 +285,78 @@ async function cargar() {
   }
 }
 
+// --- Receta ---------------------------------------------------------------------------
+
+// Sin tildes ni mayúsculas: «acetaminofen» encuentra «Acetaminofén».
+const normalizar = (texto) => String(texto ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const MAX_RESULTADOS = 8;
+
+const resultadosReceta = computed(() => {
+  const palabras = normalizar(busquedaReceta.value).split(/\s+/).filter(Boolean);
+  if (palabras.length === 0) return [];
+  return insumos.value
+    .filter((i) => {
+      const texto = normalizar(`${i.nombreGenerico} ${i.nombreComercial ?? ''} ${i.presentacion ?? ''} ${i.codigoMspas ?? ''}`);
+      return palabras.every((p) => texto.includes(p));
+    })
+    // Primero lo que hay para entregar hoy.
+    .sort((a, b) => Number(b.saldoFarmacia > 0) - Number(a.saldoFarmacia > 0) || a.nombreGenerico.localeCompare(b.nombreGenerico, 'es'))
+    .slice(0, MAX_RESULTADOS);
+});
+
+function elegirInsumo(insumo) {
+  receta.insumo = insumo;
+  receta.externo = '';
+  busquedaReceta.value = '';
+}
+
+function recetarFuera() {
+  receta.insumo = null;
+  receta.externo = busquedaReceta.value.trim();
+  busquedaReceta.value = '';
+}
+
+// Enter elige el primero de la lista; si no hay ninguno, lo receta para fuera.
+function elegirConEnter() {
+  if (resultadosReceta.value.length) elegirInsumo(resultadosReceta.value[0]);
+  else if (busquedaReceta.value.trim().length >= 2) recetarFuera();
+}
+
+function cambiarMedicamento() {
+  busquedaReceta.value = receta.insumo?.nombreGenerico ?? receta.externo;
+  receta.insumo = null;
+  receta.externo = '';
+}
+
+const recetaLista = computed(() => {
+  if (receta.insumo) return Number(receta.cantidad) > 0;
+  // Para lo que se consigue fuera la cantidad es opcional.
+  return receta.externo.trim().length >= 2;
+});
+
 async function agregarReceta() {
   error.value = '';
   avisosReceta.value = [];
   try {
-    const r = await servicio.prescribir(route.params.id, {
-      insumoId: Number(receta.insumoId),
-      cantidad: Number(receta.cantidad),
-      indicaciones: receta.indicaciones || null,
-    });
-    prescripciones.value.push(r.prescripcion);
-    avisosReceta.value = r.avisos ?? [];
-    receta.insumoId = '';
+    if (receta.insumo) {
+      const r = await servicio.prescribir(route.params.id, {
+        insumoId: receta.insumo.id,
+        cantidad: Number(receta.cantidad),
+        indicaciones: receta.indicaciones || null,
+      });
+      prescripciones.value.push(r.prescripcion);
+      avisosReceta.value = r.avisos ?? [];
+    } else {
+      const r = await servicio.recetarFuera(route.params.id, {
+        medicamento: receta.externo.trim(),
+        cantidad: receta.cantidad ? Number(receta.cantidad) : null,
+        indicaciones: receta.indicaciones || null,
+      });
+      recetasExternas.value.push(r.receta);
+    }
+    receta.insumo = null;
+    receta.externo = '';
     receta.cantidad = '';
     receta.indicaciones = '';
   } catch (fallo) {
@@ -407,7 +472,7 @@ onMounted(() => {
         <RouterLink :to="`/imprimir/ficha/${route.params.id}`" target="_blank" class="boton-secundario">
           <Icono nombre="consulta" :tamano="18" /> Imprimir ficha
         </RouterLink>
-        <RouterLink :to="`/imprimir/referencia/${route.params.id}`" target="_blank" class="boton-secundario">
+        <RouterLink :to="`/consulta/${route.params.id}/referencia`" class="boton-secundario">
           <Icono nombre="irA" :tamano="18" /> Boleta de referencia
         </RouterLink>
       </div>
@@ -610,10 +675,10 @@ onMounted(() => {
 
               <div class="rounded-control border border-linea bg-fondo p-4">
                 <p class="flex items-center gap-2 font-bold text-tinta">
-                  <Icono nombre="dispensacion" :tamano="18" class="text-marino" /> Receta para farmacia
-                  <span v-if="prescripciones.length" class="font-normal text-apagado">({{ prescripciones.length }})</span>
+                  <Icono nombre="dispensacion" :tamano="18" class="text-marino" /> Receta
+                  <span v-if="prescripciones.length + recetasExternas.length" class="font-normal text-apagado">({{ prescripciones.length + recetasExternas.length }})</span>
                 </p>
-                <ul v-if="prescripciones.length" class="mt-3 space-y-1.5">
+                <ul v-if="prescripciones.length || recetasExternas.length" class="mt-3 space-y-1.5">
                   <li
                     v-for="p in prescripciones"
                     :key="p.id"
@@ -622,25 +687,82 @@ onMounted(() => {
                     <span class="font-bold text-tinta">{{ p.insumo.nombreGenerico }} <span class="font-normal text-apagado">{{ p.insumo.presentacion }}</span></span>
                     <span class="text-tinta-2"><strong class="tabular-nums">{{ p.cantidad }}</strong><span v-if="p.indicaciones"> · {{ p.indicaciones }}</span></span>
                   </li>
+                  <li
+                    v-for="r in recetasExternas"
+                    :key="`fuera-${r.id}`"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-control border border-dashed border-linea bg-superficie px-4 py-2.5"
+                  >
+                    <span class="font-bold text-tinta">{{ r.medicamento }} <span class="ml-1 text-sm font-normal text-advertencia">Conseguir fuera del centro</span></span>
+                    <span class="text-tinta-2"><strong v-if="r.cantidad" class="tabular-nums">{{ r.cantidad }}</strong><span v-if="r.indicaciones"><template v-if="r.cantidad"> · </template>{{ r.indicaciones }}</span></span>
+                  </li>
                 </ul>
                 <p v-for="a in avisosReceta" :key="a" role="alert" class="mt-2 flex items-start gap-2 text-sm text-advertencia">
                   <Icono nombre="inventario" :tamano="16" class="mt-0.5 shrink-0" /> {{ a }}
                 </p>
-                <div class="mt-3 grid gap-3 sm:grid-cols-[1fr,7rem,1fr,auto]">
-                  <select v-model="receta.insumoId" aria-label="Medicamento" class="campo">
-                    <option value="">Medicamento y presentación</option>
-                    <option v-for="i in insumos" :key="i.id" :value="i.id">{{ i.nombreGenerico }} ({{ i.presentacion }})</option>
-                  </select>
-                  <input v-model="receta.cantidad" type="number" min="1" aria-label="Cantidad recetada" placeholder="Cantidad" class="campo tabular-nums" />
-                  <input v-model="receta.indicaciones" aria-label="Indicaciones" placeholder="Indicaciones" class="campo" />
-                  <button
-                    type="button"
-                    class="boton-secundario"
-                    :disabled="!receta.insumoId || !receta.cantidad"
-                    @click="agregarReceta"
-                  >
-                    <Icono nombre="agregar" :tamano="18" /> Agregar
-                  </button>
+                <!-- 1. Buscar el medicamento -->
+                <div v-if="!receta.insumo && !receta.externo" class="relative mt-3">
+                  <label for="buscar-medicamento" class="sr-only">Buscar medicamento</label>
+                  <Icono nombre="buscar" :tamano="18" class="pointer-events-none absolute left-3 top-3 text-apagado" />
+                  <input
+                    id="buscar-medicamento"
+                    v-model="busquedaReceta"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Buscar medicamento por nombre"
+                    class="campo pl-10"
+                    @keydown.enter.prevent="elegirConEnter"
+                  />
+                  <ul v-if="busquedaReceta.trim()" class="lista-receta" aria-label="Medicamentos encontrados">
+                    <li v-for="i in resultadosReceta" :key="i.id">
+                      <button type="button" class="opcion-receta" @click="elegirInsumo(i)">
+                        <span class="min-w-0">
+                          <b class="text-tinta">{{ i.nombreGenerico }}</b>
+                          <span v-if="i.nombreComercial" class="text-apagado"> · {{ i.nombreComercial }}</span>
+                        </span>
+                        <span v-if="i.saldoFarmacia > 0" class="shrink-0 text-sm text-mejora">Hay {{ i.saldoFarmacia }}</span>
+                        <span v-else class="shrink-0 text-sm text-advertencia">No hay en farmacia</span>
+                      </button>
+                    </li>
+                    <li v-if="!resultadosReceta.length" class="px-4 py-2.5 text-sm text-apagado">No está en la lista del centro.</li>
+                    <li v-if="busquedaReceta.trim().length >= 2">
+                      <button type="button" class="opcion-receta fuera" @click="recetarFuera">
+                        <Icono nombre="agregar" :tamano="16" class="shrink-0" />
+                        <span class="min-w-0 flex-1">Recetar «{{ busquedaReceta.trim() }}» para conseguir fuera del centro</span>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- 2. Cantidad e indicaciones del elegido -->
+                <div v-else class="mt-3 space-y-3">
+                  <div class="flex flex-wrap items-center gap-3 rounded-control bg-superficie px-4 py-2.5">
+                    <span class="min-w-0 flex-1">
+                      <template v-if="receta.insumo">
+                        <b class="text-tinta">{{ receta.insumo.nombreGenerico }}</b>
+                        <span class="ml-2 text-sm" :class="receta.insumo.saldoFarmacia > 0 ? 'text-mejora' : 'text-advertencia'">
+                          {{ receta.insumo.saldoFarmacia > 0 ? `Hay ${receta.insumo.saldoFarmacia} en farmacia` : 'No hay en farmacia: quedará como demanda no atendida' }}
+                        </span>
+                      </template>
+                      <template v-else>
+                        <b class="text-tinta">{{ receta.externo }}</b>
+                        <span class="ml-2 text-sm text-advertencia">Lo consigue fuera del centro</span>
+                      </template>
+                    </span>
+                    <button type="button" class="enlace text-sm" @click="cambiarMedicamento">Cambiar</button>
+                  </div>
+                  <div class="grid gap-3 sm:grid-cols-[8rem,1fr,auto]">
+                    <input
+                      v-model="receta.cantidad"
+                      type="number" min="1"
+                      aria-label="Cantidad recetada"
+                      :placeholder="receta.insumo ? 'Cantidad' : 'Cantidad (opc.)'"
+                      class="campo tabular-nums"
+                    />
+                    <input v-model="receta.indicaciones" aria-label="Indicaciones" placeholder="Indicaciones" class="campo" />
+                    <button type="button" class="boton-secundario" :disabled="!recetaLista" @click="agregarReceta">
+                      <Icono nombre="agregar" :tamano="18" /> Agregar
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -913,3 +1035,11 @@ onMounted(() => {
     <p v-else class="text-apagado">Cargando consulta…</p>
   </section>
 </template>
+
+<style scoped>
+.lista-receta { margin-top: 6px; overflow: hidden; border: 1px solid var(--linea, #DDE3EC); border-radius: 10px; background: #fff; }
+.opcion-receta { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; text-align: left; border-top: 1px solid var(--linea-suave, #EDF0F5); }
+li:first-child > .opcion-receta { border-top: none; }
+.opcion-receta:hover, .opcion-receta:focus-visible { background: #F2F4F7; outline: none; }
+.opcion-receta.fuera { justify-content: flex-start; color: #172A5A; font-weight: 700; }
+</style>

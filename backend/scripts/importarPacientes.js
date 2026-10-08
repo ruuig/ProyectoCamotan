@@ -16,7 +16,7 @@
  *   4. Deja constancia en la bitacora.
  *
  * Los reportes (comunidades agrupadas y filas que no se pudieron cargar) se
- * escriben en bd/importacion/.
+ * escriben en documentacion/bd/importacion/.
  */
 
 require('dotenv').config();
@@ -29,7 +29,7 @@ const { condicionesPorEdad } = require('../src/services/condiciones.service');
 
 const [, , rutaFilas, bandera] = process.argv;
 const APLICAR = bandera === '--aplicar';
-const CARPETA_REPORTES = path.join(__dirname, '..', '..', 'bd', 'importacion');
+const CARPETA_REPORTES = path.join(__dirname, '..', '..', 'documentacion', 'bd', 'importacion');
 
 function csv(filas) {
   const celda = (v) => {
@@ -164,6 +164,7 @@ async function main() {
     });
     await tx.dispensacion.deleteMany({ where: { prescripcionId: { in: idsPrescripcion } } });
     await tx.prescripcion.deleteMany({ where: { id: { in: idsPrescripcion } } });
+    await tx.recetaExterna.deleteMany({ where: { atencionId: { in: idsAtencion } } });
     await tx.notaCorreccion.deleteMany({ where: { atencionId: { in: idsAtencion } } });
     await tx.preconsulta.deleteMany({ where: { atencionId: { in: idsAtencion } } });
     await tx.antropometria.deleteMany({ where: { pacienteId: { in: idsPaciente } } });

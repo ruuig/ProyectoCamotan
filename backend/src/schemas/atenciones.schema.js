@@ -168,6 +168,48 @@ const prescripcion = z.object({
   indicaciones: z.string().trim().max(500).optional().nullable(),
 });
 
+// Lo que el centro no tiene: se escribe a mano y el paciente lo consigue fuera.
+const recetaExterna = z.object({
+  medicamento: z.string().trim().min(2, 'Escriba el medicamento').max(200),
+  cantidad: z.coerce.number().int().positive('La cantidad debe ser mayor que cero').optional().nullable(),
+  indicaciones: z.string().trim().max(500).optional().nullable(),
+});
+
+// Atencion y preconsulta juntas: la atencion se abre al guardar los datos.
+const atencionConPreconsulta = preconsulta.and(z.object({
+  pacienteId: z.coerce.number().int().positive('Debe indicar el paciente'),
+}));
+
+const cancelar = z.object({
+  motivo: z.string().trim().min(5, 'Explique por qué se cancela').max(300),
+});
+
+// Boleta de Referencia y Contrarreferencia del MSPAS.
+const textoRef = (max) => z.string().trim().max(max).optional().nullable();
+const referencia = z.object({
+  tipo: z.enum(['consulta_externa', 'emergencia']),
+  servicioDestino: z.string().trim().min(3, 'Indique a qué servicio se envía').max(200),
+  telefono: textoRef(40),
+  horaTraslado: z.union([z.literal(''), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora no válida')]).optional().nullable(),
+  historia: textoRef(4000),
+  antecedentes: z.record(z.string().max(500)).optional(),
+  examenFisico: z.record(z.string().max(60)).optional(),
+  examenes: textoRef(2000),
+  impresionClinica: textoRef(1000),
+  motivo: z.string().trim().min(3, 'Escriba el motivo de la referencia').max(1000),
+  tratamiento: textoRef(4000),
+});
+
+const contrarreferencia = z.object({
+  servicio: textoRef(200),
+  resumen: textoRef(4000),
+  tratamiento: textoRef(4000),
+  diagnostico: textoRef(1000),
+  recomendaciones: textoRef(4000),
+  responsable: textoRef(200),
+  fechaAlta: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional().nullable(),
+});
+
 const sugerenciaTipo = z.object({
   cie: z.string().trim().max(10).optional(),
   descripcion: z.string().trim().max(300).optional(),
@@ -185,4 +227,9 @@ module.exports = {
   correccion,
   correccionSignos,
   prescripcion,
+  recetaExterna,
+  atencionConPreconsulta,
+  cancelar,
+  referencia,
+  contrarreferencia,
 };

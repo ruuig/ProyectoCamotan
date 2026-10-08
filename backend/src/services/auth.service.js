@@ -42,6 +42,7 @@ function usuarioPublico(usuario) {
     usuario: usuario.usuario,
     nombre: usuario.nombre,
     rol: usuario.rol,
+    cargo: usuario.cargo ?? null,
     esDirector: usuario.esDirector,
     activo: usuario.activo,
     establecimientoId: usuario.establecimientoId,

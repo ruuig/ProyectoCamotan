@@ -59,9 +59,21 @@ const ETIQUETA_TIPO = {
   entrega: 'Entrega a paciente',
   consumo_interno: 'Consumo interno',
   traslado: 'Traslado a otro servicio',
+  paso_farmacia: 'Entre bodega y farmacia',
   reajuste: 'Reajuste',
   baja: 'Baja',
+  devolucion: 'Devolución por anulación',
 };
+
+// La bodega y la farmacia (post-consulta) del centro.
+const UBICACIONES = ['bodega', 'farmacia'];
+const ETIQUETA_UBICACION = { bodega: 'Bodega', farmacia: 'Farmacia' };
+
+/** Lo que hay de un lote en una ubicacion: la farmacia aparte, la bodega el resto. */
+function existenciaEn(lote, ubicacion) {
+  const farmacia = lote.cantidadFarmacia ?? 0;
+  return ubicacion === 'farmacia' ? farmacia : lote.cantidadActual - farmacia;
+}
 
 const ETIQUETA_ORIGEN = {
   despacho: 'Despacho del nivel superior',
@@ -113,6 +125,86 @@ async function ajustarEstadoAutomatico(tx, loteId, ahora = new Date()) {
 }
 
 /**
+ * Resta de un lote en una ubicacion, con la condicion de saldo suficiente en
+ * el propio WHERE: dos salidas simultaneas no pueden dejarlo en negativo. Lo
+ * que sale de la farmacia baja tambien su parte; lo de la bodega, solo el total.
+ * Devuelve cuantas filas cambio (1 si alcanzo).
+ */
+async function restarEn(tx, loteId, ubicacion, cantidad) {
+  if (ubicacion === 'farmacia') {
+    return tx.$executeRaw`
+      UPDATE lote SET cantidad_actual = cantidad_actual - ${cantidad}, cantidad_farmacia = cantidad_farmacia - ${cantidad}
+      WHERE id = ${loteId} AND cantidad_farmacia >= ${cantidad}`;
+  }
+  return tx.$executeRaw`
+    UPDATE lote SET cantidad_actual = cantidad_actual - ${cantidad}
+    WHERE id = ${loteId} AND cantidad_actual - cantidad_farmacia >= ${cantidad}`;
+}
+
+/**
+ * Pasa existencia de un lote entre la bodega y la farmacia. Son dos
+ * movimientos, uno en cada ubicacion, que se anulan en el total del centro:
+ * el lote no cambia de cantidad, solo de lugar.
+ */
+async function pasarEntreUbicaciones(tx, { loteId, cantidad, desde, usuarioId, trasladoId = null, motivo = null, ahora = new Date() }) {
+  const hacia = desde === 'bodega' ? 'farmacia' : 'bodega';
+  const lote = await tx.lote.findUnique({ where: { id: loteId } });
+  if (!lote) throw fallo(404, 'lote_no_encontrado', 'El lote no existe');
+  if (cantidad <= 0) throw fallo(400, 'cantidad_invalida', 'La cantidad debe ser mayor que cero');
+
+  const condicion = desde === 'bodega'
+    ? tx.$executeRaw`UPDATE lote SET cantidad_farmacia = cantidad_farmacia + ${cantidad}
+        WHERE id = ${loteId} AND cantidad_actual - cantidad_farmacia >= ${cantidad}`
+    : tx.$executeRaw`UPDATE lote SET cantidad_farmacia = cantidad_farmacia - ${cantidad}
+        WHERE id = ${loteId} AND cantidad_farmacia >= ${cantidad}`;
+  if ((await condicion) !== 1) {
+    throw fallo(
+      409,
+      'existencia_insuficiente',
+      `El lote ${lote.numeroLote} no tiene ${cantidad} en ${ETIQUETA_UBICACION[desde].toLowerCase()} (hay ${existenciaEn(lote, desde)})`,
+    );
+  }
+  const actualizado = await tx.lote.findUnique({ where: { id: loteId } });
+  await tx.movimientoInsumo.createMany({
+    data: [
+      { loteId, tipo: 'paso_farmacia', ubicacion: desde, cantidad: -cantidad, saldoResultante: existenciaEn(actualizado, desde), usuarioId, trasladoId, motivo, registradoEn: ahora },
+      { loteId, tipo: 'paso_farmacia', ubicacion: hacia, cantidad, saldoResultante: existenciaEn(actualizado, hacia), usuarioId, trasladoId, motivo, registradoEn: ahora },
+    ],
+  });
+  return actualizado;
+}
+
+/**
+ * Devuelve a la farmacia lo de una entrega anulada: vuelve al mismo lote y
+ * a la misma ubicacion de donde salio, con su propio movimiento.
+ */
+async function devolverEntrega(tx, { movimiento, usuarioId, dispensacionId, motivo }) {
+  const devolver = Math.abs(movimiento.cantidad);
+  const ubicacion = movimiento.ubicacion ?? 'bodega';
+  const lote = await tx.lote.update({
+    where: { id: movimiento.loteId },
+    data: {
+      cantidadActual: { increment: devolver },
+      ...(ubicacion === 'farmacia' ? { cantidadFarmacia: { increment: devolver } } : {}),
+    },
+  });
+  await tx.movimientoInsumo.create({
+    data: {
+      loteId: movimiento.loteId,
+      tipo: 'devolucion',
+      ubicacion,
+      cantidad: devolver,
+      saldoResultante: existenciaEn(lote, ubicacion),
+      dispensacionId,
+      usuarioId,
+      motivo,
+    },
+  });
+  await ajustarEstadoAutomatico(tx, movimiento.loteId);
+  return lote;
+}
+
+/**
  * Descuenta de un lote de forma segura ante concurrencia.
  *
  * El UPDATE lleva la condicion de saldo suficiente en el propio WHERE, asi
@@ -121,7 +213,10 @@ async function ajustarEstadoAutomatico(tx, loteId, ahora = new Date()) {
  */
 async function descontarDeLote(
   tx,
-  { loteId, cantidad, usuarioId, tipo = 'entrega', dispensacionId = null, motivo = null, causa = null, servicio = null, trasladoId = null, ahora = new Date() },
+  {
+    loteId, cantidad, usuarioId, tipo = 'entrega', ubicacion = 'bodega', dispensacionId = null, motivo = null,
+    causa = null, servicio = null, trasladoId = null, ahora = new Date(),
+  },
 ) {
   const lote = await tx.lote.findUnique({ where: { id: loteId } });
   if (!lote) throw fallo(404, 'lote_no_encontrado', 'El lote no existe');
@@ -136,16 +231,12 @@ async function descontarDeLote(
     );
   }
 
-  const afectados = await tx.lote.updateMany({
-    where: { id: loteId, cantidadActual: { gte: cantidad } },
-    data: { cantidadActual: { decrement: cantidad } },
-  });
-
-  if (afectados.count !== 1) {
+  const afectados = await restarEn(tx, loteId, ubicacion, cantidad);
+  if (afectados !== 1) {
     throw fallo(
       409,
       'existencia_insuficiente',
-      'La existencia del lote cambió y ya no alcanza. Vuelva a intentarlo',
+      `La existencia del lote en ${ETIQUETA_UBICACION[ubicacion].toLowerCase()} cambió y ya no alcanza. Vuelva a intentarlo`,
     );
   }
 
@@ -155,8 +246,9 @@ async function descontarDeLote(
     data: {
       loteId,
       tipo,
+      ubicacion,
       cantidad: -cantidad, // lo que sale se guarda en negativo
-      saldoResultante: actualizado.cantidadActual,
+      saldoResultante: existenciaEn(actualizado, ubicacion),
       dispensacionId,
       usuarioId,
       motivo,
@@ -197,6 +289,7 @@ async function registrarIngreso(
     verificacion = {},
     observacionRecepcion = null,
     motivo = null,
+    requisicionId = null,
   },
 ) {
   const conforme =
@@ -236,6 +329,7 @@ async function registrarIngreso(
       verifEmpaque: verificacion.empaque ?? null,
       verifAspecto: verificacion.aspecto ?? null,
       observacionRecepcion,
+      requisicionId,
     },
   });
 
@@ -260,7 +354,7 @@ async function registrarIngreso(
  * La cantidad va con su signo y la causa tiene que concordar: un sobrante no
  * puede restar ni un faltante sumar. Nunca se edita el movimiento anterior.
  */
-async function registrarReajuste(tx, { loteId, cantidad, causa, usuarioId, motivo = null, ahora = new Date() }) {
+async function registrarReajuste(tx, { loteId, cantidad, causa, usuarioId, motivo = null, ubicacion = 'bodega', ahora = new Date() }) {
   if (cantidad === 0) {
     throw fallo(400, 'sin_diferencia', 'Un reajuste de cero no cambia nada');
   }
@@ -280,24 +374,28 @@ async function registrarReajuste(tx, { loteId, cantidad, causa, usuarioId, motiv
   const lote = await tx.lote.findUnique({ where: { id: loteId } });
   if (!lote) throw fallo(404, 'lote_no_encontrado', 'El lote no existe');
 
-  const nuevoSaldo = lote.cantidadActual + cantidad;
+  const nuevoSaldo = existenciaEn(lote, ubicacion) + cantidad;
   if (nuevoSaldo < 0) {
     throw fallo(
       400,
       'reajuste_invalido',
-      `El reajuste dejaría el lote en ${nuevoSaldo}. La existencia no puede ser negativa`,
+      `El reajuste dejaría el lote en ${nuevoSaldo} en ${ETIQUETA_UBICACION[ubicacion].toLowerCase()}. La existencia no puede ser negativa`,
     );
   }
 
   const actualizado = await tx.lote.update({
     where: { id: loteId },
-    data: { cantidadActual: nuevoSaldo },
+    data: {
+      cantidadActual: lote.cantidadActual + cantidad,
+      ...(ubicacion === 'farmacia' ? { cantidadFarmacia: lote.cantidadFarmacia + cantidad } : {}),
+    },
   });
 
   await tx.movimientoInsumo.create({
     data: {
       loteId,
       tipo: 'reajuste',
+      ubicacion,
       cantidad,
       saldoResultante: nuevoSaldo,
       usuarioId,
@@ -320,16 +418,12 @@ async function registrarBaja(tx, { loteId, cantidad, causa, usuarioId, motivo = 
     throw fallo(400, 'causa_invalida', 'Una baja solo procede por producto vencido o dañado');
   }
 
-  const afectados = await tx.lote.updateMany({
-    where: { id: loteId, cantidadActual: { gte: cantidad } },
-    data: { cantidadActual: { decrement: cantidad } },
-  });
-
-  if (afectados.count !== 1) {
+  // Se da de baja desde la bodega: lo vencido en farmacia se devuelve primero.
+  if ((await restarEn(tx, loteId, 'bodega', cantidad)) !== 1) {
     throw fallo(
       409,
       'existencia_insuficiente',
-      'La existencia del lote no alcanza para dar de baja esa cantidad',
+      'La existencia del lote en bodega no alcanza para dar de baja esa cantidad. Si una parte está en farmacia, devuélvala a bodega primero',
     );
   }
 
@@ -339,8 +433,9 @@ async function registrarBaja(tx, { loteId, cantidad, causa, usuarioId, motivo = 
     data: {
       loteId,
       tipo: 'baja',
+      ubicacion: 'bodega',
       cantidad: -cantidad,
-      saldoResultante: lote.cantidadActual,
+      saldoResultante: existenciaEn(lote, 'bodega'),
       usuarioId,
       causa,
       motivo,
@@ -408,8 +503,14 @@ module.exports = {
   ETIQUETA_TIPO,
   ETIQUETA_ORIGEN,
   ETIQUETA_ESTADO_LOTE,
+  UBICACIONES,
+  ETIQUETA_UBICACION,
+  existenciaEn,
   signoDeCausa,
   ajustarEstadoAutomatico,
+  restarEn,
+  pasarEntreUbicaciones,
+  devolverEntrega,
   descontarDeLote,
   registrarIngreso,
   registrarReajuste,

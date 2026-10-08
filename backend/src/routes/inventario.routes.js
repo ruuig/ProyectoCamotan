@@ -79,6 +79,7 @@ router.get(
   '/insumos/:id/tarjeta-control',
   consultar,
   validar(esquemas.parametroId, 'params'),
+  validar(z.object({ ubicacion: z.enum(['bodega', 'farmacia']).optional() }), 'query'),
   asincrono(logistica.tarjetaControl),
 );
 
@@ -96,6 +97,30 @@ router.get(
 // --- Dispensación ----------------------------------------------------------
 
 router.get('/dispensaciones/pendientes', dispensa, asincrono(dispensaciones.pendientes));
+
+// Entrega por paciente: la hoja con lo que se copia al formato en papel y el
+// registro de toda la entrega de una vez.
+router.get('/dispensaciones/por-atender', dispensa, asincrono(dispensaciones.porAtender));
+router.get(
+  '/dispensaciones/atenciones/:id',
+  dispensa,
+  validar(esquemas.parametroId, 'params'),
+  asincrono(dispensaciones.hojaDeEntrega),
+);
+router.post(
+  '/dispensaciones/atenciones/:id',
+  dispensa,
+  idempotencia,
+  validar(esquemas.parametroId, 'params'),
+  validar(z.object({
+    // Sin renglones se entrega todo lo pendiente. Cantidad 0 deja esa receta pendiente.
+    renglones: z.array(z.object({
+      prescripcionId: z.coerce.number().int().positive(),
+      cantidad: z.coerce.number().int().min(0),
+    })).max(50).optional(),
+  })),
+  asincrono(dispensaciones.dispensarAtencion),
+);
 
 // Constancia de entrega (firma o huella de quien recibe) y SIGSA-4 del mes.
 router.get('/dispensaciones/por-firmar', dispensa, asincrono(dispensaciones.porFirmar));

@@ -4,6 +4,7 @@ import { useRouter, RouterLink } from 'vue-router';
 import servicio from '../../services/pacientes';
 import Icono from '../../components/comunes/Icono.vue';
 import SelectorComunidad from '../../components/comunes/SelectorComunidad.vue';
+import CompletarFicha from './CompletarFicha.vue';
 
 /**
  * Registro rápido: lo mínimo para poder atender.
@@ -16,6 +17,7 @@ const router = useRouter();
 const form = reactive({
   nombres: '',
   apellidos: '',
+  cui: '',
   sexo: '',
   fechaNacimiento: '',
   lugarPobladoId: null,
@@ -23,8 +25,16 @@ const form = reactive({
   responsableNombre: '',
   responsableParentesco: '',
   responsableTelefono: '',
+  responsableDpi: '',
   expedientePapel: '',
 });
+
+// El DPI se escribe como viene impreso (2039 43817 0101): se guardan solo los dígitos.
+const soloDigitos = (texto) => String(texto ?? '').replace(/\D/g, '');
+const cuiIncompleto = (texto) => {
+  const n = soloDigitos(texto).length;
+  return n > 0 && n !== 13;
+};
 
 // Quien no conoce su fecha de nacimiento declara su edad.
 const noConoceFecha = ref(false);
@@ -42,9 +52,15 @@ const PARENTESCOS = [
 ];
 
 const duplicados = ref([]);
+// El CUI ya está en otro expediente: no es un parecido, es la misma persona.
+const cuiRegistrado = ref(null);
 const error = ref('');
 const detallesError = ref([]);
 const guardando = ref(false);
+// "Registrar y llenar la ficha completa": al registrar, la ficha entera se
+// despliega aquí mismo en lugar de ir al expediente.
+const conFicha = ref(false);
+const registrado = ref(null);
 
 // Los años cumplidos, para decidir si hay que pedir responsable.
 const aniosCalculados = computed(() => {
@@ -91,9 +107,15 @@ watch(
   },
 );
 
-async function guardar(confirmarDuplicado = false) {
+async function guardar(confirmarDuplicado = false, llenarFicha = conFicha.value) {
+  conFicha.value = llenarFicha;
   error.value = '';
   detallesError.value = [];
+  cuiRegistrado.value = null;
+  if (cuiIncompleto(form.cui) || (pideResponsable.value && cuiIncompleto(form.responsableDpi))) {
+    error.value = 'El CUI o DPI debe tener 13 dígitos.';
+    return;
+  }
   guardando.value = true;
 
   try {
@@ -103,6 +125,7 @@ async function guardar(confirmarDuplicado = false) {
       sexo: form.sexo,
       lugarPobladoId: form.lugarPobladoId,
       telefono: form.telefono || null,
+      cui: soloDigitos(form.cui) || null,
       expedientePapel: form.expedientePapel || null,
       ...(noConoceFecha.value
         ? { edadDeclarada: { valor: Number(String(edadDeclarada.valor).replace(/[^0-9]/g, '')), unidad: edadDeclarada.unidad } }
@@ -112,15 +135,25 @@ async function guardar(confirmarDuplicado = false) {
           responsableNombre: form.responsableNombre,
           responsableParentesco: form.responsableParentesco || null,
           responsableTelefono: form.responsableTelefono || null,
+          responsableDpi: soloDigitos(form.responsableDpi) || null,
         }
         : {}),
       confirmarDuplicado,
     });
-    router.push(`/pacientes/${datos.paciente.id}`);
+    if (llenarFicha) {
+      registrado.value = datos.paciente;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      router.push(`/pacientes/${datos.paciente.id}`);
+    }
   } catch (fallo) {
     error.value = fallo.message;
     detallesError.value = Array.isArray(fallo.detalles) ? fallo.detalles : [];
     if (fallo.codigo === 'posible_duplicado') duplicados.value = fallo.detalles;
+    if (fallo.codigo === 'cui_registrado') {
+      error.value = '';
+      cuiRegistrado.value = { mensaje: fallo.message, paciente: fallo.detalles?.[0] ?? null };
+    }
   } finally {
     guardando.value = false;
   }
@@ -128,14 +161,25 @@ async function guardar(confirmarDuplicado = false) {
 </script>
 
 <template>
-  <section class="mx-auto max-w-[1040px]">
+  <section class="mx-auto" :class="registrado ? 'max-w-[1180px]' : 'max-w-[1040px]'">
     <RouterLink to="/pacientes" class="b-volver"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> Pacientes</RouterLink>
     <header class="b-cabecera">
       <h1 class="b-titulo">Registrar paciente</h1>
     </header>
 
+    <!-- Ya registrado: la ficha completa, toda abierta para llenarla aquí -->
+    <template v-if="registrado">
+      <div class="b-aviso ok mt-5 flex-wrap items-center justify-between gap-2">
+        <span>{{ registrado.nombres }} {{ registrado.apellidos }} quedó registrado. Llene la ficha; cada sección se guarda con su botón.</span>
+        <RouterLink :to="`/pacientes/${registrado.id}`" class="b-btn primario chico">Terminar e ir al expediente</RouterLink>
+      </div>
+      <div class="mt-4">
+        <CompletarFicha :paciente-id="registrado.id" embebido />
+      </div>
+    </template>
+
     <!-- Posible duplicado: antes de crear, no después -->
-    <div v-if="duplicados.length" class="b-panel duplicados mt-5" role="alert">
+    <div v-if="duplicados.length && !registrado" class="b-panel duplicados mt-5" role="alert">
       <header class="b-panel-cabeza">
         <h2 class="b-panel-titulo">¿Es alguna de estas personas?</h2>
         <span class="b-estado cuarentena">Nombre parecido</span>
@@ -152,7 +196,7 @@ async function guardar(confirmarDuplicado = false) {
       </ul>
     </div>
 
-    <form class="b-panel mt-5 px-6 pb-2 pt-5" @submit.prevent="guardar(false)">
+    <form v-if="!registrado" class="b-panel mt-5 px-6 pb-2 pt-5" @submit.prevent="guardar(false, false)">
       <section class="b-form-seccion">
         <header><h2>Identificación</h2></header>
         <div class="b-rejilla">
@@ -164,13 +208,18 @@ async function guardar(confirmarDuplicado = false) {
             <label for="apellidos" class="b-etiqueta">Apellidos</label>
             <input id="apellidos" v-model="form.apellidos" required autocomplete="off" class="b-campo" />
           </div>
-          <div class="c6">
+          <div class="c4">
             <span class="b-etiqueta">Sexo</span>
             <div class="b-segmentado ancho" role="radiogroup" aria-label="Sexo">
               <button v-for="o in [['F', 'Mujer'], ['M', 'Hombre']]" :key="o[0]" type="button" role="radio" :aria-checked="form.sexo === o[0]" :class="form.sexo === o[0] ? 'on' : ''" @click="form.sexo = o[0]">{{ o[1] }}</button>
             </div>
           </div>
-          <div class="c6">
+          <div class="c4">
+            <label for="cui" class="b-etiqueta">CUI / DPI <span class="b-opcional">opcional</span></label>
+            <input id="cui" v-model="form.cui" inputmode="numeric" maxlength="15" placeholder="13 dígitos" autocomplete="off" class="b-campo tabular-nums" :aria-invalid="cuiIncompleto(form.cui)" />
+            <small v-if="cuiIncompleto(form.cui)" class="aviso-campo">Lleva {{ soloDigitos(form.cui).length }} de 13 dígitos</small>
+          </div>
+          <div class="c4">
             <label for="expedientePapel" class="b-etiqueta">Ficha de papel <span class="b-opcional">opcional</span></label>
             <input id="expedientePapel" v-model="form.expedientePapel" placeholder="M-125" class="b-campo" />
           </div>
@@ -226,19 +275,29 @@ async function guardar(confirmarDuplicado = false) {
             <label for="respNombre" class="b-etiqueta">Nombre completo</label>
             <input id="respNombre" v-model="form.responsableNombre" :required="pideResponsable" class="b-campo" />
           </div>
-          <div class="c6">
+          <div class="c4">
             <label for="respParentesco" class="b-etiqueta">Parentesco</label>
             <select id="respParentesco" v-model="form.responsableParentesco" class="b-campo">
               <option value="">Elija</option>
               <option v-for="p in PARENTESCOS" :key="p.codigo" :value="p.codigo">{{ p.etiqueta }}</option>
             </select>
           </div>
-          <div class="c6">
+          <div class="c4">
             <label for="respTelefono" class="b-etiqueta">Teléfono <span class="b-opcional">opcional</span></label>
             <input id="respTelefono" v-model="form.responsableTelefono" inputmode="tel" class="b-campo" />
           </div>
+          <div class="c4">
+            <label for="respDpi" class="b-etiqueta">DPI <span class="b-opcional">opcional</span></label>
+            <input id="respDpi" v-model="form.responsableDpi" inputmode="numeric" maxlength="15" placeholder="13 dígitos" autocomplete="off" class="b-campo tabular-nums" :aria-invalid="cuiIncompleto(form.responsableDpi)" />
+            <small v-if="cuiIncompleto(form.responsableDpi)" class="aviso-campo">Lleva {{ soloDigitos(form.responsableDpi).length }} de 13 dígitos</small>
+          </div>
         </div>
       </section>
+
+      <div v-if="cuiRegistrado" role="alert" class="b-aviso error mb-4 flex-col items-start gap-2">
+        <span>{{ cuiRegistrado.mensaje }}</span>
+        <RouterLink v-if="cuiRegistrado.paciente" :to="`/pacientes/${cuiRegistrado.paciente.id}`" class="b-btn secundario chico">Abrir ese expediente</RouterLink>
+      </div>
 
       <div v-if="error" role="alert" class="b-aviso error mb-4 flex-col">
         <span>{{ error }}</span>
@@ -249,6 +308,9 @@ async function guardar(confirmarDuplicado = false) {
 
       <footer class="pie">
         <button v-if="duplicados.length" type="button" :disabled="guardando" class="b-btn secundario" @click="guardar(true)">Es otra persona, registrar</button>
+        <button type="button" :disabled="guardando || !form.sexo" class="b-btn secundario" @click="$event.target.closest('form').reportValidity() && guardar(false, true)">
+          <Icono nombre="lapiz" :tamano="20" /> Registrar y llenar la ficha completa
+        </button>
         <button type="submit" :disabled="guardando || !form.sexo" class="b-btn primario">
           <Icono nombre="guardar" :tamano="20" /> {{ guardando ? 'Guardando…' : 'Registrar paciente' }}
         </button>
@@ -259,6 +321,7 @@ async function guardar(confirmarDuplicado = false) {
 
 <style scoped>
 .ancho { display: flex; }
+.aviso-campo { display: block; margin-top: 4px; font-size: 13px; color: #B45309; }
 .ancho button { flex: 1; }
 .duplicados { border-color: #F5D58A; }
 .fila-dup { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-top: 1px solid #F3EAD3; }

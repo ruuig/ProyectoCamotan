@@ -46,7 +46,31 @@ const crearUsuario = z.object({
   dpi: z.string().trim().regex(/^[0-9]{13}$/, 'DPI invalido').optional().nullable(),
   rol: z.enum(['admin', 'preconsulta', 'medico', 'farmacia', 'bodega']),
   esDirector: z.boolean().default(false),
+  cargo: z.string().trim().max(120).optional().nullable(),
 });
+
+// Datos que se ven en las hojas impresas: no cambian lo que el usuario puede
+// hacer, por eso no piden al director.
+const actualizarUsuario = z
+  .object({
+    nombre: z.string().trim().min(3, 'El nombre es obligatorio').max(120).optional(),
+    cargo: z.string().trim().max(120).optional().nullable(),
+    dpi: z.string().trim().regex(/^[0-9]{13}$/, 'DPI invalido').optional().nullable(),
+  })
+  .refine((d) => Object.keys(d).length > 0, 'No se envio ningun campo por actualizar');
+
+// Rol, director y contrasena cambian el acceso: piden al director.
+const cambiarAccesoUsuario = z
+  .object({
+    rol: z.enum(['admin', 'preconsulta', 'medico', 'farmacia', 'bodega']).optional(),
+    esDirector: z.boolean().optional(),
+    password: z.string().min(10, 'La contrasena debe tener al menos 10 caracteres').max(200).optional(),
+    autorizacion,
+  })
+  .refine(
+    (d) => d.rol !== undefined || d.esDirector !== undefined || d.password !== undefined,
+    'No se envio ningun cambio de acceso',
+  );
 
 // Desactivar un usuario es operacion protegida, igual que los signos.
 const cambiarEstadoUsuario = z.object({
@@ -72,13 +96,31 @@ const confirmarTotp = z.object({
 
 const parametroId = z.object({ id: z.coerce.number().int().positive() });
 
+const configuracionRespaldo = z.object({
+  automatico: z.boolean(),
+  frecuencia: z.enum(['diaria', 'semanal'], { errorMap: () => ({ message: 'La frecuencia debe ser diaria o semanal' }) }),
+  hora: z.coerce.number().int().min(0).max(23, 'La hora va de 0 a 23'),
+  diaSemana: z.coerce.number().int().min(0).max(6),
+  conservar: z.coerce.number().int().min(1, 'Conserve al menos un respaldo').max(365, 'Se conservan como máximo 365'),
+});
+
+// Sin nombre se hace un respaldo nuevo y se descarga ese.
+const descargarRespaldo = z.object({
+  nombre: z.string().trim().max(80).optional(),
+  autorizacion,
+});
+
 module.exports = {
   autorizacion,
   crearSignoPeligro,
   actualizarSignoPeligro,
   crearUsuario,
   cambiarEstadoUsuario,
+  actualizarUsuario,
+  cambiarAccesoUsuario,
   actualizarEstablecimiento,
   confirmarTotp,
   parametroId,
+  configuracionRespaldo,
+  descargarRespaldo,
 };

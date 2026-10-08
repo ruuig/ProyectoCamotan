@@ -1,5 +1,6 @@
 const prisma = require('../config/db');
-const { validarFechasLote } = require('../services/bodega.service');
+const { validarFechasLote, CATEGORIAS_NO_PRESCRIBIBLES } = require('../services/bodega.service');
+const { enUbicacion } = require('../services/inventario.service');
 const { registrarIngreso } = require('../services/movimientos.service');
 const {
   mesesParaVencer,
@@ -7,13 +8,15 @@ const {
 const abastecimiento = require('../services/abastecimiento.service');
 
 async function listar(req, res) {
-  const { buscar, categoria } = req.query;
+  const { buscar, categoria, prescribible } = req.query;
 
   const insumos = await prisma.insumo.findMany({
     where: {
       establecimientoId: req.usuario.establecimientoId,
       activo: true,
       ...(categoria ? { categoria } : {}),
+      // La receta del medico solo ofrece lo que se entrega al paciente.
+      ...(prescribible !== undefined ? { prescribible } : {}),
       // Los cinco criterios de busqueda que el personal usa en la practica:
       // nombre generico, componente activo, codigo del cuadro basico MSPAS,
       // nombre comercial y numero de lote.
@@ -58,7 +61,11 @@ async function listar(req, res) {
         concentracion: insumo.concentracion,
         unidadEntrega: insumo.unidadEntrega,
         cadenaFrio: insumo.cadenaFrio,
+        prescribible: insumo.prescribible,
         saldoTotal: saldo,
+        // Donde esta: farmacia entrega a los pacientes, bodega traslada.
+        saldoBodega: abastecimiento.saldoUtilizable(enUbicacion(insumo.lotes, 'bodega'), ahora),
+        saldoFarmacia: abastecimiento.saldoUtilizable(enUbicacion(insumo.lotes, 'farmacia'), ahora),
         lotesConSaldo: insumo.lotes.filter((l) => l.cantidadActual > 0).length,
         lotesEnCuarentena: insumo.lotes.filter((l) => l.estado === 'cuarentena').length,
         proximoVencimiento: proximo
@@ -113,6 +120,7 @@ async function crear(req, res, next) {
 
   const datos = { ...req.body, establecimientoId };
   datos.unidadEntrega = datos.unidadEntrega ?? datos.unidadMedida;
+  datos.prescribible = datos.prescribible ?? !CATEGORIAS_NO_PRESCRIBIBLES.includes(datos.categoria);
 
   const insumo = await prisma.$transaction(async (tx) => {
     if (!datos.codigoInterno) {

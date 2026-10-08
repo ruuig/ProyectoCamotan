@@ -46,9 +46,9 @@ Dependencias agregadas fuera de la lista original, con su justificacion:
 
 ```bash
 createdb -U postgres camotan
-psql -U postgres -d camotan -f bd/01_esquema.sql
-psql -U postgres -d camotan -f bd/02_vistas.sql
-psql -U postgres -d camotan -f bd/03_catalogos.sql
+psql -U postgres -d camotan -f documentacion/bd/01_esquema.sql
+psql -U postgres -d camotan -f documentacion/bd/02_vistas.sql
+psql -U postgres -d camotan -f documentacion/bd/03_catalogos.sql
 ```
 
 ### 2. Backend
@@ -89,9 +89,9 @@ trabajo ni depender de su estado:
 
 ```bash
 createdb -U postgres camotan_test
-psql -U postgres -d camotan_test -f bd/01_esquema.sql
-psql -U postgres -d camotan_test -f bd/02_vistas.sql
-psql -U postgres -d camotan_test -f bd/03_catalogos.sql
+psql -U postgres -d camotan_test -f documentacion/bd/01_esquema.sql
+psql -U postgres -d camotan_test -f documentacion/bd/02_vistas.sql
+psql -U postgres -d camotan_test -f documentacion/bd/03_catalogos.sql
 cd backend
 DATABASE_URL="postgresql://usuario:clave@localhost:5432/camotan_test" node prisma/seed.js
 npm test
@@ -152,9 +152,64 @@ Estan escritas como funciones puras, sin acceso a base de datos:
 | `recalcularCola` | 5 min | Asigna la clinica libre al de mayor prioridad |
 | `refrescarVistas` | 1 hora | `REFRESH MATERIALIZED VIEW CONCURRENTLY` |
 | `evaluarAlertas` | 1 hora | Evalua umbrales y persiste en la tabla `Alerta` |
+| `respaldoAutomatico` | 10 min | Hace el respaldo SQL cuando toca segun el horario de Administracion > Respaldos |
 
 El job de alertas es idempotente y cierra solo las alertas cuya causa
 desaparecio.
+
+### Balance de bodega igual al Excel
+
+El historial del balance (enero 2025 a septiembre 2026) se carga tal como lo
+muestra el Excel del centro y se comprueba celda por celda:
+
+```bash
+cd backend
+python scripts/leerBalanceExcel.py "../documentacion/Plantillas/BALANCENE25.xlsx"   "../documentacion/Plantillas/INVENTARIOS CIERRE 2019.xlsx" excel.json
+node scripts/cargarHistorialBalance.js excel.json --aplicar
+node scripts/verificarBalance.js excel.json        # debe terminar con "Diferencias: 0"
+```
+
+El lector calcula cada celda con su propia formula. Los meses de septiembre
+2025 a marzo 2026 tienen `#REF!` en el Excel (el vinculo al libro de
+inventario de cierre se rompio); sus entradas y existencia fisica se toman de
+ese libro y el resto se recalcula con las formulas del balance. Los meses
+nuevos se calculan con las mismas formulas: H es la suma de los saldos de cada
+servicio mas la existencia de bodega, B es el H del mes anterior, J es la
+suma de los promedios de cada servicio y M = L - I (negativa si sobra).
+
+### Farmacia con existencia propia
+
+La farmacia (post-consulta) lleva su existencia lote por lote, aparte de la
+bodega. Recibe de la bodega con un traslado a "Post-consulta" (el mismo
+documento de entrega que a los servicios), entrega a cada paciente desde lo
+que tiene y al cerrar el dia cuenta lo que hay. Cada movimiento queda con su
+ubicacion, asi que la trazabilidad de un lote dice cuanto hay en bodega,
+cuanto en farmacia, a que pacientes llego y quien lo entrego.
+
+Para arrancar una base que ya tenia la carga inicial, se pasa a farmacia el
+saldo de post-consulta del ultimo mes del balance (una sola vez):
+
+```bash
+node scripts/separarFarmacia.js --aplicar
+```
+
+La firma o huella digital al entregar esta apagada (`constancia_digital` en
+`configuracion_logistica`): el paciente firma el formato en papel. Queda lista
+para cuando el centro tenga el equipo.
+
+### Respaldos
+
+Los respaldos se hacen con `pg_dump` en SQL plano y se guardan en
+`backend/respaldos/` (o en `RESPALDOS_DIR`). Si `pg_dump` no esta en el PATH
+del servidor, indique su ruta en `PG_DUMP`. Descargarlos exige la
+autorizacion del director. Para restaurar uno, con el sistema detenido:
+
+```bash
+psql -U postgres -d camotan -f camotan_AAAA-MM-DD_HHMM_automatico.sql
+```
+
+En un servidor con disco temporal (como Render) los archivos se pierden al
+reiniciar: ahi hay que descargarlos y guardarlos fuera.
 
 ## Seguridad
 
@@ -225,7 +280,7 @@ clasificar mal la desnutricion.
 
 ## Notas de mantenimiento
 
-`bd/*.sql` es la fuente de verdad del esquema: contiene los `CHECK` y los
+`documentacion/bd/*.sql` es la fuente de verdad del esquema: contiene los `CHECK` y los
 indices parciales que `schema.prisma` no puede representar. Por eso **no use
 `prisma migrate dev` a secas**: use `--create-only` y revise el SQL generado
 antes de aplicarlo, porque Prisma puede proponer borrar indices que no conoce.

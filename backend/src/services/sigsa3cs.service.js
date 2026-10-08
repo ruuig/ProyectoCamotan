@@ -7,72 +7,101 @@
  * Funciones puras: reciben la atencion ya leida y devuelven el renglon.
  */
 
+const HORAS_GUATEMALA = -6;
+const MS_POR_HORA = 3600000;
+
 /** Dia, mes y anio en hora de Guatemala (UTC-6). */
 function partesFecha(fecha) {
   if (!fecha) return { dia: '', mes: '', anio: '' };
-  const d = new Date(new Date(fecha).getTime() - 6 * 3600000);
-  return { dia: d.getUTCDate(), mes: d.getUTCMonth() + 1, anio: d.getUTCFullYear() };
+  const fechaLocal = new Date(new Date(fecha).getTime() + HORAS_GUATEMALA * MS_POR_HORA);
+  return { dia: fechaLocal.getUTCDate(), mes: fechaLocal.getUTCMonth() + 1, anio: fechaLocal.getUTCFullYear() };
 }
 
-/** Fecha de nacimiento del formulario. Si es estimada, se anota la edad. */
+/** Meses completos entre el nacimiento y la fecha de la consulta. */
+function mesesCumplidos(nacio, consulta) {
+  const meses = (consulta.getUTCFullYear() - nacio.getUTCFullYear()) * 12
+    + (consulta.getUTCMonth() - nacio.getUTCMonth());
+  const faltaElDia = consulta.getUTCDate() < nacio.getUTCDate();
+  return Math.max(0, faltaElDia ? meses - 1 : meses);
+}
+
+/**
+ * Fecha de nacimiento del formulario. Si es exacta se anotan dia, mes y anio.
+ * Si no se conoce, se anota la edad en una sola casilla: los dias en la del
+ * dia (menores de un mes), los meses en la del mes (menores de un anio) o
+ * los anios en la del anio. Las otras dos quedan en blanco.
+ */
 function nacimiento(paciente, consultaEn) {
-  if (!paciente.fechaNacimiento) return { dia: '', mes: '', anio: '', edad: '' };
-  if (paciente.fechaNacimientoEstimada) {
-    const n = new Date(paciente.fechaNacimiento);
-    const c = new Date(consultaEn);
-    let anios = c.getUTCFullYear() - n.getUTCFullYear();
-    if (c.getUTCMonth() < n.getUTCMonth() || (c.getUTCMonth() === n.getUTCMonth() && c.getUTCDate() < n.getUTCDate())) anios -= 1;
-    if (anios >= 1) return { dia: '', mes: '', anio: '', edad: `${anios} ${anios === 1 ? 'año' : 'años'}` };
-    const meses = Math.max(0, (c.getUTCFullYear() - n.getUTCFullYear()) * 12 + c.getUTCMonth() - n.getUTCMonth() - (c.getUTCDate() < n.getUTCDate() ? 1 : 0));
-    return { dia: '', mes: '', anio: '', edad: `${meses} ${meses === 1 ? 'mes' : 'meses'}` };
+  const vacio = { dia: '', mes: '', anio: '', estimada: false };
+  if (!paciente.fechaNacimiento) return vacio;
+
+  const nacio = new Date(paciente.fechaNacimiento);
+  if (!paciente.fechaNacimientoEstimada) {
+    return { ...vacio, dia: nacio.getUTCDate(), mes: nacio.getUTCMonth() + 1, anio: nacio.getUTCFullYear() };
   }
-  const n = new Date(paciente.fechaNacimiento);
-  return { dia: n.getUTCDate(), mes: n.getUTCMonth() + 1, anio: n.getUTCFullYear(), edad: '' };
+
+  const consulta = new Date(consultaEn);
+  const meses = mesesCumplidos(nacio, consulta);
+  const estimada = { ...vacio, estimada: true };
+  if (meses >= 12) return { ...estimada, anio: Math.floor(meses / 12) };
+  if (meses >= 1) return { ...estimada, mes: meses };
+  return { ...estimada, dia: Math.max(0, Math.floor((consulta - nacio) / (24 * MS_POR_HORA))) };
 }
 
-const codigo = (v) => (v === null || v === undefined ? '' : String(v));
-const siAplica = (v) => (v ? String(v) : '');
+/** Codigo oficial como texto; vacio si no se registro. */
+const codigo = (valor) => (valor === null || valor === undefined ? '' : String(valor));
+/** Valor solo cuando aplica; vacio en cualquier otro caso. */
+const siAplica = (valor) => (valor ? String(valor) : '');
 
 /**
  * atencion: con paciente (y su lugarPoblado), diagnosticos y prescripciones
  * (con insumo). sensibles: si se imprime la orientacion sexual.
  */
 function renglonSigsa3cs(atencion, { sensibles = true } = {}) {
-  const p = atencion.paciente;
-  const cuando = atencion.cerradaEn ?? atencion.registradaEn;
-  const diagnosticos = (atencion.diagnosticos?.length
-    ? [...atencion.diagnosticos].sort((a, b) => a.orden - b.orden)
-    : [{ descripcion: atencion.diagnosticoTxt, cie: atencion.diagnosticoCie }])
-    .filter((d) => d.descripcion || d.cie);
+  const paciente = atencion.paciente;
+  const fechaConsulta = atencion.cerradaEn ?? atencion.registradaEn;
+  const registrados = atencion.diagnosticos?.length
+    ? [...atencion.diagnosticos].sort((primero, segundo) => primero.orden - segundo.orden)
+    : [{ descripcion: atencion.diagnosticoTxt, cie: atencion.diagnosticoCie }];
+  const diagnosticos = registrados.filter((diagnostico) => diagnostico.descripcion || diagnostico.cie);
+
   return {
     atencionId: atencion.id,
-    dia: partesFecha(cuando).dia,
-    historiaClinica: p.expedientePapel || p.expediente,
-    nombre: `${p.nombres} ${p.apellidos}`,
-    cui: p.cui ?? '',
-    sexo: p.sexo ?? '',
-    pueblo: codigo(p.pueblo),
-    comunidadLinguistica: codigo(p.comunidadLinguistica),
-    nacimiento: nacimiento(p, cuando),
-    discapacidad: codigo(p.discapacidad),
-    orientacionSexual: sensibles ? codigo(p.orientacionSexual) : '',
-    escolaridad: codigo(p.escolaridad ?? p.nivelEscolar),
-    profesion: p.profesionOficio ?? '',
-    comunidad: p.lugarPoblado?.nombre ?? p.comunidad ?? '',
-    municipio: p.municipioResidencia ?? '',
-    migrante: p.migrante ? 'X' : '',
+    dia: partesFecha(fechaConsulta).dia,
+    historiaClinica: paciente.expedientePapel || paciente.expediente,
+    nombre: `${paciente.nombres} ${paciente.apellidos}`,
+    cui: paciente.cui ?? '',
+    sexo: paciente.sexo ?? '',
+    pueblo: codigo(paciente.pueblo),
+    comunidadLinguistica: codigo(paciente.comunidadLinguistica),
+    nacimiento: nacimiento(paciente, fechaConsulta),
+    discapacidad: codigo(paciente.discapacidad),
+    orientacionSexual: sensibles ? codigo(paciente.orientacionSexual) : '',
+    escolaridad: codigo(paciente.escolaridad ?? paciente.nivelEscolar),
+    profesion: paciente.profesionOficio ?? '',
+    comunidad: paciente.lugarPoblado?.nombre ?? paciente.comunidad ?? '',
+    municipio: paciente.municipioResidencia ?? '',
+    migrante: paciente.migrante ? 'X' : '',
     consulta: codigo(atencion.tipoConsulta),
     control: siAplica(atencion.controlSigsa),
     semanasGestacion: atencion.semanasGestacion ?? '',
     viene: siAplica(atencion.referenciaViene),
     fue: siAplica(atencion.referenciaFue),
     referidoA: atencion.referidoA ?? '',
-    diagnosticos: diagnosticos.map((d) => ({ descripcion: d.descripcion ?? '', cie: d.cie ?? '' })),
-    tratamiento: (atencion.prescripciones ?? []).map((r) => ({
-      descripcion: r.insumo?.nombreGenerico ?? '',
-      presentacion: r.insumo?.presentacion ?? '',
-      cantidad: r.cantidad,
-    })),
+    diagnosticos: diagnosticos.map((diagnostico) => ({ descripcion: diagnostico.descripcion ?? '', cie: diagnostico.cie ?? '' })),
+    tratamiento: [
+      ...(atencion.prescripciones ?? []).map((receta) => ({
+        descripcion: receta.insumo?.nombreGenerico ?? '',
+        presentacion: receta.insumo?.presentacion ?? '',
+        cantidad: receta.cantidad,
+      })),
+      // El SIGSA 3CS anota el tratamiento indicado, se entregue aqui o no.
+      ...(atencion.recetasExternas ?? []).map((receta) => ({
+        descripcion: receta.medicamento,
+        presentacion: '',
+        cantidad: receta.cantidad ?? '',
+      })),
+    ],
     notificacionLugar: siAplica(atencion.lugarNotificacion),
     notificacionNumero: atencion.numeroNotificacion ?? '',
     acompanante: atencion.acompanante ?? '',
@@ -81,9 +110,10 @@ function renglonSigsa3cs(atencion, { sensibles = true } = {}) {
 
 /** Renglones ordenados por fecha de la consulta. */
 function renglonesSigsa3cs(atenciones, opciones) {
+  const fecha = (atencion) => new Date(atencion.cerradaEn ?? atencion.registradaEn);
   return [...atenciones]
-    .sort((a, b) => new Date(a.cerradaEn ?? a.registradaEn) - new Date(b.cerradaEn ?? b.registradaEn))
-    .map((a) => renglonSigsa3cs(a, opciones));
+    .sort((primera, segunda) => fecha(primera) - fecha(segunda))
+    .map((atencion) => renglonSigsa3cs(atencion, opciones));
 }
 
 module.exports = { renglonSigsa3cs, renglonesSigsa3cs, partesFecha, nacimiento };

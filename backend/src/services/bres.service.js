@@ -80,33 +80,22 @@ async function calcular(establecimientoId, periodo) {
   const { desde, hasta } = limitesDePeriodo(periodo);
   const anterior = periodoAnterior(periodo);
 
-  const [consolidado, bresAnterior, bresActual] = await Promise.all([
+  // El balance ya trae los totales: los guardados si el BRES se cerro, y los
+  // calculados con las formulas del centro si esta abierto.
+  const [consolidado, bresAnterior] = await Promise.all([
     balance(establecimientoId, periodo),
     prisma.bres.findUnique({
       where: { establecimientoId_periodo: { establecimientoId, periodo: anterior } },
       include: { renglones: true },
     }),
-    prisma.bres.findUnique({
-      where: { establecimientoId_periodo: { establecimientoId, periodo } },
-      include: { renglones: true },
-    }),
   ]);
-  // Un BRES cerrado ya se envio: se muestran sus cifras guardadas, no un recalculo.
-  const congelado = bresActual?.estado === 'cerrado'
-    ? new Map(bresActual.renglones.map((r) => [r.insumoId, r]))
-    : null;
+  const congelado = consolidado.cerrado;
 
   const saldoAnteriorPorInsumo = new Map((bresAnterior?.renglones ?? []).map((r) => [r.insumoId, r.saldoFinal]));
   const descuadres = [];
 
   const renglones = consolidado.filas.map((f) => {
-    const g = congelado?.get(f.insumoId);
-    const b = g ? {
-      B: g.saldoInicial, C: g.entradas, D: g.entregado, E: g.noEntregado, F: g.demandaReal, G: g.reajustes,
-      H: g.saldoFinal, I: g.existenciaBodega, J: Number(g.pmdr), K: g.med === null ? null : Number(g.med),
-      L: g.cantidadMaxima, M: g.cantidadSolicitar, minimo: g.cantidadMinima,
-      bajoMinimo: Number(g.pmdr) > 0 && g.saldoFinal < g.cantidadMinima, sinConsumo: !Number(g.pmdr), mesesConDatos: g.mesesHistoria,
-    } : f.bres;
+    const b = f.bres;
     if (!congelado && saldoAnteriorPorInsumo.has(f.insumoId) && saldoAnteriorPorInsumo.get(f.insumoId) !== b.B) {
       descuadres.push({
         insumoId: f.insumoId,
@@ -136,6 +125,8 @@ async function calcular(establecimientoId, periodo) {
       med: b.K,
       cantidadMaxima: b.L,
       cantidadSolicitar: b.M,
+      saldoPorDemanda: b.saldoPorDemanda,
+      existenciaMesAnterior: b.mesAnterior,
       cantidadMinima: b.minimo,
       bajoMinimo: b.bajoMinimo,
       sinConsumo: b.sinConsumo,
@@ -240,6 +231,8 @@ async function generar(establecimientoId, { periodo, observaciones, usuarioId },
           cantidadMinima: r.cantidadMinima,
           cantidadMaxima: r.cantidadMaxima,
           cantidadSolicitar: r.cantidadSolicitar,
+          saldoPorDemanda: r.saldoPorDemanda,
+          existenciaMesAnterior: r.existenciaMesAnterior,
           mesesHistoria: r.mesesHistoria,
         },
       });

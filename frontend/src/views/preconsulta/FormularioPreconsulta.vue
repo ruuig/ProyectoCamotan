@@ -15,6 +15,16 @@ import {
 
 const route = useRoute();
 const router = useRouter();
+
+/*
+ * /preconsulta/nueva?paciente=ID: la atención todavía no existe. Se crea al
+ * guardar, junto con la preconsulta; si se sale sin guardar, no queda nada en
+ * la cola. /preconsulta/ID es una atención ya abierta (de antes o del médico).
+ */
+const esNueva = computed(() => route.params.id === 'nueva');
+const paciente = ref(null);
+const cancelando = ref(false);
+const motivoCancelacion = ref('');
 const sync = useSincronizacionStore();
 const encolada = ref(false);
 
@@ -133,8 +143,9 @@ async function guardar() {
     // Si cae la red, se encola en lugar de perderse.
     const envio = await sync.enviar({
       metodo: 'POST',
-      ruta: `/atenciones/${route.params.id}/preconsulta`,
+      ruta: esNueva.value ? '/atenciones/con-preconsulta' : `/atenciones/${route.params.id}/preconsulta`,
       cuerpo: {
+        ...(esNueva.value ? { pacienteId: Number(route.query.paciente) } : {}),
         ...soloConValor(),
         signosPeligro: seleccionados.value,
         ...(gravedadElegida.value ? { gravedad: gravedadElegida.value } : {}),
@@ -156,10 +167,27 @@ async function guardar() {
   }
 }
 
+/** Cancela una atención abierta por error: sale de la cola con su motivo. */
+async function cancelarAtencion() {
+  error.value = '';
+  try {
+    await servicio.cancelarAtencion(route.params.id, motivoCancelacion.value.trim());
+    router.push('/cola');
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
+
+const volver = () => (window.history.length > 1 ? router.back() : router.push('/cola'));
+
 onMounted(async () => {
   try {
-    const datos = await servicio.signosPeligro();
+    const [datos, p] = await Promise.all([
+      servicio.signosPeligro(),
+      esNueva.value && route.query.paciente ? servicio.obtener(route.query.paciente) : null,
+    ]);
     signos.value = datos.signos;
+    paciente.value = p?.paciente ?? null;
   } catch (fallo) {
     error.value = fallo.message;
   }
@@ -318,8 +346,25 @@ onMounted(async () => {
     <form v-else class="space-y-4" @submit.prevent="guardar">
       <div>
         <h1 class="titulo-pagina">Registrar preconsulta</h1>
+        <p v-if="paciente" class="mt-1 text-lg font-semibold text-tinta">
+          {{ paciente.nombres }} {{ paciente.apellidos }}
+          <span class="font-normal text-apagado">· Exp. {{ paciente.expedientePapel || paciente.expediente }}</span>
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button v-if="esNueva" type="button" class="b-btn secundario chico" @click="volver">Salir sin abrir la atención</button>
+          <button v-else-if="!cancelando" type="button" class="b-btn secundario chico" @click="cancelando = true">Cancelar atención</button>
+        </div>
+        <div v-if="cancelando" class="tarjeta mt-2 flex flex-wrap items-end gap-3 p-4">
+          <div class="min-w-[16rem] flex-1">
+            <label for="motivo-cancelar" class="etiqueta-campo">Por qué se cancela</label>
+            <input id="motivo-cancelar" v-model="motivoCancelacion" minlength="5" placeholder="Ej.: se abrió por error" class="campo" />
+          </div>
+          <button type="button" class="b-btn secundario" @click="cancelando = false">No cancelar</button>
+          <button type="button" class="b-btn primario" :disabled="motivoCancelacion.trim().length < 5" @click="cancelarAtencion">Cancelar atención</button>
+        </div>
         <p class="text-slate-500">
           Deje en blanco lo que no se midió.
+          <template v-if="esNueva"> La atención se abre al guardar: si sale sin guardar, el paciente no entra a la cola.</template>
         </p>
       </div>
 

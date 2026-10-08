@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import Pictograma from './diseno/Pictograma.vue';
-import { estiloCategoria, miles } from './diseno/PiezasBodega';
+import { estiloCategoria, miles, general } from './diseno/PiezasBodega';
 
 /**
  * Detalle del BRES por lugar: la bodega, post-consulta y cada servicio, con
@@ -28,7 +28,7 @@ const filas = computed(() => props.balance.filas.filter(props.filtro).map((f) =>
   }
   if (lugarId.value === 'post') {
     const p = f.postConsulta;
-    return { f, saldoAnterior: null, entradas: null, entregado: p.entregado, noEntregado: p.noEntregado, ajuste: 0, saldo: p.saldoSiguiente ?? null, promedio: p.promedio };
+    return { f, saldoAnterior: p.saldoAnterior, entradas: p.entradas, entregado: p.entregado, noEntregado: p.noEntregado, ajuste: 0, saldo: p.saldoSiguiente, promedio: p.promedio };
   }
   const s = f.servicios.find((x) => x.ubicacionId === lugarId.value);
   return s ? { f, saldoAnterior: s.saldoAnterior, entradas: s.entradas, entregado: s.entregado, noEntregado: s.noEntregado, ajuste: 0, saldo: s.saldoSiguiente, promedio: s.promedio, diferencia: s.diferenciaSaldo } : null;
@@ -85,7 +85,7 @@ const conAjustes = computed(() => esBodega.value && filas.value.some((x) => x.aj
               {{ n(x.saldo) }}
               <span v-if="x.diferencia" class="block text-[11px] font-bold text-[#B7710A]">reportó {{ x.diferencia > 0 ? '+' : '' }}{{ miles(x.diferencia) }}</span>
             </td>
-            <td v-if="!esBodega" class="n" :class="!x.promedio ? 'cero' : ''">{{ n(x.promedio) }}</td>
+            <td v-if="!esBodega" class="n" :class="!x.promedio ? 'cero' : ''">{{ x.promedio ? general(x.promedio) : "–" }}</td>
           </tr>
           <tr v-if="!filas.length"><td colspan="7" class="b-vacio">{{ lugar?.nombre }} no tiene movimientos este mes.</td></tr>
         </tbody>

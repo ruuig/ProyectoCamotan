@@ -107,7 +107,10 @@ async function sembrarInsumos(establecimientoId) {
     const existente = await prisma.insumo.findFirst({ where: { establecimientoId, nombreGenerico } });
     if (existente) continue;
     await prisma.insumo.create({
-      data: { establecimientoId, nombreGenerico, categoria, presentacion, unidadMedida, stockMinimo },
+      data: {
+        establecimientoId, nombreGenerico, categoria, presentacion, unidadMedida, stockMinimo,
+        prescribible: !['medico_quirurgico', 'laboratorio'].includes(categoria),
+      },
     });
   }
 }

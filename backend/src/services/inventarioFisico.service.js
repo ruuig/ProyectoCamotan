@@ -169,8 +169,10 @@ async function cerrar(inventarioId, { usuarioId, observaciones, aplicarReajustes
     for (const conteo of inventario.conteos) {
       // El saldo se lee ahora, al cerrar: es el que se compara con lo contado.
       const lote = await tx.lote.findUnique({ where: { id: conteo.loteId } });
-      const diferencia = conteo.cantidadContada - lote.cantidadActual;
-      const pendienteDeAutorizar = requiereAutorizacion(diferencia, lote.cantidadActual) && !autorizado;
+      // Se cuenta la bodega: lo que esta en farmacia lo cuenta farmacia al cerrar su dia.
+      const enBodega = lote.cantidadActual - lote.cantidadFarmacia;
+      const diferencia = conteo.cantidadContada - enBodega;
+      const pendienteDeAutorizar = requiereAutorizacion(diferencia, enBodega) && !autorizado;
 
       let aplicado = false;
       if (diferencia !== 0 && aplicarReajustes && !pendienteDeAutorizar) {
@@ -187,7 +189,7 @@ async function cerrar(inventarioId, { usuarioId, observaciones, aplicarReajustes
       await tx.conteoFisico.update({
         where: { id: conteo.id },
         data: {
-          saldoSistema: lote.cantidadActual,
+          saldoSistema: enBodega,
           diferencia,
           reajusteAplicado: aplicado,
         },
@@ -197,7 +199,7 @@ async function cerrar(inventarioId, { usuarioId, observaciones, aplicarReajustes
         loteId: conteo.loteId,
         numeroLote: lote.numeroLote,
         contado: conteo.cantidadContada,
-        saldoSistema: lote.cantidadActual,
+        saldoSistema: enBodega,
         diferencia,
         reajusteAplicado: aplicado,
         pendienteDeAutorizar,

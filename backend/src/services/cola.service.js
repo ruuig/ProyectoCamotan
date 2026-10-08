@@ -149,7 +149,8 @@ async function resumenDelDia(establecimientoId, ahora = new Date()) {
   const fin = new Date(inicio.getTime() + 86400000);
 
   const atenciones = await prisma.atencion.findMany({
-    where: { establecimientoId, registradaEn: { gte: inicio, lt: fin } },
+    // Las canceladas fueron un error de registro: no son pacientes del dia.
+    where: { establecimientoId, registradaEn: { gte: inicio, lt: fin }, estado: { not: 'cancelada' } },
     select: {
       estado: true,
       gravedad: true,

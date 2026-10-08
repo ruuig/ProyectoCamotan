@@ -18,8 +18,19 @@
   }
 
   .hoja-impresion,
-  .hoja-impresion * {
+  .hoja-impresion *,
+  .hoja-propia,
+  .hoja-propia * {
     visibility: visible;
+  }
+
+  /* Formularios con su propio formato (SIGSA): se muestran tal cual, sin el
+     tamaño de letra ni los bordes de la hoja general. */
+  .hoja-propia {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
   }
 
   .hoja-impresion {

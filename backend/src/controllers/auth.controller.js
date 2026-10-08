@@ -8,7 +8,7 @@ const { verificarCodigo } = require('../services/totp.service');
 const ERROR_CREDENCIALES = {
   status: 401,
   codigo: 'credenciales_invalidas',
-  mensaje: 'Usuario o contrasena incorrectos',
+  mensaje: 'Usuario o contraseña incorrectos',
 };
 
 async function login(req, res, next) {
@@ -29,7 +29,7 @@ async function login(req, res, next) {
         accion: 'login_fallido',
         entidad: 'usuario',
         entidadId: usuario.id,
-        detalle: usuario.activo ? 'Contrasena incorrecta' : 'Usuario desactivado',
+        detalle: usuario.activo ? 'Contraseña incorrecta' : 'Usuario desactivado',
       });
     }
     return next(ERROR_CREDENCIALES);

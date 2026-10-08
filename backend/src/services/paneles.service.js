@@ -6,7 +6,7 @@ const { existenciaTotal, diasParaVencer } = require('./inventario.service');
 const { semaforoDelCentro } = require('./abastecimiento.service');
 const { evaluarCobertura, excedenteProyectado } = require('./indicadores.service');
 const { consumoDiario } = require('./consumo.service');
-const { pendienteDe } = require('../controllers/dispensaciones.controller');
+const { pendienteDe } = require('./dispensacion.service');
 const { describirPeriodo } = require('./periodo.service');
 const { panelDireccion } = require('./panelDireccion.service');
 
@@ -53,6 +53,7 @@ async function panelPreconsulta(establecimientoId, ahora = new Date()) {
   const citasHoy = await prisma.atencion.findMany({
     where: {
       establecimientoId,
+      estado: { not: 'cancelada' },
       proximaCita: { gte: inicioDia, lt: finDia },
     },
     include: { paciente: { select: { id: true, nombres: true, apellidos: true, expediente: true, expedientePapel: true, comunidad: true } } },
@@ -251,6 +252,7 @@ async function panelFarmacia(establecimientoId, ahora = new Date()) {
     take: 200,
     include: {
       dispensaciones: true,
+      demandaNoAtendida: { select: { cantidad: true } },
       insumo: { select: { id: true, nombreGenerico: true, unidadMedida: true } },
       atencion: {
         select: { paciente: { select: { id: true, nombres: true, apellidos: true, expediente: true, expedientePapel: true } } },

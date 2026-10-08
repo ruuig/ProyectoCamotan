@@ -9,7 +9,9 @@ export default defineConfig({
     // igual que en produccion, donde ambos van tras el mismo dominio.
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        // 127.0.0.1 y no localhost: en Windows localhost puede ir primero por
+        // IPv6 y la primera conexion fallar.
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
       },
     },

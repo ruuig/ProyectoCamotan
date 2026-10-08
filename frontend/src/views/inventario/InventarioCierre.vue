@@ -93,6 +93,7 @@ const delExcel = computed(() => datos.value?.fuente === 'excel');
               <th class="n">Entregado</th>
               <th v-if="!delExcel" class="n">Reajustes</th>
               <th class="n">Saldo actual</th>
+              <th class="n" :title="`Saldo actual entre ${datos?.lugaresReparto ?? 32} lugares`">A cada lugar</th>
             </tr>
           </thead>
           <tbody>
@@ -108,8 +109,9 @@ const delExcel = computed(() => datos.value?.fuente === 'excel');
               <td class="n" :class="!f.entregado ? 'cero' : ''">{{ n(f.entregado) }}</td>
               <td v-if="!delExcel" class="n" :class="!f.reajustes ? 'cero' : f.reajustes < 0 ? 'text-[#C03535]' : ''">{{ f.reajustes ? `${f.reajustes > 0 ? '+' : ''}${miles(f.reajustes)}` : '–' }}</td>
               <td class="n fuerte" :class="!f.saldoActual ? 'cero' : ''">{{ n(f.saldoActual) }}</td>
+              <td class="n" :class="!f.porLugar ? 'cero' : ''">{{ n(f.porLugar) }}</td>
             </tr>
-            <tr v-if="!filas.length"><td colspan="6" class="b-vacio">Ningún insumo coincide.</td></tr>
+            <tr v-if="!filas.length"><td colspan="7" class="b-vacio">Ningún insumo coincide.</td></tr>
           </tbody>
         </table>
       </div>
@@ -126,7 +128,7 @@ const delExcel = computed(() => datos.value?.fuente === 'excel');
           <p class="font-semibold text-tinta">{{ datos.firmas?.coordinadorMunicipal || 'Sin nombre' }}</p>
           <p class="text-sm text-apagado">{{ datos.firmas?.cargoCoordinador }}</p>
         </div>
-        <RouterLink v-if="auth.rol === 'admin'" to="/administracion?pestana=logistica" class="b-btn secundario chico self-center"><Icono nombre="lapiz" :tamano="16" /> Editar firmas</RouterLink>
+        <RouterLink v-if="auth.rol === 'admin'" to="/administracion?pestana=firmas" class="b-btn secundario chico self-center"><Icono nombre="lapiz" :tamano="16" /> Editar firmas</RouterLink>
       </div>
     </template>
     <p v-else-if="!error" class="b-vacio">Calculando…</p>

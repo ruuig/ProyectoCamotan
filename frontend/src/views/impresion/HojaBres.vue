@@ -5,6 +5,7 @@ import servicio from '../../services/inventario';
 import HojaImpresion from '../../components/comunes/HojaImpresion.vue';
 import BresPreimpreso from '../../components/bodega/BresPreimpreso.vue';
 import { nombrePeriodo } from '../../dominio/bodega';
+import { miles, general } from '../../components/bodega/diseno/PiezasBodega';
 import {
   establecimiento as cargarEstablecimiento, registrarImpresion, paginas, renglonesEnBlanco, textoInsumo,
 } from '../../dominio/impresionBodega';
@@ -92,8 +93,11 @@ function valor(r, clave) {
   if (clave === 'med' && r.med === null) return 'sin consumo';
   const v = r[clave];
   if (v === null || v === undefined) return '';
-  if (typeof v === 'number' && !Number.isInteger(v)) return v.toFixed(1);
-  return v;
+  if (typeof v !== 'number') return v;
+  // Como el balance: K con un decimal, el maximo tal cual y lo demas entero.
+  if (clave === 'med') return v.toFixed(1);
+  if (clave === 'cantidadMaxima') return general(v);
+  return miles(v);
 }
 
 const firmas = computed(() => [

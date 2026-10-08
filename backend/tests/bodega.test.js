@@ -132,8 +132,10 @@ describe('reporte mensual del servicio y balance', () => {
     expect(col.saldoSiguiente).toBe(10);
     // H = B + C − D ± G, y coincide con bodega + servicios.
     expect(renglon.bres).toMatchObject({ C: 100, D: 20, E: 5, F: 25, H: 80, I: 70 });
-    // Máximo = promedio × 4; a pedir = máximo − existencia de bodega.
-    expect(renglon.bres.M).toBe(Math.max(0, Math.ceil(renglon.bres.L - 70)));
+    // Máximo = promedio × 4; a pedir = máximo − existencia de bodega, como en
+    // el balance del centro: negativa si sobra.
+    expect(renglon.bres.L).toBe(renglon.bres.J * 4);
+    expect(renglon.bres.M).toBe(renglon.bres.L - 70);
   });
 
   it('el BRES usa las mismas cifras y se exporta a Excel', async () => {

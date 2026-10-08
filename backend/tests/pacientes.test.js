@@ -507,3 +507,26 @@ describe('Numero de expediente generado por el sistema', () => {
     expect(new Set(expedientes).size).toBe(5);
   });
 });
+
+describe('CUI al registrar', () => {
+  it('se guarda desde el registro rápido y no se repite en otro expediente', async () => {
+    const cui = `9${String(Date.now()).slice(-12)}`;
+    const datos = {
+      nombres: 'Rosa', apellidos: `Cui ${MARCA}`, fechaNacimiento: '1985-02-03', sexo: 'F',
+      comunidad: 'Tisipe', confirmarDuplicado: true,
+    };
+    const primero = await comoPreconsulta(request(app).post('/api/v1/pacientes')).send({
+      ...datos, cui, expedientePapel: `${MARCA}-cui1`,
+    });
+    expect(primero.status).toBe(201);
+    expect(primero.body.paciente.cui).toBe(cui);
+
+    const repetido = await comoPreconsulta(request(app).post('/api/v1/pacientes')).send({
+      ...datos, nombres: 'Otra', cui, expedientePapel: `${MARCA}-cui2`,
+    });
+    expect(repetido.status).toBe(409);
+    expect(repetido.body.error.codigo).toBe('cui_registrado');
+    expect(repetido.body.error.detalles[0].id).toBe(primero.body.paciente.id);
+  });
+});
+

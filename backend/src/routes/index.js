@@ -30,6 +30,7 @@ router.use('/impresiones', impresionRutas);
 router.use('/fichas', fichasRutas);
 router.use('/bodega', require('./bodega.routes'));
 router.use('/sigsa', require('./sigsa.routes'));
+router.use('/farmacia', require('./farmacia.routes'));
 
 // El consolidado SIGSA y su exportacion se agregan en la Fase 7.
 

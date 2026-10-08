@@ -8,6 +8,7 @@ const {
 const { alertasDeAtencion } = require('../services/alertasClinicas.service');
 const { INCLUIR_PACIENTE } = require('../services/cola.service');
 const { coberturaDeInsumo } = require('../services/consumo.service');
+const { enUbicacion, existenciaTotal } = require('../services/inventario.service');
 const {
   CATALOGOS_3CS,
   sugerirTipoConsulta,
@@ -32,6 +33,7 @@ async function buscarAtencion(req) {
     include: {
       ...INCLUIR_PACIENTE,
       prescripciones: { include: { insumo: true } },
+      recetasExternas: { orderBy: { creadaEn: 'asc' } },
       diagnosticos: { orderBy: { orden: 'asc' } },
     },
   });
@@ -193,24 +195,34 @@ async function registrarConsulta(req, res, next) {
   res.json({ atencion: cerrada, duracionMin });
 }
 
-async function crearPrescripcion(req, res, next) {
-  const establecimientoId = req.usuario.establecimientoId;
-
+/** La atencion en la que se receta, si admite receta; si no, el error. */
+async function atencionParaRecetar(req) {
   const atencion = await prisma.atencion.findFirst({
-    where: { id: req.params.id, establecimientoId },
+    where: { id: req.params.id, establecimientoId: req.usuario.establecimientoId },
   });
 
   if (!atencion) {
-    return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Atención no encontrada' });
+    return { error: { status: 404, codigo: 'no_encontrado', mensaje: 'Atención no encontrada' } };
   }
 
   if (!['en_atencion', 'atendido'].includes(atencion.estado)) {
-    return next({
-      status: 409,
-      codigo: 'estado_invalido',
-      mensaje: 'Solo se puede prescribir durante o después de la consulta',
-    });
+    return {
+      error: {
+        status: 409,
+        codigo: 'estado_invalido',
+        mensaje: 'Solo se puede prescribir durante o después de la consulta',
+      },
+    };
   }
+
+  return { atencion };
+}
+
+async function crearPrescripcion(req, res, next) {
+  const establecimientoId = req.usuario.establecimientoId;
+
+  const { atencion, error } = await atencionParaRecetar(req);
+  if (error) return next(error);
 
   const insumo = await prisma.insumo.findFirst({
     where: { id: req.body.insumoId, establecimientoId, activo: true },
@@ -218,6 +230,14 @@ async function crearPrescripcion(req, res, next) {
 
   if (!insumo) {
     return next({ status: 404, codigo: 'insumo_no_encontrado', mensaje: 'Insumo no encontrado' });
+  }
+
+  if (!insumo.prescribible) {
+    return next({
+      status: 400,
+      codigo: 'insumo_no_prescribible',
+      mensaje: `${insumo.nombreGenerico} es de uso del servicio y no se entrega al paciente`,
+    });
   }
 
   const prescripcion = await prisma.prescripcion.create({
@@ -236,13 +256,18 @@ async function crearPrescripcion(req, res, next) {
   // el medico debe saberlo ahora, no la farmacia al intentar entregarla.
   const cobertura = await coberturaDeInsumo(insumo.id, establecimientoId);
   const avisos = [];
+  // Lo que importa al paciente es lo que hay en farmacia, que es de donde se le entrega.
+  const lotes = await prisma.lote.findMany({ where: { insumoId: insumo.id } });
+  const enFarmacia = existenciaTotal(enUbicacion(lotes, 'farmacia'));
+  const enBodega = existenciaTotal(enUbicacion(lotes, 'bodega'));
 
+  if (enFarmacia < req.body.cantidad) {
+    avisos.push(
+      `En farmacia quedan ${enFarmacia} ${insumo.unidadMedida}(s) y se prescriben ${req.body.cantidad}`
+      + (enBodega > 0 ? `; en bodega hay ${enBodega}` : ''),
+    );
+  }
   if (cobertura) {
-    if (cobertura.saldoTotal < req.body.cantidad) {
-      avisos.push(
-        `Quedan ${cobertura.saldoTotal} ${insumo.unidadMedida}(s) y se prescriben ${req.body.cantidad}`,
-      );
-    }
     if (cobertura.cobertura.calculable && cobertura.cobertura.critica) {
       avisos.push(`De este insumo quedan para unos ${cobertura.cobertura.dias} días`);
     }
@@ -254,8 +279,8 @@ async function crearPrescripcion(req, res, next) {
   res.status(201).json({
     prescripcion,
     existencia: cobertura
-      ? { saldoTotal: cobertura.saldoTotal, cobertura: cobertura.cobertura }
-      : null,
+      ? { saldoTotal: cobertura.saldoTotal, enFarmacia, enBodega, cobertura: cobertura.cobertura }
+      : { saldoTotal: enFarmacia + enBodega, enFarmacia, enBodega, cobertura: null },
     avisos,
   });
 }
@@ -445,4 +470,26 @@ async function sugerenciaTipo(req, res, next) {
   res.json(sugerirTipoConsulta({ cie: cie || null, descripcion: descripcion || null }, previos, new Date()));
 }
 
-module.exports = { sugerenciaTipo, obtener, registrarConsulta, codificar, crearPrescripcion, alertasPaciente, corregirConsulta, correccionesDe, corregirSignosVitales };
+/**
+ * Medicamento que el centro no tiene: queda en la receta para que el
+ * paciente lo consiga fuera. No pasa por farmacia ni toca el inventario.
+ */
+async function crearRecetaExterna(req, res, next) {
+  const { atencion, error } = await atencionParaRecetar(req);
+  if (error) return next(error);
+
+  const receta = await prisma.recetaExterna.create({
+    data: { ...req.body, atencionId: atencion.id, registradaPor: req.usuario.id },
+  });
+
+  await req.bitacora({
+    accion: 'crear',
+    entidad: 'receta_externa',
+    entidadId: receta.id,
+    detalle: `${receta.medicamento}${receta.cantidad ? ` x${receta.cantidad}` : ''} (conseguir fuera del centro)`,
+  });
+
+  res.status(201).json({ receta });
+}
+
+module.exports = { sugerenciaTipo, obtener, registrarConsulta, codificar, crearPrescripcion, crearRecetaExterna, alertasPaciente, corregirConsulta, correccionesDe, corregirSignosVitales };

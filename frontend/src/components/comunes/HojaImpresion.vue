@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import LogoInstitucional from './LogoInstitucional.vue';
 
@@ -29,6 +30,17 @@ const props = defineProps({
 });
 
 const auth = useAuthStore();
+const router = useRouter();
+
+function imprimir() {
+  window.print();
+}
+
+// Las hojas se abren en una pestaña nueva: sin historial, se cierra la pestaña.
+function volver() {
+  if (window.history.length > 1) router.back();
+  else window.close();
+}
 
 const impresoEn = computed(() =>
   new Intl.DateTimeFormat('es-GT', {
@@ -74,9 +86,16 @@ onMounted(() => {
       class="bloque-impresion mt-8 grid gap-8"
       :class="firmas.length === 3 ? 'grid-cols-3' : 'grid-cols-2'"
     >
-      <div v-for="(f, i) in firmas" :key="i">
-        <p class="border-t border-slate-900 pt-1 text-sm">{{ f.etiqueta }}</p>
-        <p v-if="f.conNombre" class="text-sm">{{ auth.usuario?.nombre }}</p>
+      <div v-for="(f, i) in firmas" :key="i" class="border-t border-slate-900 pt-1 text-sm">
+        <!-- Con nombre fijo (firmas de bodega): nombre y debajo el cargo -->
+        <template v-if="f.nombre">
+          <p class="font-semibold">{{ f.nombre }}</p>
+          <p>{{ f.etiqueta }}</p>
+        </template>
+        <template v-else>
+          <p>{{ f.etiqueta }}</p>
+          <p v-if="f.conNombre">{{ auth.usuario?.nombre }}<template v-if="auth.usuario?.cargo">, {{ auth.usuario.cargo }}</template></p>
+        </template>
       </div>
     </section>
 
@@ -92,10 +111,10 @@ onMounted(() => {
 
     <!-- Controles: no salen en el papel -->
     <div class="no-imprimir mt-6 flex gap-3 border-t border-slate-200 pt-4">
-      <button type="button" class="boton-primario" @click="window.print()">
+      <button type="button" class="boton-primario" @click="imprimir">
         Imprimir
       </button>
-      <button type="button" class="boton-secundario" @click="$router.back()">
+      <button type="button" class="boton-secundario" @click="volver">
         Volver
       </button>
     </div>

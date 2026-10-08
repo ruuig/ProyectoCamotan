@@ -580,7 +580,7 @@ async function panelDireccion(establecimientoId, ahora = new Date(), periodo = '
     : new Date(rango.desde.getTime() - (PERIODOS_TENDENCIA - 1) * 7 * MS_POR_DIA);
 
   const atenciones = await prisma.atencion.findMany({
-    where: { establecimientoId, registradaEn: { gte: desdeTendencia, lt: rango.hasta } },
+    where: { establecimientoId, registradaEn: { gte: desdeTendencia, lt: rango.hasta }, estado: { not: 'cancelada' } },
     select: {
       estado: true,
       gravedad: true,

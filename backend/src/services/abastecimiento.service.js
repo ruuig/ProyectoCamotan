@@ -280,11 +280,13 @@ async function verificarSaldoLote(loteId) {
 async function verificarSaldos(establecimientoId) {
   const lotes = await prisma.lote.findMany({
     where: { insumo: { establecimientoId } },
-    include: { movimientos: { select: { cantidad: true } }, insumo: { select: { nombreGenerico: true } } },
+    include: { movimientos: { select: { cantidad: true, ubicacion: true } }, insumo: { select: { nombreGenerico: true } } },
   });
 
   const revisados = lotes.map((l) => {
     const calculado = saldoDesdeMovimientos(l.movimientos);
+    // La parte de la farmacia tambien tiene que salir de sus movimientos.
+    const farmaciaCalculada = saldoDesdeMovimientos(l.movimientos.filter((m) => m.ubicacion === 'farmacia'));
     return {
       loteId: l.id,
       insumo: l.insumo.nombreGenerico,
@@ -292,7 +294,9 @@ async function verificarSaldos(establecimientoId) {
       saldoGuardado: l.cantidadActual,
       saldoCalculado: calculado,
       diferencia: l.cantidadActual - calculado,
-      cuadra: l.cantidadActual === calculado,
+      farmaciaGuardada: l.cantidadFarmacia,
+      farmaciaCalculada,
+      cuadra: l.cantidadActual === calculado && l.cantidadFarmacia === farmaciaCalculada,
     };
   });
 

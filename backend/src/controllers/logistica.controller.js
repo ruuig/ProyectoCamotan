@@ -197,7 +197,8 @@ async function trazaPaciente(req, res, next) {
 }
 
 async function tarjetaControl(req, res, next) {
-  const datos = await trazabilidad.tarjetaDeControl(req.params.id, req.usuario.establecimientoId);
+  // Sin ubicacion, la del centro entero; con ella, la de la bodega o la de la farmacia.
+  const datos = await trazabilidad.tarjetaDeControl(req.params.id, req.usuario.establecimientoId, { ubicacion: req.query.ubicacion ?? null });
 
   if (!datos) {
     return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Insumo no encontrado' });

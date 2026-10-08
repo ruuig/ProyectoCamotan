@@ -154,11 +154,11 @@ async function seriesDelEstablecimiento(establecimientoId, ahora = new Date(), m
 
   const [delPeriodo, recientes] = await Promise.all([
     prisma.atencion.findMany({
-      where: { establecimientoId, registradaEn: { gte: desdeMeses } },
+      where: { establecimientoId, registradaEn: { gte: desdeMeses }, estado: { not: 'cancelada' } },
       select: { registradaEn: true, reingresoEn: true, llamadaEn: true, gravedad: true },
     }),
     prisma.atencion.findMany({
-      where: { establecimientoId, registradaEn: { gte: desdeLlegadas } },
+      where: { establecimientoId, registradaEn: { gte: desdeLlegadas }, estado: { not: 'cancelada' } },
       select: { registradaEn: true },
     }),
   ]);

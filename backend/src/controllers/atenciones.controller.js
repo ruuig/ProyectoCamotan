@@ -249,4 +249,107 @@ async function registrarPreconsulta(req, res, next) {
   });
 }
 
-module.exports = { crear, registrarPreconsulta };
+/**
+ * Abre la atencion al guardar la toma de signos, no antes.
+ *
+ * Antes se abria con solo tocar "Atender" y quedaba en la cola aunque no se
+ * llenara nada. Ahora la atencion y su preconsulta se crean juntas: si los
+ * datos no pasan, la atencion se borra y no queda nada a medias.
+ */
+async function crearConPreconsulta(req, res, next) {
+  const establecimientoId = req.usuario.establecimientoId;
+  const { pacienteId, ...preconsulta } = req.body;
+
+  const paciente = await prisma.paciente.findFirst({ where: { id: pacienteId, establecimientoId, activo: true } });
+  if (!paciente) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Paciente no encontrado' });
+
+  const abierta = await prisma.atencion.findFirst({
+    where: { pacienteId, estado: { in: ['en_espera', 'en_atencion'] } },
+  });
+  if (abierta) {
+    return next({
+      status: 409,
+      codigo: 'atencion_abierta',
+      mensaje: 'El paciente ya tiene una atención en curso',
+      detalles: { atencionId: abierta.id, estado: abierta.estado },
+    });
+  }
+
+  const atencion = await prisma.$transaction(async (tx) => {
+    await sincronizarCondicionesPorEdad(tx, paciente);
+    // La gravedad final la pone la preconsulta, con los signos de peligro.
+    return tx.atencion.create({ data: { establecimientoId, pacienteId, motivoConsulta: preconsulta.motivoConsulta, gravedad: 'leve' } });
+  });
+
+  // Se registra la preconsulta sobre la atencion recien abierta. Si algo no
+  // pasa (un dato fuera de rango, una gravedad sin justificar), se borra.
+  let fallo = null;
+  const deshacer = async (error) => {
+    fallo = error;
+    await prisma.atencion.delete({ where: { id: atencion.id } }).catch(() => {});
+  };
+  req.params.id = atencion.id;
+  req.body = preconsulta;
+  try {
+    await registrarPreconsulta(req, res, deshacer);
+  } catch (error) {
+    await deshacer(error);
+  }
+  if (fallo) return next(fallo);
+  await req.bitacora({ accion: 'crear', entidad: 'atencion', entidadId: atencion.id, detalle: 'Abierta al registrar la preconsulta' });
+  return undefined;
+}
+
+// Se puede cancelar mientras el medico no haya escrito nada de la consulta.
+const CANCELABLES = ['en_espera', 'ausente', 'en_atencion'];
+
+/**
+ * Cancela una atencion abierta por error. No se borra: queda con su motivo,
+ * quien la cancelo y cuando, y sale de la cola. Lo que ya se midio en la
+ * preconsulta se conserva en el historial del paciente.
+ */
+async function cancelar(req, res, next) {
+  const establecimientoId = req.usuario.establecimientoId;
+  const atencion = await prisma.atencion.findFirst({
+    where: { id: req.params.id, establecimientoId },
+    include: {
+      _count: { select: { prescripciones: true, recetasExternas: true, diagnosticos: true } },
+    },
+  });
+  if (!atencion) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Atención no encontrada' });
+  if (!CANCELABLES.includes(atencion.estado)) {
+    return next({
+      status: 409,
+      codigo: 'no_cancelable',
+      mensaje: atencion.estado === 'cancelada' ? 'Esta atención ya está cancelada' : 'Una atención ya atendida no se cancela: se corrige',
+    });
+  }
+  const c = atencion._count;
+  if (atencion.diagnosticoTxt || c.prescripciones || c.recetasExternas || c.diagnosticos) {
+    return next({
+      status: 409,
+      codigo: 'consulta_iniciada',
+      mensaje: 'El médico ya registró parte de la consulta: no se puede cancelar',
+    });
+  }
+
+  const cancelada = await prisma.atencion.update({
+    where: { id: atencion.id },
+    data: {
+      estado: 'cancelada',
+      clinicaId: null,
+      canceladaEn: new Date(),
+      canceladaPor: req.usuario.id,
+      motivoCancelacion: req.body.motivo,
+    },
+  });
+  await req.bitacora({
+    accion: 'actualizar',
+    entidad: 'atencion',
+    entidadId: atencion.id,
+    detalle: `Atención cancelada (estaba ${atencion.estado}). Motivo: ${req.body.motivo}`,
+  });
+  res.json({ atencion: cancelada });
+}
+
+module.exports = { crear, registrarPreconsulta, crearConPreconsulta, cancelar };

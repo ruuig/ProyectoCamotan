@@ -118,11 +118,24 @@ function esLoteFEFO(loteId, lotes, cantidadRequerida, ahora = new Date()) {
   return disponibles.length > 0 && disponibles[0].id === loteId;
 }
 
+/**
+ * Los lotes vistos desde una ubicacion: cantidadActual pasa a ser lo que hay
+ * del lote en la bodega o en la farmacia. Asi PEPE, el fraccionamiento y la
+ * existencia disponible funcionan igual para las dos, sin duplicar reglas.
+ */
+function enUbicacion(lotes, ubicacion) {
+  return lotes.map((l) => {
+    const farmacia = l.cantidadFarmacia ?? 0;
+    return { ...l, cantidadActual: ubicacion === 'farmacia' ? farmacia : l.cantidadActual - farmacia };
+  });
+}
+
 function existenciaTotal(lotes, ahora = new Date()) {
   return lotesDisponibles(lotes, ahora).reduce((suma, l) => suma + l.cantidadActual, 0);
 }
 
 module.exports = {
+  enUbicacion,
   ESTADO_DISPONIBLE,
   VENTANA_MESES,
   DIAS_POR_MES,

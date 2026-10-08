@@ -44,8 +44,11 @@ async function solicitar(ruta, opciones = {}) {
     if (respuesta.status === 401 && alExpirarSesion) {
       alExpirarSesion();
     }
-    const error = new Error(cuerpo?.error?.mensaje || 'Ocurrio un error inesperado');
-    error.codigo = cuerpo?.error?.codigo || 'error';
+    // Sin cuerpo de error del servidor: la peticion no llego al backend (el
+    // proxy no pudo conectar). No es un error de la aplicacion.
+    const sinServidor = !cuerpo?.error && respuesta.status >= 500;
+    const error = new Error(cuerpo?.error?.mensaje || (sinServidor ? 'No se pudo conectar con el servidor' : 'Ocurrio un error inesperado'));
+    error.codigo = cuerpo?.error?.codigo || (sinServidor ? 'error_red' : 'error');
     error.estado = respuesta.status;
     error.detalles = cuerpo?.error?.detalles || null;
     throw error;
@@ -105,8 +108,47 @@ async function descargarArchivo(ruta) {
   return URL.createObjectURL(await respuesta.blob());
 }
 
+/**
+ * Descarga que necesita cuerpo, como la autorizacion del director, y la
+ * guarda en el equipo con el nombre que indica el servidor.
+ */
+async function descargarConCuerpo(ruta, datos) {
+  const token = obtenerToken();
+  let respuesta;
+  try {
+    respuesta = await fetch(`${BASE_URL}${ruta}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(datos ?? {}),
+    });
+  } catch {
+    const error = new Error('No se pudo conectar con el servidor');
+    error.codigo = 'error_red';
+    throw error;
+  }
+  if (!respuesta.ok) {
+    const cuerpo = await respuesta.json().catch(() => null);
+    if (respuesta.status === 401 && alExpirarSesion) alExpirarSesion();
+    const error = new Error(cuerpo?.error?.mensaje || 'No se pudo descargar el archivo');
+    error.codigo = cuerpo?.error?.codigo || 'error';
+    throw error;
+  }
+  const disposicion = respuesta.headers.get('Content-Disposition') ?? '';
+  const nombre = decodeURIComponent(disposicion.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)?.[1] ?? 'descarga');
+  const url = URL.createObjectURL(await respuesta.blob());
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombre;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return nombre;
+}
+
 export default {
   get: (ruta) => solicitar(ruta),
+  descargarConCuerpo,
   put: conCuerpo('PUT'),
   subirArchivo,
   descargarArchivo,

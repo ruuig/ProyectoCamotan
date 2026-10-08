@@ -38,3 +38,19 @@ export function renglonesEnBlanco(n = 20) {
 export function textoInsumo(r) {
   return [r.nombre, r.formaFarmaceutica, r.concentracion].filter(Boolean).join(' ');
 }
+
+/**
+ * Firmas de los formatos de bodega, como se configuran en Administración >
+ * Firmas: el encargado de bodega y el visto bueno, cada uno con su cargo.
+ */
+export async function firmasBodega() {
+  try {
+    const { configuracion: c } = await http.get('/inventario/configuracion');
+    return [
+      { etiqueta: c.cargoEncargadoBodega, nombre: c.encargadoBodega || ' ' },
+      { etiqueta: c.cargoCoordinador, nombre: c.coordinadorMunicipal ? `Vo. Bo. ${c.coordinadorMunicipal}` : 'Vo. Bo.' },
+    ];
+  } catch {
+    return [{ etiqueta: 'Encargado de bodega' }, { etiqueta: 'Coordinador municipal' }];
+  }
+}

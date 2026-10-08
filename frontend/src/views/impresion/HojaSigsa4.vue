@@ -14,6 +14,7 @@ import { nombrePeriodo } from '../../dominio/bodega';
  * pantalla. Las entregas con "firma en papel" dejan la casilla en blanco.
  */
 const route = useRoute();
+const imprimir = () => window.print();
 const auth = useAuthStore();
 const datos = ref(null);
 const est = ref(null);
@@ -62,7 +63,7 @@ const QUIEN = { responsable: 'Resp.', otro: 'Recibe' };
 </script>
 
 <template>
-  <div v-if="datos" class="sigsa4">
+  <div v-if="datos" class="sigsa4 hoja-propia">
     <section v-for="(hoja, h) in hojas" :key="h" class="hoja" :class="h > 0 ? 'salto' : ''">
       <header class="encabezado">
         <div class="titulo">
@@ -77,7 +78,7 @@ const QUIEN = { responsable: 'Resp.', otro: 'Recibe' };
         <span><b>Municipio:</b> {{ datos.encabezado.municipio }}</span>
         <span><b>Servicio de Salud:</b> {{ datos.encabezado.servicio }}</span>
         <span><b>Responsable de la información:</b> {{ auth.usuario?.nombre }}</span>
-        <span><b>Cargo:</b> {{ { farmacia: 'Farmacia', admin: 'Dirección' }[auth.rol] ?? auth.rol }}</span>
+        <span><b>Cargo:</b> {{ auth.usuario?.cargo || ({ farmacia: 'Farmacia', admin: 'Dirección' }[auth.rol] ?? auth.rol) }}</span>
         <span><b>Firma:</b> ________________</span>
         <span><b>Mes:</b> {{ nombreMes[0].toUpperCase() + nombreMes.slice(1) }} ({{ mes }})</span>
         <span><b>Año:</b> {{ anio }}</span>
@@ -135,7 +136,7 @@ const QUIEN = { responsable: 'Resp.', otro: 'Recibe' };
     </section>
 
     <div class="no-imprimir controles">
-      <button type="button" class="boton-primario" @click="window.print()">Imprimir</button>
+      <button type="button" class="boton-primario" @click="imprimir">Imprimir</button>
     </div>
   </div>
   <p v-else-if="error" class="p-8 text-red-700">{{ error }}</p>

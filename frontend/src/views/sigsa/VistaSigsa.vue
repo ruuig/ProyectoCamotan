@@ -42,6 +42,14 @@ async function excel() {
   }
 }
 
+/** Fecha de nacimiento, o la edad cuando no se conoce (va en una sola casilla del formulario). */
+function textoNacimiento(n) {
+  if (!n.estimada) return n.dia ? `${n.dia}/${n.mes}/${n.anio}` : '';
+  if (n.anio !== '') return `${n.anio} ${n.anio === 1 ? 'año' : 'años'}`;
+  if (n.mes !== '') return `${n.mes} ${n.mes === 1 ? 'mes' : 'meses'}`;
+  return `${n.dia} ${n.dia === 1 ? 'día' : 'días'}`;
+}
+
 function rangoRapido(tipo) {
   const d = new Date(`${hoy}T12:00:00Z`);
   if (tipo === 'hoy') Object.assign(filtro, { desde: hoy, hasta: hoy });
@@ -124,7 +132,7 @@ onMounted(async () => {
             <td class="font-mono">{{ r.historiaClinica }}</td>
             <td class="font-semibold text-tinta">{{ r.nombre }}</td>
             <td>{{ r.sexo }}</td>
-            <td class="whitespace-nowrap">{{ r.nacimiento.edad || `${r.nacimiento.dia}/${r.nacimiento.mes}/${r.nacimiento.anio}` }}</td>
+            <td class="whitespace-nowrap">{{ textoNacimiento(r.nacimiento) }}</td>
             <td>{{ r.comunidad }}</td>
             <td class="n">{{ r.consulta }}</td>
             <td><span v-for="(d, i) in r.diagnosticos" :key="i" class="block">{{ d.descripcion }}</span></td>

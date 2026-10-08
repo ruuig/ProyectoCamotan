@@ -1,123 +1,126 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { RouterLink } from 'vue-router';
-import servicio from '../../services/indicadores';
+import indicadores from '../../services/indicadores';
+import atenciones from '../../services/atenciones';
+import inventario from '../../services/inventario';
+import bodega from '../../services/bodega';
+import { useAuthStore } from '../../stores/auth';
+import { cierre, nombrePeriodo } from '../../dominio/bodega';
 import Icono from '../../components/comunes/Icono.vue';
-import PanelAlertas from '../../components/comunes/PanelAlertas.vue';
-import TarjetaDecision from '../../components/panel/TarjetaDecision.vue';
-import PanelIndicadores from '../../components/panel/PanelIndicadores.vue';
-import GraficaAtencionesDia from '../../components/panel/GraficaAtencionesDia.vue';
-import BarraProporcional from '../../components/panel/BarraProporcional.vue';
-import EsqueletoPanel from '../../components/panel/EsqueletoPanel.vue';
 
 /**
- * Panel de dirección.
- *
- * Lo primero que se ve son las decisiones pendientes, porque es lo único de
- * la pantalla sobre lo que hay que hacer algo hoy. Todo lo demás es contexto
- * para decidir mejor.
- *
- * Todo llega en una sola petición: quien entra a ver cómo va el
- * establecimiento no debería esperar a que se completen cuatro.
+ * Panel de dirección: cómo va el día, qué falta para cerrar el mes y qué
+ * insumos están por faltar. Cada bloque lleva a la pantalla donde se actúa.
  */
-const datos = ref(null);
+const auth = useAuthStore();
+const periodo = cierre.periodo;
+const panel = ref(null);
+const hoy = ref(null);
+const cola = ref(null);
+const cierreMes = ref({});
+const semaforo = ref(null);
 const error = ref('');
 const cargando = ref(true);
 
-const periodo = ref('semana');
-const PERIODOS = [
-  { valor: 'semana', etiqueta: 'Semana' },
-  { valor: 'mes', etiqueta: 'Mes' },
-];
+const hora = Number(new Intl.DateTimeFormat('es-GT', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Guatemala' }).format(new Date()));
+const saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+const primerNombre = computed(() => (auth.usuario?.nombre ?? '').replace(/^(Dr|Dra|Lic|Licda|Ing|P\.C)\.?\s+/i, '').split(' ')[0]);
+
+const intentar = async (p) => { try { return await p; } catch { return null; } };
 
 async function cargar() {
-  cargando.value = true;
-  try {
-    datos.value = await servicio.panel('admin', periodo.value);
-    error.value = '';
-  } catch (fallo) {
-    error.value = fallo.message;
-  } finally {
-    cargando.value = false;
-  }
+  const [p, r, c, rep, bres, firmar, tres, sem] = await Promise.all([
+    intentar(indicadores.panel('admin', 'semana')),
+    intentar(atenciones.resumenDia()),
+    intentar(atenciones.cola()),
+    intentar(bodega.estadoReportes(periodo)),
+    intentar(inventario.bresDe(periodo)),
+    intentar(inventario.porFirmar()),
+    intentar(inventario.sigsa4(periodo)),
+    intentar(bodega.semaforo({})),
+  ]);
+  panel.value = p;
+  hoy.value = r;
+  cola.value = c;
+  semaforo.value = sem?.resumen ?? null;
+  cierreMes.value = { reportes: rep?.servicios ?? null, bres: bres?.bres, porFirmar: firmar?.porFirmar ?? null, sigsa4: tres?.renglones ?? null };
+  if (!p && !r) error.value = 'No se pudo cargar el panel.';
+  cargando.value = false;
 }
 
-async function cambiarPeriodo(valor) {
-  if (periodo.value === valor) return;
-  periodo.value = valor;
-  await cargar();
-}
-
-// --- Decisiones ------------------------------------------------------------
-
-const gestionando = ref(null);
-
-/**
- * Registra que alguien ya actuó. No oculta la tarjeta: la causa sigue viva
- * y el sistema la cerrará solo cuando desaparezca.
- */
-async function gestionar(decision) {
-  gestionando.value = decision.id;
-  try {
-    await servicio.gestionarAlerta(decision.id, decision.codigoAccion);
-    await cargar();
-  } catch (fallo) {
-    error.value = fallo.message;
-  } finally {
-    gestionando.value = null;
-  }
-}
-
-// --- Diagnósticos ----------------------------------------------------------
-
-const MESES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-];
-
-function nombreMes(valor) {
-  if (!valor) return '';
-  return MESES[new Date(valor).getMonth()];
-}
-
-const subtituloDiagnosticos = computed(() => {
-  if (!datos.value) return '';
-  const actual = nombreMes(datos.value.diagnosticos.desde);
-  const anterior = nombreMes(datos.value.diagnosticos.desdeAnterior);
-  if (!actual) return '';
-  return `${actual[0].toUpperCase()}${actual.slice(1)}, comparado con ${anterior}`;
+/* ---------- Hoy ---------- */
+const cifrasHoy = computed(() => {
+  const r = hoy.value ?? {};
+  const s = cola.value?.resumen ?? {};
+  return [
+    { e: 'En espera', n: s.enEspera ?? r.enCola ?? 0, a: '/cola' },
+    { e: 'En consulta', n: cola.value?.enAtencion?.length ?? 0, a: '/cola' },
+    { e: 'Atendidos', n: r.atendidos ?? 0 },
+    { e: 'Urgentes', n: r.urgentesAtendidos ?? 0, tono: (r.urgentesAtendidos ?? 0) > 0 ? 'rojo' : '' },
+    { e: 'Espera máx.', n: s.enEspera ? `${s.esperaMaxima} min` : '—', tono: s.superan90 ? 'rojo' : '' },
+  ];
 });
 
-// La marca del umbral va sobre el mismo horizonte que la barra.
-const marcaUmbral = computed(() =>
-  datos.value ? datos.value.abastecimiento.umbral / datos.value.abastecimiento.horizonte : null,
-);
+/* ---------- Cierre del mes ---------- */
+const pasosCierre = computed(() => {
+  const c = cierreMes.value;
+  const servicios = c.reportes ?? [];
+  const recibidos = servicios.filter((s) => s.reportado).length;
+  const sinCodigo = panel.value?.pendientesDeCodificar?.length ?? 0;
+  const sinFirma = (c.sigsa4 ?? []).filter((r) => !r.constancia).length;
+  return [
+    {
+      texto: 'Reportes de los servicios',
+      detalle: servicios.length ? `${recibidos} de ${servicios.length} recibidos` : 'Sin servicios',
+      listo: servicios.length > 0 && recibidos === servicios.length,
+      a: '/inventario/reportes',
+    },
+    {
+      texto: 'BRES',
+      detalle: !c.bres ? 'Sin generar' : c.bres.estado === 'cerrado' ? 'Cerrado' : 'Generado, falta cerrarlo',
+      listo: c.bres?.estado === 'cerrado',
+      a: '/inventario/bres',
+    },
+    {
+      texto: 'Constancias del SIGSA-4',
+      detalle: sinFirma ? `${sinFirma} entregas sin firma` : 'Todas firmadas',
+      listo: !sinFirma,
+      a: '/dispensacion',
+    },
+    {
+      texto: 'Diagnósticos con CIE-10',
+      detalle: sinCodigo ? `${sinCodigo} sin código` : 'Todos codificados',
+      listo: !sinCodigo,
+      a: '#codificar',
+    },
+  ];
+});
+const listos = computed(() => pasosCierre.value.filter((p) => p.listo).length);
 
-const CLASE_COLOR = {
-  empeora: 'text-empeora',
-  advertencia: 'text-advertencia',
-  marino: 'text-tinta',
-  neutro: 'text-tinta-2',
-};
+/* ---------- Bodega ---------- */
+const faltantes = computed(() => (panel.value?.abastecimiento?.lista ?? []).slice(0, 6));
+const agotados = computed(() => (panel.value?.abastecimiento?.lista ?? []).filter((i) => i.sinExistencia).length);
 
-function fecha(valor) {
-  return valor ? new Date(valor).toLocaleDateString('es-GT') : '';
-}
+/* ---------- Semana ---------- */
+const semana = computed(() => panel.value?.atencionesPorDia?.actual ?? []);
+const maxDia = computed(() => Math.max(1, ...semana.value.map((d) => d.noUrgentes + d.urgentes)));
+const totalSemana = computed(() => semana.value.reduce((t, d) => t + d.noUrgentes + d.urgentes, 0));
+const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const nombreDia = (f) => DIAS[new Date(new Date(f).getTime() - 6 * 3600000).getUTCDay()];
+const esHoy = (f) => new Date(new Date(f).getTime() - 6 * 3600000).toISOString().slice(0, 10) === new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
 
-// --- Codificación pendiente ------------------------------------------------
-
+/* ---------- Codificación ---------- */
 const codigos = ref({});
 const codificando = ref(null);
-
-async function codificar(atencionId) {
-  const codigo = (codigos.value[atencionId] ?? '').trim().toUpperCase();
+async function codificar(id) {
+  const codigo = (codigos.value[id] ?? '').trim().toUpperCase();
   if (!codigo) return;
-
-  codificando.value = atencionId;
+  codificando.value = id;
   try {
-    await servicio.codificar(atencionId, codigo);
-    delete codigos.value[atencionId];
-    await cargar();
+    await indicadores.codificar(id, codigo);
+    delete codigos.value[id];
+    panel.value = await indicadores.panel('admin', 'semana');
   } catch (fallo) {
     error.value = fallo.message;
   } finally {
@@ -125,291 +128,182 @@ async function codificar(atencionId) {
   }
 }
 
-onMounted(cargar);
+// La cola cambia durante el día: se refresca cada minuto.
+let reloj = null;
+onMounted(() => {
+  cargar();
+  reloj = setInterval(async () => {
+    const [r, c] = await Promise.all([intentar(atenciones.resumenDia()), intentar(atenciones.cola())]);
+    if (r) hoy.value = r;
+    if (c) cola.value = c;
+  }, 60000);
+});
+onBeforeUnmount(() => clearInterval(reloj));
 </script>
 
 <template>
-  <section class="space-y-bloque">
-    <!-- Encabezado: qué se está mirando y de qué período -->
-    <div class="flex flex-wrap items-end justify-between gap-4">
+  <section class="space-y-5">
+    <header class="b-cabecera">
       <div>
-        <h1 class="titulo-pagina">Panel de dirección</h1>
-        <p class="text-apagado">{{ datos?.periodo.etiqueta ?? '' }}</p>
+        <span class="b-antetitulo">Panel de dirección</span>
+        <h1 class="b-titulo mt-1">{{ saludo }}{{ primerNombre ? `, ${primerNombre}` : '' }}</h1>
       </div>
-
-      <div class="flex flex-wrap items-center gap-3">
-        <div
-          class="flex rounded-control border border-linea bg-superficie p-1"
-          role="group"
-          aria-label="Período del panel"
-        >
-          <button
-            v-for="p in PERIODOS"
-            :key="p.valor"
-            type="button"
-            class="min-h-[2.25rem] rounded-[0.375rem] px-5 font-bold transition-colors"
-            :class="periodo === p.valor
-              ? 'bg-marino text-superficie'
-              : 'text-apagado hover:text-tinta'"
-            :aria-pressed="periodo === p.valor"
-            @click="cambiarPeriodo(p.valor)"
-          >
-            {{ p.etiqueta }}
-          </button>
-        </div>
-
-        <RouterLink to="/consolidado" class="boton-secundario">
-          <Icono nombre="consolidado" :tamano="19" /> Ver consolidado
-        </RouterLink>
+      <div class="b-acciones">
+        <RouterLink to="/cola" class="b-btn secundario"><Icono nombre="cola" :tamano="20" /> Cola</RouterLink>
+        <RouterLink to="/consolidado" class="b-btn primario"><Icono nombre="consolidado" :tamano="20" /> Documentos del mes</RouterLink>
       </div>
+    </header>
+
+    <p v-if="error" role="alert" class="b-aviso error">{{ error }}</p>
+
+    <!-- Hoy -->
+    <div class="hoy">
+      <span class="hoy-titulo">Hoy</span>
+      <component :is="c.a ? RouterLink : 'div'" v-for="c in cifrasHoy" :key="c.e" :to="c.a" class="b-cifra" :class="[c.tono, c.a ? 'enlace-cifra' : '']">
+        <span class="n">{{ cargando ? '·' : c.n }}</span><span class="e">{{ c.e }}</span>
+      </component>
     </div>
 
-    <p v-if="error" role="alert" class="aviso aviso-urgente">
-      <Icono nombre="alerta" :tamano="20" class="mt-0.5 shrink-0 text-empeora" />
-      <span class="text-tinta-2">{{ error }}</span>
-    </p>
-
-    <!-- FILA 1. Requiere su decisión -->
-    <section class="space-y-4">
-      <div class="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 class="font-titulo text-titulo-seccion font-medium text-tinta">Requiere su decisión</h2>
-        <a v-if="datos && datos.totalAlertas > 0" href="#alertas" class="enlace">
-          Ver las {{ datos.totalAlertas }} alertas
-        </a>
-      </div>
-
-      <EsqueletoPanel v-if="cargando && !datos" forma="decisiones" />
-
-      <div
-        v-else-if="datos && datos.decisiones.length > 0"
-        class="grid gap-tarjeta panel:grid-cols-3"
-      >
-        <TarjetaDecision
-          v-for="(d, i) in datos.decisiones"
-          :key="d.id"
-          :decision="d"
-          :destacada="i === 0"
-          :registrando="gestionando === d.id"
-          @gestionar="gestionar"
-        />
-      </div>
-
-      <!-- Sin decisiones no se dejan tarjetas vacías ocupando la fila -->
-      <p v-else-if="datos" class="tarjeta px-relleno py-5 text-apagado">
-        No hay decisiones pendientes.
-      </p>
-    </section>
-
-    <!-- FILA 2. Indicadores -->
-    <EsqueletoPanel v-if="cargando && !datos" forma="indicadores" />
-    <PanelIndicadores v-else-if="datos" :indicadores="datos.indicadores" />
-
-    <!-- FILA 3. Atenciones por día y diagnósticos del mes -->
-    <div class="grid gap-tarjeta panel:grid-cols-3">
-      <EsqueletoPanel v-if="cargando && !datos" forma="grafica" class="panel:col-span-2" />
-      <div v-else-if="datos" class="panel p-relleno panel:col-span-2">
-        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div class="rejilla">
+      <!-- Cierre del mes -->
+      <section class="b-panel">
+        <header class="b-panel-cabeza">
           <div>
-            <h2 class="font-titulo text-titulo-seccion font-medium text-tinta">
-              Atenciones por día
-            </h2>
-            <p class="text-sm text-apagado">
-              {{ periodo === 'mes' ? 'Últimas ocho semanas' : 'Últimas dos semanas' }}
-            </p>
+            <h2 class="b-panel-titulo first-letter:uppercase">Cierre de {{ nombrePeriodo(periodo) }}</h2>
+            <div class="progreso mt-2" :aria-label="`${listos} de ${pasosCierre.length} listos`">
+              <span v-for="(p, i) in pasosCierre" :key="i" :class="p.listo ? 'listo' : ''" />
+            </div>
           </div>
-          <div class="flex items-center gap-4 text-sm text-apagado">
-            <span class="flex items-center gap-1.5">
-              <span class="h-2.5 w-2.5 rounded-[2px] bg-marino" /> Atenciones
-            </span>
-            <span class="flex items-center gap-1.5">
-              <span class="h-2.5 w-2.5 rounded-[2px] bg-empeora-claro" /> Urgentes
-            </span>
+          <span class="text-sm font-bold text-apagado">{{ listos }} de {{ pasosCierre.length }}</span>
+        </header>
+        <ul>
+          <li v-for="p in pasosCierre" :key="p.texto">
+            <component :is="p.a.startsWith('#') ? 'a' : RouterLink" :to="p.a" :href="p.a" class="paso">
+              <span class="marca" :class="p.listo ? 'listo' : ''"><Icono :nombre="p.listo ? 'correcto' : 'reloj'" :tamano="20" /></span>
+              <span class="min-w-0 flex-1">
+                <b>{{ p.texto }}</b>
+                <small :class="p.listo ? '' : 'falta'">{{ p.detalle }}</small>
+              </span>
+              <Icono nombre="irA" :tamano="18" :grosor="2.2" class="text-slate-400" />
+            </component>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Bodega -->
+      <section class="b-panel">
+        <header class="b-panel-cabeza">
+          <h2 class="b-panel-titulo">Insumos por faltar</h2>
+          <RouterLink to="/inventario" class="text-sm font-bold text-tinta hover:underline">Ver bodega</RouterLink>
+        </header>
+        <div class="mini-cifras">
+          <RouterLink to="/inventario" class="mini"><b class="rojo">{{ agotados }}</b><span>Agotados</span></RouterLink>
+          <RouterLink to="/inventario/semaforo" class="mini"><b class="rojo">{{ semaforo ? semaforo.vencido : '·' }}</b><span>Vencidos</span></RouterLink>
+          <RouterLink to="/inventario/semaforo" class="mini"><b class="ambar">{{ semaforo ? semaforo.rojo : '·' }}</b><span>Por vencer</span></RouterLink>
+        </div>
+        <ul class="faltantes">
+          <li v-for="i in faltantes" :key="i.insumoId">
+            <RouterLink :to="`/inventario/${i.insumoId}`" class="faltante">
+              <span class="min-w-0 flex-1 truncate">{{ i.nombre }}</span>
+              <span class="dias" :class="i.sinExistencia ? 'cero' : ''">{{ i.sinExistencia ? 'Agotado' : i.sinConsumo ? 'Sin consumo' : `${i.dias} días` }}</span>
+            </RouterLink>
+          </li>
+          <li v-if="panel && !faltantes.length" class="b-vacio !py-6">Ningún insumo por debajo de 15 días.</li>
+        </ul>
+      </section>
+
+      <!-- Semana -->
+      <section class="b-panel">
+        <header class="b-panel-cabeza">
+          <h2 class="b-panel-titulo">Atenciones de la semana</h2>
+          <span class="text-sm font-bold text-apagado">{{ totalSemana }} en total</span>
+        </header>
+        <div class="grafica" role="img" :aria-label="`Atenciones por día: ${semana.map((d) => `${nombreDia(d.fecha)} ${d.noUrgentes + d.urgentes}`).join(', ')}`">
+          <div v-for="d in semana" :key="d.fecha" class="columna" :class="esHoy(d.fecha) ? 'hoy-col' : ''">
+            <span class="valor">{{ d.noUrgentes + d.urgentes || '' }}</span>
+            <div class="barra">
+              <span class="urg" :style="{ height: `${(d.urgentes / maxDia) * 100}%` }" />
+              <span class="norm" :style="{ height: `${(d.noUrgentes / maxDia) * 100}%` }" />
+            </div>
+            <span class="dia">{{ nombreDia(d.fecha) }}</span>
           </div>
         </div>
+        <div class="leyenda"><span><i class="norm" /> No urgentes</span><span><i class="urg" /> Urgentes</span></div>
+      </section>
 
-        <GraficaAtencionesDia :datos="datos.atencionesPorDia" />
-      </div>
-
-      <EsqueletoPanel v-if="cargando && !datos" forma="lista" />
-      <div v-else-if="datos" class="panel p-relleno">
-        <h2 class="font-titulo text-titulo-seccion font-medium text-tinta">
-          Diagnósticos del mes
-        </h2>
-        <p class="text-sm text-apagado">{{ subtituloDiagnosticos }}</p>
-
-        <p v-if="datos.diagnosticos.lista.length === 0" class="mt-5 text-apagado">
-          Sin diagnósticos codificados este mes.
-        </p>
-
-        <ul v-else class="mt-5 space-y-4">
-          <li v-for="d in datos.diagnosticos.lista" :key="d.codigo">
-            <div class="flex items-baseline justify-between gap-3">
-              <span class="min-w-0 truncate text-tinta-2">{{ d.nombre ?? d.codigo }}</span>
-              <span class="flex shrink-0 items-baseline gap-2">
-                <span v-if="d.repunte" class="text-sm font-bold text-empeora">
-                  subió {{ d.subida }} %
-                </span>
-                <strong class="tabular-nums text-tinta">{{ d.casos }}</strong>
-              </span>
-            </div>
-            <BarraProporcional
-              class="mt-1.5"
-              :proporcion="d.proporcion"
-              :color="d.repunte ? 'empeora' : 'marino'"
-            />
-          </li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- FILA 4. Abastecimiento y comunidades -->
-    <div class="grid gap-tarjeta panel:grid-cols-2">
-      <EsqueletoPanel v-if="cargando && !datos" forma="lista" />
-      <div v-else-if="datos" class="panel p-relleno">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="font-titulo text-titulo-seccion font-medium text-tinta">Abastecimiento</h2>
-            <p class="text-sm text-apagado">Días que alcanza cada insumo al consumo actual</p>
-          </div>
-          <p class="flex items-center gap-1.5 text-sm text-apagado">
-            <span class="h-3.5 w-px bg-tinta-2" />
-            Mínimo de {{ datos.abastecimiento.umbral }} días
-          </p>
-        </div>
-
-        <p v-if="datos.abastecimiento.lista.length === 0" class="mt-5 text-apagado">
-          No hay insumos activos registrados.
-        </p>
-
-        <ul v-else class="mt-5 space-y-4">
-          <li
-            v-for="i in datos.abastecimiento.lista"
-            :key="i.insumoId"
-            class="flex flex-wrap items-center gap-x-4 gap-y-2"
-          >
-            <RouterLink :to="`/inventario/${i.insumoId}`" class="min-w-0 flex-1">
-              <span class="block truncate text-tinta-2 hover:text-tinta hover:underline">
-                {{ i.nombre }}
-              </span>
-              <span class="block text-sm text-apagado">
-                {{ i.sinExistencia ? 'Sin existencia' : `${i.saldo} ${i.unidad}` }}
-              </span>
-            </RouterLink>
-
-            <BarraProporcional
-              class="w-full min-w-[8rem] shrink-0 sm:w-40"
-              :proporcion="i.proporcion"
-              :color="i.color"
-              :umbral="marcaUmbral"
-            />
-
-            <!-- Sin historial de consumo no se afirma un número de días -->
-            <span
-              class="w-28 shrink-0 text-right font-bold tabular-nums"
-              :class="CLASE_COLOR[i.color] ?? 'text-apagado'"
-            >
-              {{ i.sinConsumo ? 'Sin datos de consumo' : `${i.dias} días` }}
+      <!-- Codificación -->
+      <section id="codificar" class="b-panel">
+        <header class="b-panel-cabeza">
+          <h2 class="b-panel-titulo">Diagnósticos sin CIE-10</h2>
+          <span v-if="panel?.fichasIncompletas" class="text-sm font-semibold text-apagado">{{ panel.fichasIncompletas.toLocaleString('es-GT') }} fichas incompletas</span>
+        </header>
+        <ul class="codificar">
+          <li v-for="a in panel?.pendientesDeCodificar ?? []" :key="a.id">
+            <span class="min-w-0 flex-1">
+              <b class="block truncate">{{ a.diagnosticoTxt }}</b>
+              <RouterLink :to="`/pacientes/${a.paciente.id}`" class="block truncate text-sm text-apagado hover:underline">{{ a.paciente.nombres }} {{ a.paciente.apellidos }} · {{ a.paciente.expedientePapel || a.paciente.expediente }}</RouterLink>
             </span>
+            <form class="flex gap-1.5" @submit.prevent="codificar(a.id)">
+              <div class="w-[92px]"><input v-model="codigos[a.id]" :aria-label="`Código CIE-10 de ${a.diagnosticoTxt}`" placeholder="R51" maxlength="10" class="b-campo !h-[38px] font-mono uppercase" /></div>
+              <button type="submit" class="b-btn secundario chico" :disabled="!codigos[a.id] || codificando === a.id">Guardar</button>
+            </form>
           </li>
+          <li v-if="panel && !panel.pendientesDeCodificar?.length" class="b-vacio !py-6">Todo codificado.</li>
         </ul>
-      </div>
-
-      <EsqueletoPanel v-if="cargando && !datos" forma="lista" />
-      <div v-else-if="datos" class="panel p-relleno">
-        <h2 class="font-titulo text-titulo-seccion font-medium text-tinta">
-          Comunidades con rezago
-        </h2>
-        <p class="text-sm text-apagado">Días desde la última atención registrada</p>
-
-        <p v-if="datos.comunidades.lista.length === 0" class="mt-5 text-apagado">
-          Ninguna comunidad con pacientes registrados.
-        </p>
-
-        <ul v-else class="mt-5 space-y-4">
-          <li
-            v-for="c in datos.comunidades.lista"
-            :key="c.lugarId"
-            class="flex flex-wrap items-center gap-x-4 gap-y-2"
-          >
-            <div class="min-w-0 flex-1">
-              <span class="block truncate font-bold text-tinta">{{ c.nombre }}</span>
-              <span class="block text-sm text-apagado">
-                {{ c.pacientes }} {{ c.pacientes === 1 ? 'paciente' : 'pacientes' }}
-              </span>
-            </div>
-
-            <BarraProporcional
-              class="w-full min-w-[8rem] shrink-0 sm:w-40"
-              :proporcion="c.proporcion"
-              :color="c.color"
-            />
-
-            <span
-              class="w-28 shrink-0 text-right font-bold tabular-nums"
-              :class="CLASE_COLOR[c.color] ?? 'text-apagado'"
-            >
-              {{ c.dias === null ? 'Nunca atendida' : `${c.dias} días` }}
-            </span>
-          </li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- Consultas sin código CIE-10 -->
-    <div v-if="datos && datos.pendientesDeCodificar.length > 0" class="panel">
-      <div class="border-b border-linea px-relleno py-4">
-        <h2 class="font-titulo text-titulo-seccion font-medium text-tinta">
-          Pendientes de codificar ({{ datos.pendientesDeCodificar.length }})
-        </h2>
-        <p class="text-sm text-apagado">
-          El consolidado SIGSA no las incluye hasta que se les asigne un código.
-        </p>
-      </div>
-
-      <ul class="lista">
-        <li
-          v-for="a in datos.pendientesDeCodificar"
-          :key="a.id"
-          class="flex flex-wrap items-end justify-between gap-4 px-relleno py-4"
-        >
-          <div class="min-w-0">
-            <RouterLink
-              :to="`/pacientes/${a.paciente.id}`"
-              class="font-bold text-tinta hover:underline"
-            >
-              {{ a.paciente.apellidos }}, {{ a.paciente.nombres }}
-            </RouterLink>
-            <p class="text-tinta-2">{{ a.diagnosticoTxt }}</p>
-            <p class="text-sm text-apagado">
-              Exp. {{ a.paciente.expediente }} &middot; cerrada el {{ fecha(a.cerradaEn) }}
-            </p>
-          </div>
-
-          <form class="flex shrink-0 items-end gap-2" @submit.prevent="codificar(a.id)">
-            <div>
-              <label :for="`cie-${a.id}`" class="etiqueta-campo">Código CIE-10</label>
-              <input
-                :id="`cie-${a.id}`"
-                v-model="codigos[a.id]"
-                placeholder="J06.9"
-                class="campo w-36 font-mono uppercase"
-              />
-            </div>
-            <button
-              type="submit"
-              class="boton-secundario"
-              :disabled="codificando === a.id || !(codigos[a.id] ?? '').trim()"
-            >
-              {{ codificando === a.id ? 'Guardando...' : 'Asignar' }}
-            </button>
-          </form>
-        </li>
-      </ul>
-    </div>
-
-    <!-- Todas las alertas abiertas, incluidas las clínicas -->
-    <div v-if="datos" id="alertas" class="scroll-mt-24">
-      <PanelAlertas :alertas="datos.alertas" />
+      </section>
     </div>
   </section>
 </template>
+
+<style scoped>
+.hoy { display: flex; flex-wrap: wrap; border: 2px solid #E2E8F0; border-radius: 14px; overflow: hidden; background: #fff; }
+.hoy-titulo { display: grid; place-items: center; padding: 0 20px; background: #172A5A; color: #fff; font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.hoy .b-cifra.rojo { color: #B23A3A; }
+.enlace-cifra:hover { background: #F8FAFC; }
+
+.rejilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 1000px) { .rejilla { grid-template-columns: 1fr; } }
+
+.progreso { display: flex; gap: 4px; width: 220px; }
+.progreso span { flex: 1; height: 6px; border-radius: 3px; background: #E2E8F0; }
+.progreso span.listo { background: #2FA772; }
+.paso { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid #EEF2F6; }
+li:first-child > .paso { border-top: none; }
+.paso:hover { background: #F8FAFC; }
+.paso b { display: block; font-size: 15px; color: #14244A; }
+.paso small { font-size: 13px; color: #1E8E5E; font-weight: 600; }
+.paso small.falta { color: #A16207; }
+.marca { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #FDF3DC; color: #A16207; flex-shrink: 0; }
+.marca.listo { background: #E3F4EA; color: #1E8E5E; }
+
+.mini-cifras { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 2px solid #EEF2F6; }
+.mini { display: flex; align-items: baseline; gap: 8px; padding: 10px 18px; border-right: 2px solid #EEF2F6; }
+.mini:last-child { border-right: none; }
+.mini:hover { background: #F8FAFC; }
+.mini b { font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.mini span { font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: .04em; }
+.rojo { color: #B23A3A; }
+.ambar { color: #A16207; }
+.faltantes { max-height: 200px; overflow-y: auto; }
+.faltante { display: flex; align-items: center; gap: 12px; padding: 7px 18px; border-top: 1px solid #F1F5F9; font-size: 14px; color: #1E293B; }
+li:first-child > .faltante { border-top: none; }
+.faltante:hover { background: #F8FAFC; }
+.dias { flex-shrink: 0; padding: 1px 8px; border-radius: 6px; background: #FDF3DC; color: #8A5A06; font-size: 12px; font-weight: 700; }
+.dias.cero { background: #FBE3E3; color: #8C1D1D; }
+
+.grafica { display: flex; align-items: flex-end; gap: 10px; height: 170px; padding: 14px 18px 0; }
+.columna { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.valor { height: 18px; font-size: 13px; font-weight: 700; color: #14244A; font-variant-numeric: tabular-nums; }
+.barra { flex: 1; width: 100%; max-width: 38px; display: flex; flex-direction: column; justify-content: flex-end; border-radius: 6px 6px 0 0; background: #F4F6FA; overflow: hidden; }
+.barra .norm, .leyenda .norm { background: #3D7BE0; }
+.barra .urg, .leyenda .urg { background: #D9534F; }
+.dia { padding: 6px 0; font-size: 12px; font-weight: 700; color: #64748B; }
+.hoy-col .dia { color: #172A5A; }
+.hoy-col .barra { box-shadow: inset 0 0 0 2px #C9D5EC; }
+.leyenda { display: flex; gap: 16px; padding: 4px 18px 14px; font-size: 12px; font-weight: 600; color: #64748B; }
+.leyenda i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 3px; }
+
+.codificar { max-height: 250px; overflow-y: auto; }
+.codificar li { display: flex; align-items: center; gap: 12px; padding: 9px 18px; border-top: 1px solid #F1F5F9; }
+.codificar li:first-child { border-top: none; }
+</style>

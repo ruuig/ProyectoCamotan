@@ -7,7 +7,7 @@ import Pictograma from '../../components/bodega/diseno/Pictograma.vue';
 import EstanteCategoria from '../../components/bodega/diseno/EstanteCategoria.vue';
 import ReglaCobertura from '../../components/bodega/diseno/ReglaCobertura.vue';
 import SelloVence from '../../components/bodega/diseno/SelloVence.vue';
-import { CATEGORIA, estiloCategoria, situacion, miles, decimal } from '../../components/bodega/diseno/PiezasBodega';
+import { CATEGORIA, estiloCategoria, situacion, miles, decimal, general } from '../../components/bodega/diseno/PiezasBodega';
 import { periodoActual, nombrePeriodo } from '../../dominio/bodega';
 
 /**
@@ -122,7 +122,7 @@ const filasServicio = computed(() => {
           <button v-for="v in [['insumo', 'Por insumo'], ['servicio', 'Por servicio']]" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="vista = v[0]">{{ v[1] }}</button>
         </div>
         <RouterLink to="/inventario/nuevo" class="b-btn secundario"><Icono nombre="agregar" :tamano="20" /> Nuevo insumo</RouterLink>
-        <RouterLink to="/inventario/traslados" class="b-btn primario"><Icono nombre="trasladar" :tamano="20" :grosor="2.2" /> Trasladar</RouterLink>
+        <RouterLink to="/inventario/requisiciones" class="b-btn primario"><Icono nombre="trasladar" :tamano="20" :grosor="2.2" /> Requisición</RouterLink>
       </div>
     </header>
 
@@ -221,7 +221,7 @@ const filasServicio = computed(() => {
             <div v-if="enCuarentena"><dt>· en cuarentena</dt><dd>{{ miles(enCuarentena) }}</dd></div>
             <div><dt>Consumo mensual</dt><dd>{{ miles(elegido.bres.J) }}</dd></div>
             <div><dt>Alcanza para</dt><dd>{{ elegido.bres.K === null ? '—' : `${decimal(elegido.bres.K)} meses` }}</dd></div>
-            <div><dt>Máximo ({{ maximo }} meses)</dt><dd>{{ miles(elegido.bres.L) }}</dd></div>
+            <div><dt>Máximo ({{ maximo }} meses)</dt><dd>{{ general(elegido.bres.L) }}</dd></div>
             <div class="total"><dt>Pedir</dt><dd>{{ elegido.bres.M > 0 ? miles(elegido.bres.M) : '—' }}</dd></div>
           </dl>
 

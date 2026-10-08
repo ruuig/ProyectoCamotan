@@ -4,7 +4,7 @@ const {
   descontarDeLote,
   ETIQUETA_CAUSA,
 } = require('../services/movimientos.service');
-const { planFraccionamiento, lotesDisponibles } = require('../services/inventario.service');
+const { planFraccionamiento, lotesDisponibles, enUbicacion } = require('../services/inventario.service');
 const trazabilidad = require('../services/trazabilidad.service');
 const { periodoDe } = require('../services/logistica.service');
 const { limitesDePeriodo } = require('../services/abastecimiento.service');
@@ -94,12 +94,13 @@ async function usoInterno(req, res, next) {
     return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Insumo no encontrado' });
   }
 
-  // Con lote indicado se respeta la decisión de quien está en farmacia; sin
-  // él, se reparte por PEPE como en cualquier otra salida.
+  // Con lote indicado se respeta la decisión de quien lo registra; sin él, se
+  // reparte por PEPE como en cualquier otra salida. Sale de la bodega.
+  const lotes = enUbicacion(insumo.lotes, 'bodega');
   let reparto;
 
   if (loteId) {
-    const elegido = lotesDisponibles(insumo.lotes, ahora).find((l) => l.id === loteId);
+    const elegido = lotesDisponibles(lotes, ahora).find((l) => l.id === loteId);
 
     if (!elegido) {
       return next({
@@ -113,19 +114,19 @@ async function usoInterno(req, res, next) {
       return next({
         status: 409,
         codigo: 'existencia_insuficiente',
-        mensaje: `El lote ${elegido.numeroLote} solo tiene ${elegido.cantidadActual}`,
+        mensaje: `El lote ${elegido.numeroLote} solo tiene ${elegido.cantidadActual} en bodega`,
       });
     }
 
     reparto = [{ loteId, cantidad }];
   } else {
-    reparto = planFraccionamiento(insumo.lotes, cantidad, ahora);
+    reparto = planFraccionamiento(lotes, cantidad, ahora);
 
     if (!reparto) {
       return next({
         status: 409,
         codigo: 'existencia_insuficiente',
-        mensaje: 'No hay existencia disponible suficiente',
+        mensaje: 'No hay existencia disponible suficiente en bodega',
       });
     }
   }
@@ -146,7 +147,7 @@ async function usoInterno(req, res, next) {
         loteId: lote.id,
         numeroLote: lote.numeroLote,
         cantidad: parte.cantidad,
-        saldoResultante: lote.cantidadActual,
+        saldoResultante: lote.cantidadActual - lote.cantidadFarmacia,
       });
     }
     return hechos;

@@ -45,31 +45,51 @@ function parametrosBres(config) {
 
 // --- Centro -----------------------------------------------------------------------
 
-/** Movimientos del centro en un rango, por insumo y tipo. */
+const MOVIMIENTOS_VACIOS = {
+  entradas: 0, entregado: 0, consumo: 0, trasladado: 0, aFarmacia: 0, devuelto: 0,
+  reajustes: 0, reajustesBodega: 0, reajustesFarmacia: 0, bajas: 0,
+};
+
+/**
+ * Movimientos del centro en un rango, por insumo y tipo.
+ *
+ * entradas: lo que recibio la bodega. aFarmacia: lo que paso de la bodega a
+ * la farmacia (neto de lo que farmacia devolvio). entregado: lo entregado a
+ * pacientes, menos lo de entregas anuladas (devuelto). trasladado: lo que
+ * salio a los servicios. Los reajustes van por ubicacion.
+ */
 async function movimientosCentro(establecimientoId, desde, hasta) {
   const filas = await prisma.movimientoInsumo.findMany({
     where: { lote: { insumo: { establecimientoId } }, registradoEn: { gte: desde, lt: hasta } },
-    select: { tipo: true, cantidad: true, lote: { select: { insumoId: true } } },
+    select: { tipo: true, cantidad: true, ubicacion: true, lote: { select: { insumoId: true } } },
   });
   const salida = new Map();
   for (const m of filas) {
     const id = m.lote.insumoId;
-    const fila = salida.get(id) ?? { entradas: 0, entregado: 0, consumo: 0, trasladado: 0, reajustes: 0, bajas: 0 };
+    const fila = salida.get(id) ?? { ...MOVIMIENTOS_VACIOS };
     if (m.tipo === 'ingreso') fila.entradas += m.cantidad;
     else if (m.tipo === 'entrega') fila.entregado -= m.cantidad;
+    else if (m.tipo === 'devolucion') fila.entregado -= m.cantidad;
     else if (m.tipo === 'consumo_interno') fila.consumo -= m.cantidad;
     else if (m.tipo === 'traslado') fila.trasladado -= m.cantidad;
-    else if (m.tipo === 'reajuste') fila.reajustes += m.cantidad;
-    else if (m.tipo === 'baja') fila.bajas -= m.cantidad;
+    else if (m.tipo === 'paso_farmacia' && m.ubicacion === 'farmacia') fila.aFarmacia += m.cantidad;
+    else if (m.tipo === 'reajuste') {
+      fila.reajustes += m.cantidad;
+      if (m.ubicacion === 'farmacia') fila.reajustesFarmacia += m.cantidad;
+      else fila.reajustesBodega += m.cantidad;
+    } else if (m.tipo === 'baja') fila.bajas -= m.cantidad;
     salida.set(id, fila);
   }
   return salida;
 }
 
-/** Existencia fisica de la bodega por insumo antes de una fecha. */
-async function saldoCentro(establecimientoId, hasta) {
+/**
+ * Existencia fisica por insumo antes de una fecha: de todo el centro, o de
+ * una ubicacion (bodega o farmacia).
+ */
+async function saldoCentro(establecimientoId, hasta, ubicacion = null) {
   const filas = await prisma.movimientoInsumo.findMany({
-    where: { lote: { insumo: { establecimientoId } }, registradoEn: { lt: hasta } },
+    where: { lote: { insumo: { establecimientoId } }, registradoEn: { lt: hasta }, ...(ubicacion ? { ubicacion } : {}) },
     select: { cantidad: true, lote: { select: { insumoId: true } } },
   });
   const salida = new Map();
@@ -352,21 +372,49 @@ async function demandaMunicipal(establecimientoId, periodos) {
   return porPeriodo;
 }
 
-/**
- * Balance consolidado del mes: insumos en filas, la bodega, post-consulta y
- * cada servicio en columnas, y al final las columnas del BRES (B a M).
- */
-/** Columnas B a M de un renglon de BRES guardado. */
+/** Numero de un campo decimal de Prisma; null se queda null. */
+const numero = (v) => (v === null || v === undefined ? null : Number(v));
+
+/** Totales (B a M) de un renglon de BRES guardado: lo que se envio, tal cual. */
 function bresGuardado(g) {
-  const J = Number(g.pmdr) || 0;
+  const J = numero(g.pmdr) ?? 0;
   return {
-    B: g.saldoInicial, C: g.entradas, D: g.entregado, E: g.noEntregado, F: g.demandaReal, G: g.reajustes,
-    H: g.saldoFinal, I: g.existenciaBodega, J, K: g.med === null ? null : Number(g.med),
-    L: g.cantidadMaxima, M: g.cantidadSolicitar, minimo: g.cantidadMinima,
-    bajoMinimo: J > 0 && g.saldoFinal < g.cantidadMinima, sinConsumo: J === 0, mesesConDatos: g.mesesHistoria,
+    B: g.saldoInicial,
+    C: g.entradas,
+    D: g.entregado,
+    E: g.noEntregado,
+    F: g.demandaReal,
+    G: g.reajustes,
+    H: g.saldoFinal,
+    I: g.existenciaBodega,
+    J,
+    K: numero(g.med),
+    L: numero(g.cantidadMaxima),
+    M: numero(g.cantidadSolicitar),
+    minimo: g.cantidadMinima,
+    saldoPorDemanda: g.saldoPorDemanda ?? g.saldoInicial + g.entradas - g.entregado,
+    mesAnterior: g.existenciaMesAnterior,
+    bajoMinimo: J > 0 && g.cantidadMinima !== null && g.saldoFinal < g.cantidadMinima,
+    sinConsumo: J === 0,
+    mesesConDatos: g.mesesHistoria,
   };
 }
 
+const BRES_VACIO = {
+  saldoInicial: 0, entradas: 0, entregado: 0, noEntregado: 0, demandaReal: 0, reajustes: 0, saldoFinal: 0,
+  existenciaBodega: 0, pmdr: 0, med: null, cantidadMaxima: 0, cantidadSolicitar: 0, cantidadMinima: 0,
+  saldoPorDemanda: 0, existenciaMesAnterior: 0, mesesHistoria: 0,
+};
+
+/**
+ * Balance consolidado del mes: insumos en filas, la bodega, post-consulta y
+ * cada servicio en columnas, y al final los totales (B a M), como el Excel
+ * del centro.
+ *
+ * Un mes con BRES cerrado (los importados del Excel y los que el sistema ya
+ * envio) muestra lo que se guardo, cifra por cifra: no se recalcula nada. Un
+ * mes abierto se calcula con las formulas del Excel (filaBres).
+ */
 async function balance(establecimientoId, periodo, { categoria = null, insumoId = null } = {}) {
   const { desde, hasta } = limitesDePeriodo(periodo);
   const config = await configuracion(establecimientoId);
@@ -376,15 +424,13 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
   // el promedio: se usan los meses completos anteriores.
   const finVentana = mesAbierto(periodo, config.diaCorteBres) ? periodoAnterior(periodo) : periodo;
 
-  const [insumos, lista, movimientos, saldoInicio, saldoFin, dna, arranque, reportes, demandas] = await Promise.all([
-    prisma.insumo.findMany({
-      where: { establecimientoId, activo: true, ...(categoria ? { categoria } : {}), ...(insumoId ? { id: insumoId } : {}) },
-      orderBy: { nombreGenerico: 'asc' },
-    }),
+  const [lista, movimientos, saldoInicio, saldoFin, farmaciaInicio, farmaciaFin, dna, arranque, reportes, demandas, cerrado, anterior] = await Promise.all([
     ubicaciones(establecimientoId),
     movimientosCentro(establecimientoId, desde, hasta),
-    saldoCentro(establecimientoId, desde),
-    saldoCentro(establecimientoId, hasta),
+    saldoCentro(establecimientoId, desde, 'bodega'),
+    saldoCentro(establecimientoId, hasta, 'bodega'),
+    saldoCentro(establecimientoId, desde, 'farmacia'),
+    saldoCentro(establecimientoId, hasta, 'farmacia'),
     noEntregadoCentro(establecimientoId, desde, hasta),
     arranqueServicios(establecimientoId, periodo),
     prisma.reporteServicio.findMany({
@@ -392,16 +438,37 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
       include: { renglones: true },
     }),
     demandaMunicipal(establecimientoId, ultimosPeriodos(finVentana, config.mesesPromedio)),
-  ]);
-
-  // Meses anteriores al sistema: el BRES cerrado tiene las cifras que se
-  // enviaron, la bodega sale del inventario de cierre del centro y
-  // post-consulta de su reporte importado.
-  const [cerrado, historico] = await Promise.all([
     prisma.bres.findUnique({ where: { establecimientoId_periodo: { establecimientoId, periodo } }, include: { renglones: true } }),
-    prisma.inventarioCierreHistorico.findMany({ where: { establecimientoId, periodo } }),
+    prisma.bres.findUnique({
+      where: { establecimientoId_periodo: { establecimientoId, periodo: periodoAnterior(periodo) } },
+      include: { renglones: { select: { insumoId: true, saldoFinal: true } } },
+    }),
   ]);
   const congelado = cerrado?.estado === 'cerrado' ? new Map(cerrado.renglones.map((r) => [r.insumoId, r])) : null;
+  // B del mes abierto: el saldo siguiente (H) del mes anterior, si se cerro.
+  const saldoAnteriorBres = anterior?.estado === 'cerrado'
+    ? new Map(anterior.renglones.map((r) => [r.insumoId, r.saldoFinal]))
+    : null;
+
+  // Los insumos activos y los que tienen cifras en el mes, aunque hoy ya no
+  // se usen: un mes viejo se ve con todos sus renglones.
+  const conCifras = new Set([
+    ...(congelado ? congelado.keys() : []),
+    ...reportes.flatMap((r) => r.renglones.map((x) => x.insumoId)),
+  ]);
+  const insumos = await prisma.insumo.findMany({
+    where: {
+      establecimientoId,
+      OR: [{ activo: true }, { id: { in: [...conCifras] } }],
+      ...(categoria ? { categoria } : {}),
+      ...(insumoId ? { id: insumoId } : {}),
+    },
+    orderBy: { nombreGenerico: 'asc' },
+  });
+
+  // Meses anteriores al sistema sin BRES: la bodega sale del inventario de
+  // cierre que llevaba el centro.
+  const historico = congelado ? [] : await prisma.inventarioCierreHistorico.findMany({ where: { establecimientoId, periodo } });
   const cierreExcel = new Map(historico.map((h) => [h.insumoId, h]));
   const centro = lista.find((u) => u.tipo === 'centro_salud');
   const reportePost = centro ? reportes.find((r) => r.ubicacionId === centro.id) : null;
@@ -414,56 +481,122 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
     distinct: ['ubicacionId'],
   })).map((t) => t.ubicacionId));
   const reportado = new Map();
-  for (const r of reportes) for (const ren of r.renglones) reportado.set(clave2(r.ubicacionId, ren.insumoId), ren);
+  const importado = new Set();
+  for (const r of reportes) {
+    if (r.importado) importado.add(r.ubicacionId);
+    for (const ren of r.renglones) reportado.set(clave2(r.ubicacionId, ren.insumoId), ren);
+  }
   const conReporte = new Set(reportes.map((r) => r.ubicacionId));
 
+  // Promedio de cada servicio en un mes abierto: la demanda de los ultimos
+  // meses, redondeada, como la anota cada servicio en su balance.
+  const ventana = ultimosPeriodos(finVentana, config.mesesPromedio).map((per) => demandas.get(per)).filter(Boolean);
+  const promedio = (fn) => (ventana.length ? Math.round(ventana.reduce((s, d) => s + fn(d), 0) / ventana.length) : 0);
+
   const filas = insumos.map((i) => {
-    const m = movimientos.get(i.id) ?? { entradas: 0, entregado: 0, consumo: 0, trasladado: 0, reajustes: 0, bajas: 0 };
+    const m = movimientos.get(i.id) ?? MOVIMIENTOS_VACIOS;
+    const g = congelado?.get(i.id);
     const h = cierreExcel.get(i.id);
-    const bodega = h
-      ? { saldoAnterior: h.saldoAnterior, entradas: h.entradas, trasladado: h.entregado, reajustes: 0, saldoSiguiente: h.saldoActual }
-      : {
+    let bodega;
+    if (congelado) {
+      // Mes cerrado: la bodega es la del balance que se envio.
+      bodega = {
+        saldoAnterior: g?.existenciaMesAnterior ?? 0,
+        entradas: g?.entradas ?? 0,
+        trasladado: 0,
+        reajustes: g?.reajustes ?? 0,
+        saldoSiguiente: g?.existenciaBodega ?? 0,
+      };
+    } else if (h) {
+      bodega = { saldoAnterior: h.saldoAnterior, entradas: h.entradas, trasladado: h.entregado, reajustes: 0, saldoSiguiente: h.saldoActual };
+    } else {
+      // La bodega: lo que recibe, lo que sale a los servicios y a la farmacia.
+      bodega = {
         saldoAnterior: saldoInicio.get(i.id) ?? 0,
         entradas: m.entradas,
-        trasladado: m.trasladado,
-        reajustes: m.reajustes - m.bajas,
+        trasladado: m.trasladado + m.aFarmacia + m.consumo,
+        aFarmacia: m.aFarmacia,
+        reajustes: m.reajustesBodega - m.bajas,
         saldoSiguiente: saldoFin.get(i.id) ?? 0,
       };
-    const rp = postImportado?.get(i.id);
-    const postConsulta = rp
-      ? { entregado: rp.entregado, noEntregado: rp.noEntregado, saldoSiguiente: rp.saldoSiguiente }
-      : { entregado: m.entregado + m.consumo, noEntregado: dna.get(i.id) ?? 0 };
+    }
+
+    // Post-consulta: si el mes viene del Excel, sus seis cifras tal cual.
+    let postConsulta;
+    if (postImportado) {
+      const rp = postImportado.get(i.id);
+      postConsulta = {
+        saldoAnterior: rp?.saldoAnterior ?? 0,
+        entradas: rp?.entradas ?? 0,
+        entregado: rp?.entregado ?? 0,
+        noEntregado: rp?.noEntregado ?? 0,
+        saldoSiguiente: rp?.saldoSiguiente ?? 0,
+        promedio: numero(rp?.promedioAnotado) ?? 0,
+      };
+    } else {
+      // La farmacia del centro: recibe de la bodega y entrega a los pacientes.
+      postConsulta = {
+        saldoAnterior: farmaciaInicio.get(i.id) ?? 0,
+        entradas: m.aFarmacia,
+        entregado: m.entregado,
+        noEntregado: dna.get(i.id) ?? 0,
+        saldoSiguiente: farmaciaFin.get(i.id) ?? 0,
+        // El conteo del dia: faltantes y sobrantes encontrados al cerrar.
+        ajuste: m.reajustesFarmacia,
+        promedio: promedio((d) => (d.centro.get(i.id) ?? 0) + (centro ? d.porServicio.get(clave2(centro.id, i.id)) ?? 0 : 0)),
+      };
+    }
 
     const columnas = servicios.map((s) => {
       const k = clave2(s.id, i.id);
       const ren = reportado.get(k);
+      if (importado.has(s.id)) {
+        // Reporte del Excel: cada cifra como se anoto, aunque no cuadre.
+        const saldoSiguiente = ren?.saldoSiguiente ?? 0;
+        return {
+          ubicacionId: s.id,
+          reportado: true,
+          ...filaReporte({ saldoAnterior: ren?.saldoAnterior ?? 0, entradas: ren?.entradas ?? 0, entregado: ren?.entregado ?? 0, noEntregado: ren?.noEntregado ?? 0 }),
+          saldoSiguiente,
+          negativo: saldoSiguiente < 0,
+          promedio: numero(ren?.promedioAnotado) ?? 0,
+        };
+      }
       const f = ren
         ? filaReporte({ saldoAnterior: ren.saldoAnterior, entradas: ren.entradas, entregado: ren.entregado, noEntregado: ren.noEntregado, saldoReportado: ren.saldoReportado, entradasReportadas: ren.entradasReportadas })
         : filaReporte({ saldoAnterior: arranque.saldoAnterior.get(k) ?? 0, entradas: arranque.entradas.get(k) ?? 0 });
-      return { ubicacionId: s.id, reportado: conReporte.has(s.id), ...f };
+      return {
+        ubicacionId: s.id,
+        reportado: conReporte.has(s.id),
+        ...f,
+        promedio: promedio((d) => d.porServicio.get(k) ?? 0),
+      };
     });
 
     const svc = (campo) => columnas.reduce((s, c) => s + c[campo], 0);
-    const ventana = ultimosPeriodos(finVentana, config.mesesPromedio).map((per) => demandas.get(per)).filter(Boolean);
-    const historial = ultimosPeriodos(finVentana, config.mesesPromedio).map((per) => {
-      const d = demandas.get(per);
-      return d === null ? null : (d.total.get(i.id) ?? 0);
-    });
-    // Promedio de cada servicio, como la columna "Promedio" del balance.
-    const promedio = (fn) => (ventana.length ? Math.round(ventana.reduce((s, d) => s + fn(d), 0) / ventana.length) : 0);
-    postConsulta.promedio = promedio((d) => (d.centro.get(i.id) ?? 0) + (centro ? d.porServicio.get(clave2(centro.id, i.id)) ?? 0 : 0));
-    for (const c of columnas) c.promedio = promedio((d) => d.porServicio.get(clave2(c.ubicacionId, i.id)) ?? 0);
-    const g = congelado?.get(i.id);
-    const bres = g ? bresGuardado(g) : filaBres({
-      B: bodega.saldoAnterior + svc('saldoAnterior'),
-      C: bodega.entradas,
-      D: postConsulta.entregado + svc('entregado'),
-      E: postConsulta.noEntregado + svc('noEntregado'),
-      G: bodega.reajustes,
-      I: bodega.saldoSiguiente,
-      demandas: historial,
-      config: p,
-    });
+    let bres;
+    if (g) {
+      bres = bresGuardado(g);
+    } else if (congelado) {
+      // El insumo no estaba en el balance de ese mes: sin cifras.
+      bres = bresGuardado(BRES_VACIO);
+    } else {
+      const saldoAnterior = bodega.saldoAnterior + postConsulta.saldoAnterior + svc('saldoAnterior');
+      bres = filaBres({
+        B: saldoAnteriorBres?.has(i.id) ? saldoAnteriorBres.get(i.id) : saldoAnterior,
+        C: bodega.entradas,
+        // El consumo interno sale de la bodega y el BRES lo cuenta como entregado.
+        D: postConsulta.entregado + svc('entregado') + m.consumo,
+        E: postConsulta.noEntregado + svc('noEntregado'),
+        G: bodega.reajustes,
+        I: bodega.saldoSiguiente,
+        saldos: [postConsulta.saldoSiguiente, ...columnas.map((c) => c.saldoSiguiente)],
+        promedios: [postConsulta.promedio, ...columnas.map((c) => c.promedio)],
+        config: p,
+      });
+      bres.mesAnterior = bodega.saldoAnterior;
+      bres.mesesConDatos = ventana.length;
+    }
 
     return {
       insumoId: i.id,
@@ -473,6 +606,7 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
       formaFarmaceutica: i.formaFarmaceutica,
       unidadEntrega: i.unidadEntrega,
       categoria: i.categoria,
+      activo: i.activo,
       bodega,
       postConsulta,
       servicios: columnas,
@@ -482,10 +616,16 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
 
   return {
     periodo,
+    cerrado: Boolean(congelado),
     servicios: servicios.map((s) => ({ id: s.id, nombre: s.nombre, tipo: s.tipo, reportado: conReporte.has(s.id) })),
     filas,
     configuracion: { ...p, semaforoRojoMeses: config.semaforoRojoMeses, semaforoAmarilloMeses: config.semaforoAmarilloMeses },
-    firmas: { encargadoBodega: config.encargadoBodega, cargoEncargadoBodega: config.cargoEncargadoBodega, coordinadorMunicipal: config.coordinadorMunicipal, cargoCoordinador: config.cargoCoordinador },
+    firmas: {
+      encargadoBodega: config.encargadoBodega,
+      cargoEncargadoBodega: config.cargoEncargadoBodega,
+      coordinadorMunicipal: config.coordinadorMunicipal,
+      cargoCoordinador: config.cargoCoordinador,
+    },
     categorias: CATEGORIAS,
     // Solo se espera reporte de quien ya recibe traslados por el sistema.
     pendientesDeReporte: servicios.filter((s) => !conReporte.has(s.id) && conTraslados.has(s.id)).length,

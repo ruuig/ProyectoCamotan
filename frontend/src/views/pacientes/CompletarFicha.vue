@@ -19,7 +19,14 @@ import { registradoPor } from '../../dominio/ficha';
  *
  * Cada sección se guarda sola: se puede llenar una y salir.
  */
+const props = defineProps({
+  // Dentro del registro del paciente: la ficha va debajo, toda abierta.
+  pacienteId: { type: [Number, String], default: null },
+  embebido: { type: Boolean, default: false },
+});
+
 const route = useRoute();
+const idPaciente = computed(() => props.pacienteId ?? route.params.id);
 
 const datos = ref(null);
 const cat = ref({});
@@ -36,11 +43,13 @@ const perfil = computed(() => ({
 async function cargar() {
   try {
     const [ficha, listas] = await Promise.all([
-      servicio.ficha(route.params.id),
+      servicio.ficha(idPaciente.value),
       Object.keys(cat.value).length ? Promise.resolve({ catalogos: cat.value }) : catalogos.listar(),
     ]);
+    const primeraVez = !datos.value;
     datos.value = ficha;
     cat.value = listas.catalogos;
+    if (primeraVez && props.embebido) abrirTodo(true);
   } catch (fallo) {
     error.value = fallo.message;
   }
@@ -89,6 +98,11 @@ const avanceSigsa = computed(() => {
 
 const registradas = computed(() => datos.value?.secciones.filter((s) => s.estado === 'registrado').length ?? 0);
 
+const todasAbiertas = computed(() => indice.value.length > 0 && indice.value.every((s) => abiertas[s.id]));
+function abrirTodo(abrir = !todasAbiertas.value) {
+  for (const s of indice.value) abiertas[s.id] = abrir;
+}
+
 async function ir(id) {
   abiertas[id] = true;
   await nextTick();
@@ -129,7 +143,7 @@ onMounted(cargar);
 
 <template>
   <section v-if="datos" class="mx-auto max-w-[1180px]">
-    <RouterLink :to="`/pacientes/${paciente.id}`" class="b-volver"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> {{ paciente.apellidos }}, {{ paciente.nombres }}</RouterLink>
+    <RouterLink v-if="!embebido" :to="`/pacientes/${paciente.id}`" class="b-volver"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> {{ paciente.apellidos }}, {{ paciente.nombres }}</RouterLink>
 
     <header class="b-panel encabezado">
       <span class="codigo" :class="paciente.expedientePapel ? '' : 'sin-papel'">
@@ -157,6 +171,7 @@ onMounted(cargar);
       <!-- Índice -->
       <nav class="b-panel indice" aria-label="Secciones de la ficha">
         <p class="b-subtitulo px-2">Secciones<template v-if="datos.secciones.length"> · {{ registradas }} de {{ datos.secciones.length }}</template></p>
+        <button type="button" class="b-btn secundario chico mx-2 mt-2 w-[calc(100%-16px)]" @click="abrirTodo()">{{ todasAbiertas ? 'Cerrar todo' : 'Abrir todo para llenar' }}</button>
         <ol class="mt-2">
           <li v-for="s in indice" :key="s.id">
             <button type="button" class="entrada" @click="ir(s.id)">

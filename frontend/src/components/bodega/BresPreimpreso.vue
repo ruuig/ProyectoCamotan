@@ -7,7 +7,7 @@ import { computed, onMounted, onBeforeUnmount } from 'vue';
  * El centro no imprime el BRES en hoja blanca: lo imprime encima del
  * formulario que ya trae títulos, líneas y columnas. Por eso aquí no hay
  * tabla ni bordes, solo los valores, cada uno en la posición que tiene en el
- * Excel "BRES ... IMP" del centro (plantillas/BRES SEPTIEMBRE2026IMP.xlsx):
+ * Excel "BRES ... IMP" del centro (documentacion/Plantillas/BRES SEPTIEMBRE2026IMP.xlsx):
  *
  *   papel oficio (8.5 × 13 pulgadas) horizontal, escala 90 %,
  *   margen izquierdo 0.79", superior 0.51",

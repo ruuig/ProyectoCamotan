@@ -53,20 +53,12 @@ function alEscribir() {
 }
 
 /**
- * Abre la atención y lleva directo a la toma de signos vitales.
- * El motivo de consulta se pregunta allí, no aquí: es un paso menos.
+ * Lleva a la toma de signos vitales. La atención se abre al guardarla, no
+ * aquí: tocar el botón por error ya no deja a nadie en la cola.
  */
-async function atender(pacienteId) {
+function atender(pacienteId) {
   abriendo.value = pacienteId;
-  error.value = '';
-  try {
-    const r = await pacientes.crearAtencion({ pacienteId });
-    router.push(`/preconsulta/${r.atencion.id}`);
-  } catch (fallo) {
-    error.value = fallo.message;
-  } finally {
-    abriendo.value = null;
-  }
+  router.push(`/preconsulta/nueva?paciente=${pacienteId}`);
 }
 
 // --- Fila de hoy -----------------------------------------------------------

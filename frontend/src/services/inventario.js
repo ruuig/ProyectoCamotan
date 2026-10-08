@@ -34,11 +34,17 @@ export default {
   // --- Lotes ---------------------------------------------------------------
   trazabilidad: (loteId) => http.get(`/lotes/${loteId}/trazabilidad`),
   cambiarEstadoLote: (loteId, datos) => http.patch(`/lotes/${loteId}/estado`, datos),
-  tarjetaControl: (insumoId) => http.get(`/insumos/${insumoId}/tarjeta-control`),
+  // Sin ubicacion, la tarjeta del centro; con 'bodega' o 'farmacia', la de esa ubicacion.
+  tarjetaControl: (insumoId, ubicacion) => http.get(`/insumos/${insumoId}/tarjeta-control${ubicacion ? `?ubicacion=${ubicacion}` : ''}`),
   insumosDePaciente: (pacienteId) => http.get(`/pacientes/${pacienteId}/insumos`),
 
   // --- Dispensación --------------------------------------------------------
   pendientes: () => http.get('/dispensaciones/pendientes'),
+  // Entrega por paciente: la hoja con lo que se copia al formato en papel y
+  // el registro de toda la entrega de una vez.
+  porAtender: () => http.get('/dispensaciones/por-atender'),
+  hojaDeEntrega: (atencionId) => http.get(`/dispensaciones/atenciones/${atencionId}`),
+  dispensarAtencion: (atencionId, datos, clave) => http.post(`/dispensaciones/atenciones/${atencionId}`, datos, clave ? { 'Idempotency-Key': clave } : undefined),
   dispensar: (datos) => http.post('/dispensaciones', datos),
   porFirmar: () => http.get('/dispensaciones/por-firmar'),
   registrarConstancia: (datos) => http.post('/dispensaciones/constancias', datos),

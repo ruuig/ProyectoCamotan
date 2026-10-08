@@ -29,6 +29,8 @@ export default {
   curva: (id, indicador) => http.get(`/pacientes/${id}/curva?indicador=${indicador}`),
 
   crearAtencion: (datos) => http.post('/atenciones', datos),
+  // Una atención abierta por error sale de la cola con su motivo.
+  cancelarAtencion: (id, motivo) => http.patch(`/atenciones/${id}/cancelar`, { motivo }),
   registrarPreconsulta: (atencionId, datos) =>
     http.post(`/atenciones/${atencionId}/preconsulta`, datos),
 

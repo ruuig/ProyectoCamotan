@@ -1,5 +1,5 @@
 """
-Extrae a JSON los Excel de la bodega del centro (plantillas/).
+Extrae a JSON los Excel de la bodega del centro (documentacion/Plantillas/).
 
     python scripts/extraerBodega.py <carpeta plantillas> <salida.json>
 

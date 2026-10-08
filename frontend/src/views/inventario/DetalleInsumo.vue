@@ -9,7 +9,7 @@ import EstanteCategoria from '../../components/bodega/diseno/EstanteCategoria.vu
 import ReglaCobertura from '../../components/bodega/diseno/ReglaCobertura.vue';
 import SelloVence from '../../components/bodega/diseno/SelloVence.vue';
 import GraficaDemanda from '../../components/bodega/diseno/GraficaDemanda.vue';
-import { estiloCategoria, situacion, miles, decimal } from '../../components/bodega/diseno/PiezasBodega';
+import { estiloCategoria, situacion, miles, decimal, general } from '../../components/bodega/diseno/PiezasBodega';
 import { fecha } from '../../dominio/bodega';
 
 /** Ficha de un insumo: cifras del balance, demanda mes a mes y sus lotes. */
@@ -76,6 +76,21 @@ const enviarUso = () => ejecutar(() => servicio.usoInterno({
   ...(uso.servicio ? { servicio: uso.servicio } : {}),
   ...(uso.loteId ? { loteId: Number(uso.loteId) } : {}),
 }));
+
+// Lo que se usa en el servicio (guantes, reactivos) no aparece en la receta del médico.
+const guardandoReceta = ref(false);
+async function cambiarPrescribible(valor) {
+  guardandoReceta.value = true;
+  error.value = '';
+  try {
+    await bodega.cambiarPrescribible(id.value, valor);
+    datos.value.insumo.prescribible = valor;
+  } catch (fallo) {
+    error.value = fallo.message;
+  } finally {
+    guardandoReceta.value = false;
+  }
+}
 
 const enviarEstado = () => ejecutar(async () => {
   await servicio.cambiarEstadoLote(Number(cambioEstado.loteId), { estado: cambioEstado.estado, motivo: cambioEstado.motivo });
@@ -155,14 +170,14 @@ onMounted(async () => {
           <div v-if="enCuarentena"><dt>En cuarentena</dt><dd>{{ miles(enCuarentena) }}</dd></div>
           <div><dt>Consumo mensual</dt><dd>{{ miles(bres.J) }}</dd></div>
           <div><dt>Mínimo ({{ config.nivelMinimoMeses }} meses)</dt><dd>{{ miles(bres.minimo) }}</dd></div>
-          <div><dt>Máximo ({{ config.nivelMaximoMeses }} meses)</dt><dd>{{ miles(bres.L) }}</dd></div>
+          <div><dt>Máximo ({{ config.nivelMaximoMeses }} meses)</dt><dd>{{ general(bres.L) }}</dd></div>
           <div class="total"><dt>Pedir</dt><dd>{{ bres.M > 0 ? miles(bres.M) : '—' }}</dd></div>
         </dl>
 
         <div class="grid gap-2">
           <button type="button" class="b-btn secundario" :class="abierto === 'uso' ? 'activo' : ''" @click="abrir('uso')"><Icono nombre="dispensacion" :tamano="20" /> Consumo interno</button>
           <button type="button" class="b-btn secundario" :class="abierto === 'reajuste' ? 'activo' : ''" @click="abrir('reajuste')"><Icono nombre="lapiz" :tamano="20" /> Reajuste</button>
-          <RouterLink to="/inventario/traslados" class="b-btn secundario"><Icono nombre="trasladar" :tamano="20" :grosor="2.2" /> Trasladar a un servicio</RouterLink>
+          <RouterLink to="/inventario/requisiciones" class="b-btn secundario"><Icono nombre="trasladar" :tamano="20" :grosor="2.2" /> Requisiciones</RouterLink>
         </div>
       </div>
 
@@ -291,6 +306,31 @@ onMounted(async () => {
             </li>
             <li v-if="!lotesVisibles.length" class="b-vacio">Sin lotes con existencia.</li>
           </ul>
+        </section>
+
+        <section class="b-panel">
+          <header class="b-panel-cabeza">
+            <h2 class="b-panel-titulo">Receta del médico</h2>
+          </header>
+          <div class="b-panel-cuerpo">
+            <label class="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                class="mt-1 h-5 w-5 shrink-0 accent-[#172A5A]"
+                :checked="datos.insumo.prescribible"
+                :disabled="guardandoReceta"
+                @change="cambiarPrescribible($event.target.checked)"
+              />
+              <span>
+                <b class="block text-tinta">El médico puede recetarlo</b>
+                <small class="text-sm text-apagado">
+                  {{ datos.insumo.prescribible
+                    ? 'Aparece en la lista de medicamentos de la consulta.'
+                    : 'No aparece en la consulta: es de uso del servicio y no se entrega al paciente.' }}
+                </small>
+              </span>
+            </label>
+          </div>
         </section>
 
         <AliasInsumo :insumo-id="id" />

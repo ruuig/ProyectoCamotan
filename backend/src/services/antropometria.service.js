@@ -10,6 +10,10 @@ function valorEnZ(z, L, M, S) {
   return M * Math.pow(1 + L * S * z, 1 / L);
 }
 
+/**
+ * Puntaje Z de una medicion por el metodo LMS de la OMS. L corrige la
+ * asimetria, M es la mediana y S el coeficiente de variacion.
+ */
 function calcularZ(valor, L, M, S) {
   if (L === 0) return Math.log(valor / M) / S;
   return (Math.pow(valor / M, L) - 1) / (L * S);
@@ -20,14 +24,14 @@ function calcularZ(valor, L, M, S) {
 // la ultima desviacion conocida.
 function ajustarZExtremo(z, valor, L, M, S) {
   if (z > 3) {
-    const sd3 = valorEnZ(3, L, M, S);
-    const sd23 = sd3 - valorEnZ(2, L, M, S);
-    return 3 + (valor - sd3) / sd23;
+    const valorEnMas3 = valorEnZ(3, L, M, S);
+    const anchoUltimaDesviacion = valorEnMas3 - valorEnZ(2, L, M, S);
+    return 3 + (valor - valorEnMas3) / anchoUltimaDesviacion;
   }
   if (z < -3) {
-    const sd3neg = valorEnZ(-3, L, M, S);
-    const sd23neg = valorEnZ(-2, L, M, S) - sd3neg;
-    return -3 + (valor - sd3neg) / sd23neg;
+    const valorEnMenos3 = valorEnZ(-3, L, M, S);
+    const anchoUltimaDesviacion = valorEnZ(-2, L, M, S) - valorEnMenos3;
+    return -3 + (valor - valorEnMenos3) / anchoUltimaDesviacion;
   }
   return z;
 }

@@ -1,22 +1,76 @@
 const prisma = require('../config/db');
-const { descontarDeLote } = require('../services/movimientos.service');
-const { saldoUtilizable, limitesDePeriodo } = require('../services/abastecimiento.service');
+const { descontarDeLote, devolverEntrega } = require('../services/movimientos.service');
+const { limitesDePeriodo } = require('../services/abastecimiento.service');
 const { renglonesSigsa4 } = require('../services/sigsa4.service');
-const {
-  seleccionarLoteFEFO,
-  planFraccionamiento,
-  esLoteFEFO,
-  lotesDisponibles,
-  existenciaTotal,
-} = require('../services/inventario.service');
+const { enUbicacion, existenciaTotal } = require('../services/inventario.service');
+const { planEntrega, pendienteDe } = require('../services/dispensacion.service');
+const { calcularEdad } = require('../services/pacientes.service');
 
-// Cuanto queda por entregar de una prescripcion.
-function pendienteDe(prescripcion) {
-  const entregado = prescripcion.dispensaciones
-    .filter((d) => !d.anulada)
-    .reduce((suma, d) => suma + d.cantidad, 0);
-  return prescripcion.cantidad - entregado;
+/**
+ * Farmacia (post-consulta): entrega a cada paciente lo que recetó el médico,
+ * desde la existencia de la farmacia, y deja cada entrega ligada a su lote.
+ * Eso es lo que permite responder, ante un retiro sanitario, a quién se le
+ * dio cada lote.
+ */
+
+const INCLUIR_RECETA = {
+  dispensaciones: true,
+  demandaNoAtendida: { select: { cantidad: true } },
+  insumo: { include: { lotes: { orderBy: { fechaVence: 'asc' } } } },
+  atencion: { select: { id: true, pacienteId: true } },
+};
+
+/**
+ * Registra lo que se entrega de una receta: demanda no atendida si falta,
+ * la dispensacion y un movimiento de farmacia por cada lote. Todo en la
+ * transaccion que recibe.
+ */
+async function registrarEntrega(tx, { prescripcion, plan, usuarioId, motivo, establecimientoId }) {
+  if (plan.noAtendido > 0) {
+    await tx.demandaNoAtendida.create({
+      data: {
+        establecimientoId,
+        insumoId: prescripcion.insumoId,
+        prescripcionId: prescripcion.id,
+        pacienteId: prescripcion.atencion.pacienteId,
+        cantidad: plan.noAtendido,
+        registradaPor: usuarioId,
+      },
+    });
+  }
+  if (plan.aEntregar === 0) return { dispensacion: null, movimientos: [] };
+
+  const dispensacion = await tx.dispensacion.create({
+    data: {
+      prescripcionId: prescripcion.id,
+      cantidad: plan.aEntregar,
+      parcial: plan.aEntregar < pendienteDe(prescripcion),
+      usuarioId,
+    },
+  });
+  const movimientos = [];
+  for (const parte of plan.reparto) {
+    const lote = await descontarDeLote(tx, {
+      loteId: parte.loteId,
+      cantidad: parte.cantidad,
+      usuarioId,
+      ubicacion: 'farmacia',
+      dispensacionId: dispensacion.id,
+      motivo: motivo ?? null,
+    });
+    movimientos.push({
+      loteId: lote.id,
+      numeroLote: lote.numeroLote,
+      fechaVence: lote.fechaVence,
+      cantidad: parte.cantidad,
+      saldoResultante: lote.cantidadFarmacia,
+    });
+  }
+  return { dispensacion, movimientos };
 }
+
+/** Lo que hay de un insumo en la bodega, para decirle a farmacia que lo pida. */
+const enBodega = (lotes, ahora) => existenciaTotal(enUbicacion(lotes, 'bodega'), ahora);
 
 async function crear(req, res, next) {
   const establecimientoId = req.usuario.establecimientoId;
@@ -25,201 +79,217 @@ async function crear(req, res, next) {
 
   const prescripcion = await prisma.prescripcion.findFirst({
     where: { id: prescripcionId, atencion: { establecimientoId } },
-    include: {
-      dispensaciones: true,
-      insumo: { include: { lotes: { orderBy: { fechaVence: 'asc' } } } },
-      atencion: { select: { id: true, pacienteId: true } },
-    },
+    include: INCLUIR_RECETA,
   });
-
   if (!prescripcion) {
     return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Prescripción no encontrada' });
   }
 
-  const pendiente = pendienteDe(prescripcion);
-
-  if (pendiente <= 0) {
-    return next({
-      status: 409,
-      codigo: 'ya_entregada',
-      mensaje: 'Esta prescripción ya fue entregada por completo',
-    });
-  }
-
-  if (cantidad > pendiente) {
-    return next({
-      status: 400,
-      codigo: 'cantidad_excede',
-      mensaje: `Solo quedan ${pendiente} por entregar de esta prescripción`,
-    });
-  }
-
   const lotes = prescripcion.insumo.lotes;
-  const disponible = saldoUtilizable(lotes, ahora);
+  const plan = planEntrega({
+    lotes: enUbicacion(lotes, 'farmacia'), cantidad, pendiente: pendienteDe(prescripcion), loteId, motivo, ahora,
+  });
+  if (plan.error) return next(plan.error);
 
-  /*
-   * Demanda no atendida.
-   *
-   * Si no alcanza, se entrega lo que hay y lo que falta se registra. Son las
-   * dos cosas a la vez: al paciente no se le manda con las manos vacias
-   * habiendo existencia, y el faltante queda contado.
-   *
-   * Este es el dato que hace que el sistema pida bien. Contando solo lo
-   * entregado, un insumo que se agoto el dia 3 aparece con consumo bajo y el
-   * mes siguiente se vuelve a pedir de menos. Contando lo que no se pudo
-   * entregar, sube en la lista.
-   */
-  let noAtendido = 0;
-  let aEntregar = cantidad;
+  const resultado = await prisma.$transaction((tx) => registrarEntrega(tx, {
+    prescripcion, plan, usuarioId: req.usuario.id, motivo, establecimientoId,
+  }));
 
-  if (disponible < cantidad) {
-    noAtendido = cantidad - disponible;
-    aEntregar = disponible;
-
-    await prisma.demandaNoAtendida.create({
-      data: {
-        establecimientoId,
-        insumoId: prescripcion.insumoId,
-        prescripcionId: prescripcion.id,
-        pacienteId: prescripcion.atencion.pacienteId,
-        cantidad: noAtendido,
-        registradaPor: req.usuario.id,
-      },
-    });
-
+  const nombre = prescripcion.insumo.nombreGenerico;
+  if (plan.noAtendido > 0) {
     await req.bitacora({
       accion: 'crear',
       entidad: 'demanda_no_atendida',
       entidadId: prescripcion.insumoId,
-      detalle: `${prescripcion.insumo.nombreGenerico}: faltaron ${noAtendido} para completar la receta`,
+      detalle: `${nombre}: faltaron ${plan.noAtendido} en farmacia para completar la receta`,
     });
-
-    // Sin nada en existencia no hay entrega que registrar, pero el faltante
-    // ya quedo contado arriba.
-    if (disponible === 0) {
-      return next({
-        status: 409,
-        codigo: 'existencia_insuficiente',
-        mensaje: `No hay existencia de ${prescripcion.insumo.nombreGenerico}. Quedó registrada la demanda no atendida de ${noAtendido}`,
-        detalles: { disponible: 0, solicitado: cantidad, noAtendido },
-      });
-    }
   }
 
-  // --- Que lotes se usan ---------------------------------------------------
-  let reparto;
-  let avisoFefo = null;
-
-  if (loteId) {
-    const elegido = lotesDisponibles(lotes, ahora).find((l) => l.id === loteId);
-
-    if (!elegido) {
-      return next({
-        status: 400,
-        codigo: 'lote_invalido',
-        mensaje: 'El lote indicado no existe, esta vencido o no tiene existencia',
-      });
-    }
-
-    if (elegido.cantidadActual < aEntregar) {
-      return next({
-        status: 409,
-        codigo: 'existencia_insuficiente',
-        mensaje: `El lote ${elegido.numeroLote} solo tiene ${elegido.cantidadActual}`,
-      });
-    }
-
-    // Si no es el de vencimiento mas proximo, se exige motivo por escrito.
-    if (!esLoteFEFO(loteId, lotes, aEntregar, ahora)) {
-      if (!motivo) {
-        const propuesta = seleccionarLoteFEFO(lotes, aEntregar, ahora);
-        const sugerido = propuesta.requiereFraccionamiento
-          ? propuesta.lotes[0]
-          : propuesta.lote;
-
-        return next({
-          status: 400,
-          codigo: 'motivo_requerido',
-          mensaje: 'Este no es el lote de vencimiento más próximo. Indique motivo',
-          detalles: {
-            loteSugerido: sugerido && {
-              id: sugerido.id,
-              numeroLote: sugerido.numeroLote,
-              fechaVence: sugerido.fechaVence,
-            },
-          },
-        });
-      }
-      avisoFefo = `Se dispenso un lote distinto al de vencimiento más próximo. Motivo: ${motivo}`;
-    }
-
-    reparto = [{ loteId, cantidad: aEntregar }];
-  } else {
-    // Sin lote indicado, el sistema reparte por PEPE.
-    reparto = planFraccionamiento(lotes, aEntregar, ahora);
-
-    if (!reparto) {
-      return next({
-        status: 409,
-        codigo: 'existencia_insuficiente',
-        mensaje: 'No hay existencia vigente suficiente',
-      });
-    }
-  }
-
-  // --- Escritura -----------------------------------------------------------
-  const resultado = await prisma.$transaction(async (tx) => {
-    const dispensacion = await tx.dispensacion.create({
-      data: {
-        prescripcionId,
-        cantidad: aEntregar,
-        parcial: aEntregar < pendiente,
-        usuarioId: req.usuario.id,
-      },
+  // Sin nada en farmacia no hay entrega, pero el faltante ya quedo contado.
+  if (!resultado.dispensacion) {
+    const bodega = enBodega(lotes, ahora);
+    return next({
+      status: 409,
+      codigo: 'existencia_insuficiente',
+      mensaje: `No hay existencia de ${nombre} en farmacia. Quedó registrada la demanda no atendida de ${plan.noAtendido}${bodega ? `. En bodega hay ${bodega}: pídalo a bodega` : ''}`,
+      detalles: { disponible: 0, solicitado: cantidad, noAtendido: plan.noAtendido, enBodega: bodega },
     });
-
-    const movimientos = [];
-    for (const parte of reparto) {
-      const lote = await descontarDeLote(tx, {
-        loteId: parte.loteId,
-        cantidad: parte.cantidad,
-        usuarioId: req.usuario.id,
-        dispensacionId: dispensacion.id,
-        motivo: motivo ?? null,
-      });
-      movimientos.push({
-        loteId: lote.id,
-        numeroLote: lote.numeroLote,
-        cantidad: parte.cantidad,
-        saldoResultante: lote.cantidadActual,
-      });
-    }
-
-    return { dispensacion, movimientos };
-  });
+  }
 
   await req.bitacora({
     accion: 'crear',
     entidad: 'dispensacion',
     entidadId: resultado.dispensacion.id,
-    detalle: `${prescripcion.insumo.nombreGenerico} x${aEntregar}${noAtendido > 0 ? `, ${noAtendido} sin entregar por falta de existencia` : ''}${motivo ? `. Motivo: ${motivo}` : ''}`,
+    detalle: `${nombre} x${plan.aEntregar}${plan.noAtendido > 0 ? `, ${plan.noAtendido} sin entregar por falta de existencia` : ''}${motivo ? `. Motivo: ${motivo}` : ''}`,
   });
-
-  const quedaPendiente = pendiente - aEntregar;
 
   res.status(201).json({
     dispensacion: resultado.dispensacion,
     movimientos: resultado.movimientos,
     fraccionada: resultado.movimientos.length > 1,
-    entregado: aEntregar,
-    noAtendido,
-    pendiente: quedaPendiente,
-    avisoFefo,
-    aviso:
-      noAtendido > 0
-        ? `Solo había ${aEntregar} de ${cantidad}. Se entregó lo disponible y quedaron ${noAtendido} registrados como demanda no atendida.`
-        : null,
+    entregado: plan.aEntregar,
+    noAtendido: plan.noAtendido,
+    pendiente: pendienteDe(prescripcion) - plan.aEntregar,
+    avisoFefo: plan.avisoFefo,
+    aviso: plan.noAtendido > 0
+      ? `Solo había ${plan.aEntregar} de ${cantidad} en farmacia. Se entregó lo disponible y quedaron ${plan.noAtendido} registrados como demanda no atendida.`
+      : null,
   });
+}
+
+// --- Entrega por paciente --------------------------------------------------------
+
+const INCLUIR_ATENCION = {
+  paciente: true,
+  medico: { select: { nombre: true, cargo: true } },
+  diagnosticos: { orderBy: { orden: 'asc' } },
+  recetasExternas: { orderBy: { creadaEn: 'asc' } },
+  prescripciones: { include: INCLUIR_RECETA, orderBy: { creadaEn: 'asc' } },
+};
+
+/** Pacientes que esperan en farmacia: atenciones con algo por entregar. */
+async function porAtender(req, res) {
+  const atenciones = await prisma.atencion.findMany({
+    where: { establecimientoId: req.usuario.establecimientoId, prescripciones: { some: {} } },
+    orderBy: { registradaEn: 'desc' },
+    take: 150,
+    include: {
+      paciente: { select: { id: true, nombres: true, apellidos: true, expediente: true, expedientePapel: true } },
+      medico: { select: { nombre: true } },
+      prescripciones: { include: { dispensaciones: true, demandaNoAtendida: { select: { cantidad: true } }, insumo: { select: { nombreGenerico: true } } } },
+    },
+  });
+  const lista = atenciones
+    .map((a) => ({
+      atencionId: a.id,
+      registradaEn: a.registradaEn,
+      paciente: { ...a.paciente, nombreCompleto: `${a.paciente.apellidos}, ${a.paciente.nombres}` },
+      medico: a.medico?.nombre ?? null,
+      medicamentos: a.prescripciones.filter((p) => pendienteDe(p) > 0).map((p) => p.insumo.nombreGenerico),
+    }))
+    .filter((a) => a.medicamentos.length)
+    // El que espera desde antes va primero.
+    .reverse();
+  res.json({ porAtender: lista });
+}
+
+/**
+ * La hoja de entrega de un paciente: todo lo que farmacia copia al formato
+ * en papel, con los lotes que el sistema propone (el que vence primero) desde
+ * la existencia de la farmacia.
+ */
+async function hojaDeEntrega(req, res, next) {
+  const ahora = new Date();
+  const atencion = await prisma.atencion.findFirst({
+    where: { id: Number(req.params.id), establecimientoId: req.usuario.establecimientoId },
+    include: INCLUIR_ATENCION,
+  });
+  if (!atencion) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Atención no encontrada' });
+
+  const p = atencion.paciente;
+  const edad = calcularEdad(p.fechaNacimiento, ahora);
+  const renglones = atencion.prescripciones.map((r) => {
+    const pendiente = pendienteDe(r);
+    const lotesFarmacia = enUbicacion(r.insumo.lotes, 'farmacia');
+    const plan = pendiente > 0 ? planEntrega({ lotes: lotesFarmacia, cantidad: pendiente, pendiente, ahora }) : null;
+    return {
+      prescripcionId: r.id,
+      insumoId: r.insumoId,
+      medicamento: r.insumo.nombreGenerico,
+      presentacion: r.insumo.presentacion,
+      unidad: r.insumo.unidadEntrega,
+      recetado: r.cantidad,
+      yaEntregado: r.cantidad - pendiente,
+      pendiente,
+      indicaciones: r.indicaciones,
+      enFarmacia: existenciaTotal(lotesFarmacia, ahora),
+      enBodega: enBodega(r.insumo.lotes, ahora),
+      aEntregar: plan?.aEntregar ?? 0,
+      noAlcanza: plan?.noAtendido ?? 0,
+      lotes: plan?.reparto ?? [],
+    };
+  });
+
+  await req.bitacora({ accion: 'leer', entidad: 'paciente', entidadId: p.id, detalle: `Hoja de entrega de la atención ${atencion.id}` });
+  res.json({
+    atencionId: atencion.id,
+    fecha: atencion.registradaEn,
+    paciente: {
+      id: p.id,
+      nombreCompleto: `${p.nombres} ${p.apellidos}`,
+      expediente: p.expediente,
+      expedientePapel: p.expedientePapel,
+      cui: p.cui,
+      sexo: p.sexo,
+      edad,
+      comunidad: p.comunidad,
+      responsableNombre: p.responsableNombre,
+    },
+    medico: atencion.medico,
+    diagnosticos: atencion.diagnosticos.map((d) => ({ descripcion: d.descripcion, cie: d.cie })),
+    renglones,
+    recetasExternas: atencion.recetasExternas.map((x) => ({ medicamento: x.medicamento, cantidad: x.cantidad, indicaciones: x.indicaciones })),
+  });
+}
+
+/**
+ * Termina la dispensacion de un paciente: registra de una vez lo que se
+ * entrega de cada receta (por defecto, todo lo pendiente) desde la farmacia.
+ * Es una sola transaccion: o queda toda la entrega, o nada.
+ */
+async function dispensarAtencion(req, res, next) {
+  const establecimientoId = req.usuario.establecimientoId;
+  const ahora = new Date();
+  const atencion = await prisma.atencion.findFirst({
+    where: { id: Number(req.params.id), establecimientoId },
+    include: { prescripciones: { include: INCLUIR_RECETA }, paciente: { select: { id: true, nombres: true, apellidos: true } } },
+  });
+  if (!atencion) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Atención no encontrada' });
+
+  const pedidas = new Map((req.body.renglones ?? []).map((r) => [r.prescripcionId, r]));
+  const planes = [];
+  for (const p of atencion.prescripciones) {
+    const pendiente = pendienteDe(p);
+    if (pendiente <= 0) continue;
+    const pedido = pedidas.get(p.id);
+    // Lo que no se manda se entrega completo; con cantidad 0 se deja pendiente.
+    const cantidad = pedido ? pedido.cantidad : pendiente;
+    if (cantidad === 0) continue;
+    const plan = planEntrega({ lotes: enUbicacion(p.insumo.lotes, 'farmacia'), cantidad, pendiente, ahora });
+    if (plan.error) return next({ ...plan.error, mensaje: `${p.insumo.nombreGenerico}: ${plan.error.mensaje}` });
+    planes.push({ prescripcion: p, plan });
+  }
+  if (!planes.length) {
+    return next({ status: 409, codigo: 'sin_pendientes', mensaje: 'Este paciente no tiene medicamentos por entregar' });
+  }
+
+  const resultados = await prisma.$transaction(async (tx) => {
+    const salida = [];
+    for (const { prescripcion, plan } of planes) {
+      const r = await registrarEntrega(tx, { prescripcion, plan, usuarioId: req.usuario.id, establecimientoId });
+      salida.push({
+        prescripcionId: prescripcion.id,
+        medicamento: prescripcion.insumo.nombreGenerico,
+        entregado: plan.aEntregar,
+        noEntregado: plan.noAtendido,
+        dispensacionId: r.dispensacion?.id ?? null,
+        lotes: r.movimientos,
+      });
+    }
+    return salida;
+  }, { timeout: 30000 });
+
+  const entregados = resultados.filter((r) => r.entregado > 0);
+  const faltaron = resultados.filter((r) => r.noEntregado > 0);
+  await req.bitacora({
+    accion: 'crear',
+    entidad: 'dispensacion',
+    entidadId: atencion.id,
+    detalle: `Entrega a ${atencion.paciente.apellidos}, ${atencion.paciente.nombres} (atención ${atencion.id}): `
+      + `${entregados.map((r) => `${r.medicamento} x${r.entregado}`).join(', ') || 'nada'}`
+      + `${faltaron.length ? `. Sin existencia en farmacia: ${faltaron.map((r) => `${r.medicamento} x${r.noEntregado}`).join(', ')}` : ''}`,
+  });
+  res.status(201).json({ atencionId: atencion.id, renglones: resultados });
 }
 
 // Prescripciones pendientes de entrega, que es lo que farmacia necesita ver.
@@ -232,6 +302,7 @@ async function pendientes(req, res) {
     take: 100,
     include: {
       dispensaciones: true,
+      demandaNoAtendida: { select: { cantidad: true } },
       insumo: { select: { id: true, nombreGenerico: true, presentacion: true, unidadMedida: true } },
       atencion: {
         select: {
@@ -250,6 +321,7 @@ async function pendientes(req, res) {
   res.json({
     pendientes: conPendiente.map(({ prescripcion, pendiente }) => ({
       id: prescripcion.id,
+      atencionId: prescripcion.atencion.id,
       cantidad: prescripcion.cantidad,
       pendiente,
       indicaciones: prescripcion.indicaciones,
@@ -283,25 +355,14 @@ async function anular(req, res, next) {
   await prisma.$transaction(async (tx) => {
     await tx.dispensacion.update({ where: { id: dispensacion.id }, data: { anulada: true } });
 
-    // Se devuelve lo entregado a su lote, con movimiento propio: la anulacion
-    // no borra nada, deja rastro.
-    for (const movimiento of dispensacion.movimientos) {
-      const devolver = Math.abs(movimiento.cantidad);
-      const lote = await tx.lote.update({
-        where: { id: movimiento.loteId },
-        data: { cantidadActual: { increment: devolver } },
-      });
-
-      await tx.movimientoInsumo.create({
-        data: {
-          loteId: movimiento.loteId,
-          tipo: 'ajuste',
-          cantidad: devolver,
-          saldoResultante: lote.cantidadActual,
-          dispensacionId: dispensacion.id,
-          usuarioId: req.usuario.id,
-          motivo: `Anulación de dispensación ${dispensacion.id}`,
-        },
+    // Se devuelve lo entregado a su lote y a la farmacia, con movimiento
+    // propio: la anulacion no borra nada, deja rastro.
+    for (const movimiento of dispensacion.movimientos.filter((m) => m.cantidad < 0)) {
+      await devolverEntrega(tx, {
+        movimiento,
+        usuarioId: req.usuario.id,
+        dispensacionId: dispensacion.id,
+        motivo: `Anulación de dispensación ${dispensacion.id}`,
       });
     }
   });
@@ -310,7 +371,7 @@ async function anular(req, res, next) {
     accion: 'actualizar',
     entidad: 'dispensacion',
     entidadId: dispensacion.id,
-    detalle: 'Dispensación anulada, existencia devuelta al lote',
+    detalle: 'Dispensación anulada, existencia devuelta al lote en farmacia',
   });
 
   res.json({ mensaje: 'Dispensación anulada y existencia devuelta' });
@@ -436,4 +497,7 @@ async function sigsa4(req, res) {
   });
 }
 
-module.exports = { crear, pendientes, anular, pendienteDe, porFirmar, registrarConstancia, imagenConstancia, sigsa4 };
+module.exports = {
+  crear, pendientes, anular, pendienteDe, porFirmar, registrarConstancia, imagenConstancia, sigsa4,
+  porAtender, hojaDeEntrega, dispensarAtencion,
+};

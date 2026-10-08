@@ -1,18 +1,18 @@
 /**
  * Migra el historial de la bodega desde los Excel del centro.
  *
- *   python scripts/extraerBodega.py ../plantillas <bodega.json>
+ *   python scripts/extraerBodega.py ../documentacion/Plantillas <bodega.json>
  *   node scripts/importarBodega.js <bodega.json>              (solo revisa)
  *   node scripts/importarBodega.js <bodega.json> --aplicar    (escribe)
  *
- * Fuentes (plantillas/):
+ * Fuentes (documentacion/Plantillas/):
  *   BALANCE*.xlsx            catalogo (ultimo mes), reportes de los servicios y
  *                            totales del BRES de cada mes
  *   INVENTARIOS CIERRE*.xlsx existencia de la bodega al ultimo cierre y nombres
  *                            viejos (alias)
  *   SEMAFORO*.xlsx           lotes y vencimientos
  *
- * Los reportes de revision se escriben en bd/importacion/bodega/.
+ * Los reportes de revision se escriben en documentacion/bd/importacion/bodega/.
  */
 
 require('dotenv').config();
@@ -26,7 +26,7 @@ const { partirLinea } = require('../src/services/csvLugares.service');
 
 const [, , rutaDatos, bandera] = process.argv;
 const APLICAR = bandera === '--aplicar';
-const CARPETA = path.join(__dirname, '..', '..', 'bd', 'importacion', 'bodega');
+const CARPETA = path.join(__dirname, '..', '..', 'documentacion', 'bd', 'importacion', 'bodega');
 
 function csv(filas) {
   const celda = (v) => {
@@ -66,9 +66,9 @@ async function main() {
   for (const m of datos.cierres) for (const r of m.renglones) anotar(r.nombre, `cierre ${m.hoja}`);
   for (const [color, filas] of Object.entries(datos.semaforo)) for (const r of filas) anotar(r.nombre, `semáforo ${color}`);
 
-  // Equivalencias escritas a mano (plantillas/equivalencias.csv): mandan
+  // Equivalencias escritas a mano (documentacion/Plantillas/equivalencias.csv): mandan
   // sobre cualquier regla.
-  const rutaEquivalencias = path.join(__dirname, '..', '..', 'plantillas', 'equivalencias.csv');
+  const rutaEquivalencias = path.join(__dirname, '..', '..', 'documentacion', 'Plantillas', 'equivalencias.csv');
   const BOM = String.fromCharCode(0xFEFF);
   const SALTO = String.fromCharCode(10);
   const equivalencias = fs.existsSync(rutaEquivalencias)
@@ -176,7 +176,7 @@ async function main() {
   console.log(`Lotes del semáforo: ${conLotes.reduce((s, x) => s + x.lotes.length, 0)} lotes para ${conLotes.length} insumos; ${unidadesSinLote} unidades quedan sin lote; ${conciliacion.reduce((s, x) => s + x.descartados.length, 0)} lotes con fecha imposible`);
 
   if (!APLICAR) {
-    console.log('Revisión sin cambios. Reportes en bd/importacion/bodega/.');
+    console.log('Revisión sin cambios. Reportes en documentacion/bd/importacion/bodega/.');
     return;
   }
   await require('./aplicarBodega')({

@@ -319,6 +319,28 @@ async function obtener(req, res, next) {
   res.json({ paciente: verSensibles ? salida : sinCamposSensibles(salida) });
 }
 
+/**
+ * El CUI es unico en todo el sistema. Si ya lo tiene otro paciente, se dice
+ * quien es en vez de dejar que la base rechace el registro sin explicacion.
+ */
+async function errorCuiRegistrado(cui, establecimientoId, idExcluido = null) {
+  if (!cui) return null;
+  const otro = await prisma.paciente.findFirst({
+    where: { cui, ...(idExcluido ? { NOT: { id: idExcluido } } : {}) },
+    select: { id: true, expediente: true, nombres: true, apellidos: true, establecimientoId: true },
+  });
+  if (!otro) return null;
+  const aqui = otro.establecimientoId === establecimientoId;
+  return {
+    status: 409,
+    codigo: 'cui_registrado',
+    mensaje: aqui
+      ? `El CUI ${cui} ya está registrado en el expediente ${otro.expediente} (${otro.apellidos} ${otro.nombres})`
+      : `El CUI ${cui} ya está registrado en otro establecimiento`,
+    detalles: aqui ? [{ id: otro.id, expediente: otro.expediente, nombreCompleto: `${otro.apellidos} ${otro.nombres}` }] : null,
+  };
+}
+
 async function crear(req, res, next) {
   const establecimientoId = req.usuario.establecimientoId;
   const { condiciones, confirmarDuplicado, edadDeclarada, ...datos } = req.body;
@@ -363,6 +385,9 @@ async function crear(req, res, next) {
 
     datos.comunidad = lugar.nombre;
   }
+
+  const cuiRegistrado = await errorCuiRegistrado(datos.cui, establecimientoId);
+  if (cuiRegistrado) return next(cuiRegistrado);
 
   const duplicados = await buscarPosiblesDuplicados(establecimientoId, datos);
 
@@ -499,6 +524,11 @@ async function actualizar(req, res, next) {
       mensaje: 'Ese dato sensible ya está registrado. Solo el personal médico o el administrador puede cambiarlo',
       detalles: { campos: fusion.campos },
     });
+  }
+
+  if (datos.cui && datos.cui !== existente.cui) {
+    const cuiRegistrado = await errorCuiRegistrado(datos.cui, req.usuario.establecimientoId, existente.id);
+    if (cuiRegistrado) return next(cuiRegistrado);
   }
 
   const paciente = await prisma.$transaction(async (tx) => {

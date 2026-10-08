@@ -7,6 +7,7 @@ const esquemas = require('../schemas/atenciones.schema');
 const controlador = require('../controllers/atenciones.controller');
 const cola = require('../controllers/cola.controller');
 const consulta = require('../controllers/consulta.controller');
+const referencias = require('../controllers/referencias.controller');
 const idempotencia = require('../middleware/idempotencia');
 
 const router = express.Router();
@@ -28,6 +29,25 @@ router.get('/siguiente', medicos, asincrono(cola.siguiente));
 // El medico tambien puede abrirla: cuando preconsulta no esta cubierta, el
 // sistema no debe impedir que se registre la atencion.
 router.post('/', clinicos, validar(esquemas.crearAtencion), asincrono(controlador.crear));
+
+// La atencion se abre al guardar la toma de signos: si no se guarda, no
+// queda nada en la cola. Se encola sin conexion como la preconsulta.
+router.post(
+  '/con-preconsulta',
+  registro,
+  idempotencia,
+  validar(esquemas.atencionConPreconsulta),
+  asincrono(controlador.crearConPreconsulta),
+);
+
+// Una atencion abierta por error se cancela con su motivo.
+router.patch(
+  '/:id/cancelar',
+  clinicos,
+  validar(esquemas.parametroId, 'params'),
+  validar(esquemas.cancelar),
+  asincrono(controlador.cancelar),
+);
 
 router.post(
   '/:id/preconsulta',
@@ -113,6 +133,39 @@ router.post(
   validar(esquemas.parametroId, 'params'),
   validar(esquemas.prescripcion),
   asincrono(consulta.crearPrescripcion),
+);
+
+router.post(
+  '/:id/receta-externa',
+  medicos,
+  validar(esquemas.parametroId, 'params'),
+  validar(esquemas.recetaExterna),
+  asincrono(consulta.crearRecetaExterna),
+);
+
+// Boleta de Referencia y Contrarreferencia: la llena el medico; la
+// contrarreferencia la registra quien recibe al paciente de regreso.
+router.get(
+  '/:id/referencia',
+  clinicos,
+  validar(esquemas.parametroId, 'params'),
+  asincrono(referencias.obtener),
+);
+
+router.put(
+  '/:id/referencia',
+  medicos,
+  validar(esquemas.parametroId, 'params'),
+  validar(esquemas.referencia),
+  asincrono(referencias.guardar),
+);
+
+router.put(
+  '/:id/contrarreferencia',
+  clinicos,
+  validar(esquemas.parametroId, 'params'),
+  validar(esquemas.contrarreferencia),
+  asincrono(referencias.guardarContrarreferencia),
 );
 
 module.exports = router;

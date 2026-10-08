@@ -9,6 +9,7 @@ const esquemas = require('../schemas/admin.schema');
 const bitacoraControlador = require('../controllers/bitacora.controller');
 const signosControlador = require('../controllers/signosPeligro.controller');
 const admin = require('../controllers/admin.controller');
+const respaldos = require('../controllers/respaldos.controller');
 
 const router = express.Router();
 
@@ -62,6 +63,25 @@ router.patch(
   asincrono(admin.cambiarEstadoUsuario),
 );
 
+// Nombre y cargo salen en las hojas impresas; no cambian el acceso.
+router.patch(
+  '/usuarios/:id',
+  soloAdmin,
+  validar(esquemas.parametroId, 'params'),
+  validar(esquemas.actualizarUsuario),
+  asincrono(admin.actualizarUsuario),
+);
+
+// Rol, director y contraseña sí cambian el acceso: piden al director.
+router.patch(
+  '/usuarios/:id/acceso',
+  soloAdmin,
+  validar(esquemas.parametroId, 'params'),
+  validar(esquemas.cambiarAccesoUsuario),
+  asincrono(exigirAutorizacionDirector('cambiar acceso de usuario')),
+  asincrono(admin.cambiarAccesoUsuario),
+);
+
 // --- Establecimiento -------------------------------------------------------
 
 // Leerlo lo puede cualquier rol clinico: el nombre, area y distrito del
@@ -90,6 +110,29 @@ router.post(
   soloAdmin,
   validar(esquemas.confirmarTotp),
   asincrono(admin.confirmarTotp),
+);
+
+// --- Respaldos de la base de datos -------------------------------------------
+
+router.get('/respaldos', soloAdmin, asincrono(respaldos.listar));
+
+router.put(
+  '/respaldos/configuracion',
+  soloAdmin,
+  validar(esquemas.configuracionRespaldo),
+  asincrono(respaldos.guardarConfiguracion),
+);
+
+// Hacerlo deja el archivo en el servidor; no saca datos del sistema.
+router.post('/respaldos', soloAdmin, asincrono(respaldos.crearRespaldo));
+
+// Descargarlo pide al director: el archivo lleva toda la informacion de los pacientes.
+router.post(
+  '/respaldos/descargar',
+  soloAdmin,
+  validar(esquemas.descargarRespaldo),
+  asincrono(exigirAutorizacionDirector('descargar respaldo de la base de datos')),
+  asincrono(respaldos.descargar),
 );
 
 // --- Bitacora --------------------------------------------------------------

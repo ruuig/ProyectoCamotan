@@ -8,12 +8,14 @@ const ExcelJS = require('exceljs');
 const prisma = require('../config/db');
 const datos = require('../services/bodegaDatos.service');
 const {
-  CATEGORIAS, semaforoBodega, lotesPepe, propuestaDistribucion, numeroTraslado, ordenarInsumos,
+  CATEGORIAS, semaforoBodega, lotesPepe, propuestaDistribucion, ordenarInsumos,
   normalizarAlias, mesesParaVencer, ultimosPeriodos,
 } = require('../services/bodega.service');
 const { configuracion, rangosSemaforo, limitesDePeriodo } = require('../services/abastecimiento.service');
-const { descontarDeLote } = require('../services/movimientos.service');
+const { errorDestino, errorLotes, registrarTraslado } = require('../services/traslados.service');
+const { enUbicacion } = require('../services/inventario.service');
 const bresService = require('../services/bres.service');
+const { kardexDe, encabezadoKardex } = require('../services/kardex.service');
 
 const ETIQUETA_TIPO_UBICACION = {
   bodega: 'Bodega',
@@ -74,7 +76,8 @@ async function propuestaLotes(req, res, next) {
     include: { lotes: true },
   });
   if (!insumo) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Insumo no encontrado' });
-  res.json(lotesPepe(insumo.lotes, cantidad));
+  // Se traslada desde la bodega: lo que esta en farmacia no cuenta.
+  res.json(lotesPepe(enUbicacion(insumo.lotes, 'bodega'), cantidad));
 }
 
 /** Propuesta de distribucion de un insumo entre los servicios. */
@@ -85,7 +88,7 @@ async function distribucion(req, res, next) {
   if (!insumo) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Insumo no encontrado' });
 
   const ahora = new Date();
-  const existencia = insumo.lotes
+  const existencia = enUbicacion(insumo.lotes, 'bodega')
     .filter((l) => l.estado === 'disponible' && new Date(l.fechaVence) >= ahora)
     .reduce((s, l) => s + l.cantidadActual, 0);
   const cantidad = Math.min(req.query.cantidad ?? existencia, existencia);
@@ -99,69 +102,43 @@ async function distribucion(req, res, next) {
     insumo: { id: insumo.id, nombre: insumo.nombreGenerico, unidadEntrega: insumo.unidadEntrega, unidadesPorEmpaque: insumo.unidadesPorEmpaque },
     existencia,
     cantidad,
+    lugares: config.lugaresReparto,
     ...propuestaDistribucion({
       cantidad,
       modo,
       empaque: insumo.unidadesPorEmpaque,
+      lugares: config.lugaresReparto,
       servicios: servicios.map((s) => ({ id: s.id, nombre: s.nombre, promedio: Math.round((promedios.get(s.id) ?? 0) * 10) / 10 })),
     }),
   });
 }
 
 /**
- * Registra un traslado de la bodega a un servicio. Cada renglon descuenta su
- * lote y queda como movimiento ligado al traslado: asi un retiro sanitario
- * sabe a que servicio fue a parar cada lote.
+ * Registra un traslado de la bodega a un servicio o a la farmacia del centro
+ * (post-consulta), con el mismo documento de entrega.
+ *
+ * A un puesto o centro comunitario, cada renglon sale del inventario del
+ * centro y queda ligado al traslado: un retiro sanitario sabe a que servicio
+ * fue a parar cada lote. A la farmacia, el lote no sale del centro: pasa de
+ * la bodega a la farmacia y desde ahi se entrega a cada paciente.
  */
 async function crearTraslado(req, res, next) {
   const establecimientoId = req.usuario.establecimientoId;
   const { ubicacionId, recibidoPor, observacion, renglones } = req.body;
 
-  const ubicacion = await prisma.ubicacion.findFirst({ where: { id: ubicacionId, establecimientoId, activo: true } });
-  if (!ubicacion || !datos.esServicioQueReporta(ubicacion)) {
-    return next({ status: 400, codigo: 'destino_invalido', mensaje: 'Solo se traslada a puestos de salud y centros comunitarios activos' });
-  }
+  const ubicacion = await prisma.ubicacion.findFirst({ where: { id: ubicacionId, establecimientoId } });
+  const fallaDestino = errorDestino(ubicacion);
+  if (fallaDestino) return next(fallaDestino);
 
   const lotes = await prisma.lote.findMany({
     where: { id: { in: renglones.map((r) => r.loteId) }, insumo: { establecimientoId } },
-    include: { insumo: true },
   });
-  const porId = new Map(lotes.map((l) => [l.id, l]));
-  const ahora = new Date();
-  for (const r of renglones) {
-    const lote = porId.get(r.loteId);
-    if (!lote) return next({ status: 404, codigo: 'lote_no_encontrado', mensaje: 'Uno de los lotes no existe' });
-    if (new Date(lote.fechaVence) < ahora) {
-      return next({ status: 409, codigo: 'lote_vencido', mensaje: `El lote ${lote.numeroLote} está vencido: no se puede trasladar` });
-    }
-  }
+  const fallaLotes = errorLotes(renglones, new Map(lotes.map((l) => [l.id, l])));
+  if (fallaLotes) return next(fallaLotes);
 
-  const anio = new Date(ahora.getTime() - 6 * 3600000).getUTCFullYear();
-  const traslado = await prisma.$transaction(async (tx) => {
-    const cuantos = await tx.traslado.count({ where: { establecimientoId, numero: { startsWith: `TRA-${anio}-` } } });
-    const creado = await tx.traslado.create({
-      data: {
-        establecimientoId,
-        numero: numeroTraslado(anio, cuantos + 1),
-        ubicacionId,
-        entregadoPor: req.usuario.id,
-        recibidoPor,
-        observacion: observacion ?? null,
-      },
-    });
-    for (const r of renglones) {
-      await descontarDeLote(tx, {
-        loteId: r.loteId,
-        cantidad: r.cantidad,
-        usuarioId: req.usuario.id,
-        tipo: 'traslado',
-        servicio: ubicacion.nombre,
-        trasladoId: creado.id,
-        motivo: `Traslado ${creado.numero}`,
-      });
-    }
-    return creado;
-  });
+  const traslado = await prisma.$transaction((tx) => registrarTraslado(tx, {
+    establecimientoId, ubicacion, usuarioId: req.usuario.id, recibidoPor, observacion: observacion ?? null, renglones,
+  }));
 
   await req.bitacora({
     accion: 'crear',
@@ -179,6 +156,7 @@ async function detalleTraslado(id, establecimientoId) {
     include: {
       ubicacion: true,
       usuario: { select: { nombre: true } },
+      requisicion: { select: { id: true, numero: true } },
       movimientos: {
         include: { lote: { include: { insumo: { select: { codigoInterno: true, nombreGenerico: true, concentracion: true, unidadEntrega: true, categoria: true } } } } },
         orderBy: { id: 'asc' },
@@ -194,7 +172,8 @@ async function detalleTraslado(id, establecimientoId) {
     entregadoPor: t.usuario.nombre,
     recibidoPor: t.recibidoPor,
     observacion: t.observacion,
-    renglones: t.movimientos.map((m) => ({
+    requisicion: t.requisicion,
+    renglones: t.movimientos.filter((m) => m.ubicacion === 'bodega').map((m) => ({
       loteId: m.loteId,
       numeroLote: m.lote.numeroLote,
       fechaVence: m.lote.fechaVence,
@@ -225,7 +204,11 @@ async function listarTraslados(req, res) {
     where,
     orderBy: { registradoEn: 'desc' },
     take: 200,
-    include: { ubicacion: { select: { nombre: true } }, usuario: { select: { nombre: true } }, movimientos: { select: { cantidad: true } } },
+    include: {
+      ubicacion: { select: { nombre: true } },
+      usuario: { select: { nombre: true } },
+      movimientos: { where: { ubicacion: 'bodega' }, select: { cantidad: true } },
+    },
   });
   res.json({
     traslados: lista.map((t) => ({
@@ -315,6 +298,7 @@ async function semaforo(req, res) {
       numeroLote: l.numeroLote,
       fechaVence: l.fechaVence,
       cantidad: l.cantidadActual,
+      enFarmacia: l.cantidadFarmacia,
       estado: l.estado,
       ubicacion: l.ubicacion,
       mesesParaVencer: Number(mesesParaVencer(l.fechaVence, ahora).toFixed(1)),
@@ -387,6 +371,9 @@ async function fichaInsumo(req, res) {
       numeroLote: l.numeroLote,
       fechaVence: l.fechaVence,
       cantidadActual: l.cantidadActual,
+      // Donde esta: lo de farmacia se entrega a pacientes, lo de bodega se traslada.
+      enBodega: l.cantidadActual - l.cantidadFarmacia,
+      enFarmacia: l.cantidadFarmacia,
       cantidadInicial: l.cantidadInicial,
       estado: l.estado,
       motivoEstado: l.motivoEstado,
@@ -425,6 +412,9 @@ async function buscarLotes(req, res) {
       fechaVence: l.fechaVence,
       cantidadInicial: l.cantidadInicial,
       cantidadActual: l.cantidadActual,
+      // Donde esta: lo de farmacia se entrega a pacientes, lo de bodega se traslada.
+      enBodega: l.cantidadActual - l.cantidadFarmacia,
+      enFarmacia: l.cantidadFarmacia,
       estado: l.estado,
       movimientos: l._count.movimientos,
       insumo: l.insumo,
@@ -464,11 +454,13 @@ async function inventarioCierre(req, res) {
       entregado: h.entregado,
       reajustes: 0,
       saldoActual: h.saldoActual,
+      porLugar: Math.round(h.saldoActual / config.lugaresReparto),
     }));
     return res.json({
       periodo,
       diaCorte: config.diaCorteBres,
       fuente: 'excel',
+      lugaresReparto: config.lugaresReparto,
       firmas,
       filas: req.query.orden && req.query.orden !== 'excel' ? ordenarInsumos(filasHist, req.query.orden) : filasHist,
       categorias: CATEGORIAS,
@@ -478,12 +470,14 @@ async function inventarioCierre(req, res) {
   const { desde, hasta } = limitesDePeriodo(periodo);
   const [insumos, inicio, fin, mov] = await Promise.all([
     prisma.insumo.findMany({ where: { establecimientoId, activo: true, ...(req.query.categoria ? { categoria: req.query.categoria } : {}) } }),
-    datos.saldoCentro(establecimientoId, desde),
-    datos.saldoCentro(establecimientoId, hasta),
+    // Es el inventario de la bodega: lo de farmacia lo lleva farmacia.
+    datos.saldoCentro(establecimientoId, desde, 'bodega'),
+    datos.saldoCentro(establecimientoId, hasta, 'bodega'),
     datos.movimientosCentro(establecimientoId, desde, hasta),
   ]);
   const filas = insumos.map((i) => {
-    const m = mov.get(i.id) ?? { entradas: 0, entregado: 0, consumo: 0, trasladado: 0, reajustes: 0, bajas: 0 };
+    const m = mov.get(i.id) ?? { entradas: 0, consumo: 0, trasladado: 0, aFarmacia: 0, reajustesBodega: 0, bajas: 0 };
+    const saldoActual = fin.get(i.id) ?? 0;
     return {
       insumoId: i.id,
       codigoInterno: i.codigoInterno,
@@ -493,13 +487,17 @@ async function inventarioCierre(req, res) {
       categoria: i.categoria,
       saldoAnterior: inicio.get(i.id) ?? 0,
       entradas: m.entradas,
-      // Lo que salio de la bodega: a pacientes, consumo interno y traslados.
-      entregado: m.entregado + m.consumo + m.trasladado,
-      reajustes: m.reajustes - m.bajas,
-      saldoActual: fin.get(i.id) ?? 0,
+      // Lo que salio de la bodega: a farmacia, a los servicios y consumo interno.
+      entregado: m.aFarmacia + m.trasladado + m.consumo,
+      reajustes: m.reajustesBodega - m.bajas,
+      saldoActual,
+      porLugar: Math.round(saldoActual / config.lugaresReparto),
     };
   });
-  res.json({ periodo, diaCorte: config.diaCorteBres, fuente: 'sistema', firmas, filas: ordenarInsumos(filas, req.query.orden ?? 'alfabetico'), categorias: CATEGORIAS });
+  res.json({
+    periodo, diaCorte: config.diaCorteBres, fuente: 'sistema', lugaresReparto: config.lugaresReparto, firmas,
+    filas: ordenarInsumos(filas, req.query.orden ?? 'alfabetico'), categorias: CATEGORIAS,
+  });
 }
 
 // --- Alias del catalogo ----------------------------------------------------------------
@@ -525,6 +523,25 @@ async function quitarAlias(req, res, next) {
   await prisma.insumoAlias.delete({ where: { id: alias.id } });
   await req.bitacora({ accion: 'eliminar', entidad: 'insumo', entidadId: alias.insumoId, detalle: `Alias quitado: ${alias.alias}` });
   res.json({ ok: true });
+}
+
+/** Si el medico puede recetar este insumo (aparece en su lista de medicamentos). */
+async function cambiarPrescribible(req, res, next) {
+  const insumo = await prisma.insumo.findFirst({
+    where: { id: Number(req.params.id), establecimientoId: req.usuario.establecimientoId },
+  });
+  if (!insumo) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Insumo no encontrado' });
+  const actualizado = await prisma.insumo.update({
+    where: { id: insumo.id },
+    data: { prescribible: req.body.prescribible },
+  });
+  await req.bitacora({
+    accion: 'actualizar',
+    entidad: 'insumo',
+    entidadId: insumo.id,
+    detalle: `${insumo.nombreGenerico}: ${req.body.prescribible ? 'se puede recetar' : 'ya no se puede recetar'}`,
+  });
+  res.json({ insumo: { id: actualizado.id, prescribible: actualizado.prescribible } });
 }
 
 async function listarAlias(req, res) {
@@ -558,6 +575,9 @@ async function enviarLibro(res, libro, nombre) {
  * por servicio empezando por post-consulta, la existencia física del mes
  * anterior y el bloque de totales (saldo anterior a cantidad a solicitar).
  */
+// Formato de cada columna de totales, como en el Excel del centro (B a M).
+const FORMATO_TOTALES = ['#,##0', '#,##0', '#,##0', '#,##0', '#,##0', '#,##0', '#,##0', '#,##0', '0', '0.0;[Red]0.0', 'General', '#,##0'];
+
 async function exportarBalance(req, res) {
   const establecimientoId = req.usuario.establecimientoId;
   const periodo = req.params.periodo;
@@ -597,16 +617,20 @@ async function exportarBalance(req, res) {
     const fila = hoja.getRow(5 + n);
     fila.getCell(1).value = n + 1;
     fila.getCell(2).value = [f.nombre, f.formaFarmaceutica, f.concentracion].filter(Boolean).join(' ');
-    // Post-consulta entrega desde la bodega: no lleva saldo propio.
+    const p = f.postConsulta;
     const bloques = [
-      [null, null, f.postConsulta.entregado, f.postConsulta.noEntregado, null, f.postConsulta.promedio],
+      [p.saldoAnterior, p.entradas, p.entregado, p.noEntregado, p.saldoSiguiente, p.promedio],
       ...f.servicios.map((s) => [s.saldoAnterior, s.entradas, s.entregado, s.noEntregado, s.saldoSiguiente, s.promedio]),
     ];
     bloques.forEach((valores, k) => valores.forEach((v, c) => { if (v !== null) fila.getCell(3 + k * 6 + c).value = v; }));
     fila.getCell(inicioTotales - 1).value = f.bodega.saldoAnterior;
     const r = f.bres;
-    [r.B, r.C, r.D, r.E, r.F, r.B + r.C - r.D, r.H, r.I, r.J, r.K, r.L, r.M]
-      .forEach((v, c) => { fila.getCell(inicioTotales + c).value = v ?? 'sin consumo'; });
+    [r.B, r.C, r.D, r.E, r.F, r.saldoPorDemanda, r.H, r.I, r.J, r.K, r.L, r.M].forEach((v, c) => {
+      const celda = fila.getCell(inicioTotales + c);
+      celda.value = v ?? (c === 9 ? '#DIV/0!' : null);
+      // Los formatos del balance del centro.
+      celda.numFmt = FORMATO_TOTALES[c];
+    });
   });
   hoja.getColumn(2).width = 40;
   hoja.views = [{ state: 'frozen', xSplit: 2, ySplit: 4 }];
@@ -629,7 +653,32 @@ async function exportarBres(req, res) {
   await enviarLibro(res, libro, `bres-${periodo}.xlsx`);
 }
 
+// --- Kardex ------------------------------------------------------------------------
+
+/**
+ * Kardex de la bodega: de un insumo, o de todos los que se movieron en el
+ * periodo para imprimirlos juntos. Sin periodo, la historia completa.
+ */
+async function kardex(req, res) {
+  const { periodo, insumoId } = req.query;
+  const rango = periodo ? limitesDePeriodo(periodo) : {};
+  const tarjetas = await kardexDe(req.usuario.establecimientoId, {
+    insumoIds: insumoId ? [insumoId] : null,
+    desde: rango.desde ?? null,
+    hasta: rango.hasta ?? null,
+    soloConMovimiento: !insumoId,
+  });
+  await req.bitacora({
+    accion: 'leer',
+    entidad: 'kardex',
+    entidadId: insumoId ?? null,
+    detalle: `Kardex${periodo ? ` ${periodo}` : ''}: ${tarjetas.length} producto(s)`,
+  });
+  res.json({ periodo: periodo ?? null, encabezado: await encabezadoKardex(req.usuario.establecimientoId), tarjetas });
+}
+
 module.exports = {
+  kardex,
   listarUbicaciones,
   crearUbicacion,
   actualizarUbicacion,
@@ -650,6 +699,7 @@ module.exports = {
   agregarAlias,
   quitarAlias,
   listarAlias,
+  cambiarPrescribible,
   exportarBalance,
   exportarBres,
 };

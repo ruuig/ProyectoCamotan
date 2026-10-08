@@ -93,6 +93,7 @@ async function listarUsuarios(req, res) {
       nombre: true,
       dpi: true,
       rol: true,
+      cargo: true,
       esDirector: true,
       activo: true,
       totpSecret: true,
@@ -178,6 +179,82 @@ async function cambiarEstadoUsuario(req, res, next) {
 }
 
 // --- Establecimiento -------------------------------------------------------
+
+const ROL_TEXTO = { admin: 'dirección', preconsulta: 'preconsulta', medico: 'médico', farmacia: 'farmacia', bodega: 'bodega' };
+
+async function buscarUsuario(req, next) {
+  const usuario = await prisma.usuario.findFirst({
+    where: { id: req.params.id, establecimientoId: req.usuario.establecimientoId },
+  });
+  if (!usuario) next({ status: 404, codigo: 'no_encontrado', mensaje: 'Usuario no encontrado' });
+  return usuario;
+}
+
+/** Nombre, cargo y DPI: lo que sale en las hojas impresas. */
+async function actualizarUsuario(req, res, next) {
+  const usuario = await buscarUsuario(req, next);
+  if (!usuario) return undefined;
+
+  if (req.body.dpi && req.body.dpi !== usuario.dpi) {
+    const repetido = await prisma.usuario.findUnique({ where: { dpi: req.body.dpi } });
+    if (repetido) {
+      return next({ status: 409, codigo: 'dpi_duplicado', mensaje: 'Ese DPI ya esta registrado' });
+    }
+  }
+
+  const actualizado = await prisma.usuario.update({ where: { id: usuario.id }, data: req.body });
+
+  const cambios = Object.keys(req.body)
+    .filter((k) => (usuario[k] ?? null) !== (actualizado[k] ?? null))
+    .map((k) => `${k}: "${usuario[k] ?? ''}" -> "${actualizado[k] ?? ''}"`);
+
+  await req.bitacora({
+    accion: 'actualizar',
+    entidad: 'usuario',
+    entidadId: usuario.id,
+    detalle: `Datos de ${usuario.usuario}. ${cambios.join('; ') || 'Sin cambios'}`,
+  });
+
+  res.json({ usuario: usuarioPublico(actualizado) });
+}
+
+/** Rol, director o contraseña nueva, con autorización del director. */
+async function cambiarAccesoUsuario(req, res, next) {
+  const usuario = await buscarUsuario(req, next);
+  if (!usuario) return undefined;
+
+  const { rol, esDirector, password } = req.body;
+
+  // El director no se quita a sí mismo la dirección: nadie podría autorizar.
+  if (usuario.id === req.director.id && esDirector === false) {
+    return next({
+      status: 409,
+      codigo: 'autodesactivacion',
+      mensaje: 'El director no puede quitarse a si mismo la direccion',
+    });
+  }
+
+  const data = {};
+  if (rol !== undefined) data.rol = rol;
+  if (esDirector !== undefined) data.esDirector = esDirector;
+  if (password !== undefined) data.passwordHash = await hashearPassword(password);
+
+  const actualizado = await prisma.usuario.update({ where: { id: usuario.id }, data });
+
+  const partes = [];
+  if (rol !== undefined && rol !== usuario.rol) partes.push(`rol ${ROL_TEXTO[usuario.rol]} -> ${ROL_TEXTO[rol]}`);
+  if (esDirector !== undefined && esDirector !== usuario.esDirector) partes.push(esDirector ? 'nombrado director' : 'deja de ser director');
+  if (password !== undefined) partes.push('contrasena restablecida');
+
+  await req.bitacora({
+    accion: 'actualizar',
+    entidad: 'usuario',
+    entidadId: usuario.id,
+    detalle: `Acceso de ${usuario.usuario}: ${partes.join(', ') || 'sin cambios'}. Autorizo el director ${req.director.nombre}`,
+  });
+
+  res.json({ usuario: usuarioPublico(actualizado) });
+}
 
 async function obtenerEstablecimiento(req, res) {
   const establecimiento = await prisma.establecimiento.findUnique({
@@ -273,6 +350,8 @@ async function confirmarTotp(req, res, next) {
 }
 
 module.exports = {
+  actualizarUsuario,
+  cambiarAccesoUsuario,
   listarSignosPeligro,
   crearSignoPeligro,
   actualizarSignoPeligro,

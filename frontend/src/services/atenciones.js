@@ -20,10 +20,17 @@ export default {
   correcciones: (id) => http.get(`/atenciones/${id}/correcciones`),
   corregirSignoVital: (id, datos) => http.patch(`/atenciones/${id}/preconsulta`, datos),
   prescribir: (id, datos) => http.post(`/atenciones/${id}/prescripcion`, datos),
-  insumos: () => http.get('/insumos'),
+  // Solo lo que se entrega al paciente: el material del servicio no se receta.
+  insumos: () => http.get('/insumos?prescribible=true'),
+  // Lo que el centro no tiene: el paciente lo consigue fuera.
+  recetarFuera: (id, datos) => http.post(`/atenciones/${id}/receta-externa`, datos),
   sugerenciaTipo: (id, { cie, descripcion }) =>
     http.get(`/atenciones/${id}/sugerencia-tipo?${new URLSearchParams(
       Object.entries({ cie, descripcion }).filter(([, v]) => v),
     )}`),
   buscarDiagnostico: (q) => http.get(`/catalogos/cie10?q=${encodeURIComponent(q)}`),
+  // Boleta de Referencia y Contrarreferencia del MSPAS.
+  referencia: (id) => http.get(`/atenciones/${id}/referencia`),
+  guardarReferencia: (id, datos) => http.put(`/atenciones/${id}/referencia`, datos),
+  guardarContrarreferencia: (id, datos) => http.put(`/atenciones/${id}/contrarreferencia`, datos),
 };

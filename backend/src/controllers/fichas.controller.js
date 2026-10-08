@@ -46,6 +46,7 @@ async function impresa(req, res, next) {
       preconsulta: true,
       diagnosticos: { orderBy: { orden: 'asc' } },
       prescripciones: { include: { insumo: true } },
+      recetasExternas: { orderBy: { creadaEn: 'asc' } },
     },
   });
   if (!atencion) {

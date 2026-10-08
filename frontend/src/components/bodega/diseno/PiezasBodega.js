@@ -42,7 +42,12 @@ export function sello(fecha) {
   return { mes: MESES[d.getUTCMonth()], anio: d.getUTCFullYear() };
 }
 
-export const miles = (n) => (n === null || n === undefined ? '' : Math.round(Number(n)).toLocaleString('en-US'));
+// Como el formato #,##0 de Excel: entero con separador de miles, y el medio
+// se redondea alejandose del cero (-2.5 -> -3), no hacia arriba.
+const redondearExcel = (x) => Math.sign(x) * Math.round(Math.abs(x));
+export const miles = (n) => (n === null || n === undefined ? '' : redondearExcel(Number(n)).toLocaleString('en-US'));
+// Como el formato General de Excel: el numero tal cual, con sus decimales.
+export const general = (n) => (n === null || n === undefined ? '' : String(Math.round(Number(n) * 1e9) / 1e9));
 
 
 const SIN_CATEGORIA = { nombre: 'Sin categoría', corto: 'Otro', tinta: '#334155', fondo: '#EEF2F6', medio: '#64748B', trazo: 'M5 5h14v14H5z' };

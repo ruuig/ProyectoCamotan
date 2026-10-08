@@ -15,6 +15,7 @@ const CompletarFicha = () => import('../views/pacientes/CompletarFicha.vue');
 const FichaClinica = () => import('../views/impresion/FichaClinica.vue');
 const ResumenExpediente = () => import('../views/impresion/ResumenExpediente.vue');
 const BoletaReferencia = () => import('../views/impresion/BoletaReferencia.vue');
+const FormularioReferencia = () => import('../views/consulta/FormularioReferencia.vue');
 const TarjetaControl = () => import('../views/impresion/TarjetaControl.vue');
 const HojaBres = () => import('../views/impresion/HojaBres.vue');
 const OficioBajaImpreso = () => import('../views/impresion/OficioBaja.vue');
@@ -28,7 +29,6 @@ const VistaBajas = () => import('../views/inventario/VistaBajas.vue');
 const VistaRetiros = () => import('../views/inventario/VistaRetiros.vue');
 import MarcoBodega from '../components/bodega/MarcoBodega.vue';
 const VistaTrazabilidad = () => import('../views/inventario/VistaTrazabilidad.vue');
-const VistaTraslados = () => import('../views/inventario/VistaTraslados.vue');
 const VistaReportes = () => import('../views/inventario/VistaReportes.vue');
 const VistaSemaforo = () => import('../views/inventario/VistaSemaforo.vue');
 const HojaBalance = () => import('../views/impresion/HojaBalance.vue');
@@ -38,6 +38,10 @@ const VistaSigsa = () => import('../views/sigsa/VistaSigsa.vue');
 const HojaSigsa4 = () => import('../views/impresion/HojaSigsa4.vue');
 const HojaSemaforo = () => import('../views/impresion/HojaSemaforo.vue');
 const ComprobanteTraslado = () => import('../views/impresion/ComprobanteTraslado.vue');
+const HojaRequisicion = () => import('../views/impresion/HojaRequisicion.vue');
+const HojaKardex = () => import('../views/impresion/HojaKardex.vue');
+const VistaRequisiciones = () => import('../views/inventario/VistaRequisiciones.vue');
+const VistaKardex = () => import('../views/inventario/VistaKardex.vue');
 
 import FormularioPreconsulta from '../views/preconsulta/FormularioPreconsulta.vue';
 import VistaCola from '../views/cola/VistaCola.vue';
@@ -46,6 +50,7 @@ import VistaInventario from '../views/inventario/VistaInventario.vue';
 import NuevoInsumo from '../views/inventario/NuevoInsumo.vue';
 import DetalleInsumo from '../views/inventario/DetalleInsumo.vue';
 import VistaDispensacion from '../views/inventario/VistaDispensacion.vue';
+import VistaControlFarmacia from '../views/inventario/VistaControlFarmacia.vue';
 import VistaConsolidado from '../views/admin/VistaConsolidado.vue';
 import VistaAdministracion from '../views/admin/VistaAdministracion.vue';
 
@@ -101,6 +106,12 @@ const router = createRouter({
           component: VistaConsulta,
           meta: { roles: ['admin', 'medico'] },
         },
+        {
+          path: ':id/referencia',
+          name: 'consulta-referencia',
+          component: FormularioReferencia,
+          meta: { roles: ['admin', 'medico'] },
+        },
       ],
     },
     {
@@ -116,7 +127,11 @@ const router = createRouter({
             // Las rutas fijas van antes que ':id', o este se las traga.
             { path: 'cierre', name: 'inventario-cierre', component: InventarioCierre, meta: { roles: BODEGA } },
             { path: 'bres', name: 'bres', component: VistaBres, meta: { roles: BODEGA } },
-            { path: 'traslados', name: 'traslados', component: VistaTraslados, meta: { roles: BODEGA } },
+            // El traslado es la requisicion: el enlace viejo lleva a ella.
+            { path: 'traslados', redirect: '/inventario/requisiciones' },
+            // Farmacia pide a bodega con requisición, como los demás servicios.
+            { path: 'requisiciones', name: 'requisiciones', component: VistaRequisiciones, meta: { roles: [...BODEGA, 'farmacia'] } },
+            { path: 'kardex', name: 'kardex', component: VistaKardex, meta: { roles: BODEGA } },
             { path: 'trazabilidad', name: 'trazabilidad', component: VistaTrazabilidad, meta: { roles: BODEGA } },
             { path: 'reportes', name: 'reportes-servicios', component: VistaReportes, meta: { roles: BODEGA } },
             // El balance quedo dentro del BRES como "Detalle por servicio".
@@ -144,6 +159,7 @@ const router = createRouter({
       component: LayoutPrincipal,
       children: [
         { path: '', name: 'dispensacion', component: VistaDispensacion, meta: { roles: FARMACIA } },
+        { path: 'control', name: 'control-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA } },
       ],
     },
     {
@@ -218,6 +234,8 @@ const router = createRouter({
         { path: 'sigsa4/:periodo', name: 'imprimir-sigsa4', component: HojaSigsa4, meta: { roles: FARMACIA } },
         { path: 'semaforo', name: 'imprimir-semaforo', component: HojaSemaforo, meta: { roles: BODEGA } },
         { path: 'traslado/:id', name: 'imprimir-traslado', component: ComprobanteTraslado, meta: { roles: BODEGA } },
+        { path: 'requisicion/:id', name: 'imprimir-requisicion', component: HojaRequisicion, meta: { roles: [...BODEGA, 'farmacia'] } },
+        { path: 'kardex', name: 'imprimir-kardex', component: HojaKardex, meta: { roles: BODEGA } },
       ],
     },
     // Cualquier otra ruta cae al guard, que envia al panel del rol o al login.

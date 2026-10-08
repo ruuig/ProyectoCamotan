@@ -7,7 +7,7 @@ import Icono from '../../components/comunes/Icono.vue';
 import PasosCierre from '../../components/bodega/PasosCierre.vue';
 import DetallePorServicio from '../../components/bodega/DetallePorServicio.vue';
 import Pictograma from '../../components/bodega/diseno/Pictograma.vue';
-import { CATEGORIA, estiloCategoria, miles, decimal } from '../../components/bodega/diseno/PiezasBodega';
+import { CATEGORIA, estiloCategoria, miles, decimal, general } from '../../components/bodega/diseno/PiezasBodega';
 import { cierre, nombrePeriodo } from '../../dominio/bodega';
 
 /**
@@ -120,6 +120,8 @@ const totales = computed(() => {
 function celda(r, c) {
   const v = r[c.clave];
   if (c.letra === 'K') return v === null || v === undefined ? '—' : decimal(v);
+  // El maximo va sin formato en el balance: con sus decimales.
+  if (c.letra === 'L') return v ? general(v) : '–';
   return v ? miles(v) : '–';
 }
 </script>

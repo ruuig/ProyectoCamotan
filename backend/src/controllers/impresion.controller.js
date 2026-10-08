@@ -14,12 +14,14 @@ const DOCUMENTOS = {
   comprobante_traslado: 'Comprobante de traslado',
   tarjeta_control: 'Tarjeta de control de apoyo',
   oficio_baja: 'Oficio de baja',
+  requisicion: 'Requisición despacho de almacén',
+  kardex: 'Kardex de bodega',
   sigsa4: 'SIGSA-4, registro diario de post-consulta',
   sigsa3cs: 'SIGSA-3CS, registro diario de consulta',
 };
 
 const DOCUMENTOS_BODEGA = new Set([
-  'bres', 'balance', 'inventario_cierre', 'hoja_conteo', 'semaforo', 'comprobante_traslado', 'tarjeta_control', 'oficio_baja',
+  'bres', 'balance', 'inventario_cierre', 'hoja_conteo', 'semaforo', 'comprobante_traslado', 'tarjeta_control', 'oficio_baja', 'requisicion', 'kardex',
 ]);
 
 /**
@@ -44,7 +46,7 @@ async function registrar(req, res, next) {
     return next({ status: 403, codigo: 'sin_permiso', mensaje: 'Ese documento no corresponde a su rol' });
   }
   // Farmacia imprime solo su SIGSA-4.
-  if (req.usuario.rol === 'farmacia' && documento !== 'sigsa4') {
+  if (req.usuario.rol === 'farmacia' && !['sigsa4', 'requisicion'].includes(documento)) {
     return next({ status: 403, codigo: 'sin_permiso', mensaje: 'Los documentos de bodega los imprime bodega' });
   }
 

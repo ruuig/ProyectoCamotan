@@ -45,9 +45,9 @@ function pmdr(meses) {
   const recientes = meses.slice(-MESES_PMDR);
   if (recientes.length === 0) return { valor: null, mesesUsados: 0, completo: false };
 
-  const suma = recientes.reduce((s, v) => s + v, 0);
+  const demandaTotal = recientes.reduce((total, demandaDelMes) => total + demandaDelMes, 0);
   return {
-    valor: suma / recientes.length,
+    valor: demandaTotal / recientes.length,
     mesesUsados: recientes.length,
     completo: recientes.length === MESES_PMDR,
   };

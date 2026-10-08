@@ -5,16 +5,13 @@
  *   1. Borra el inventario de prueba (insumos, lotes, movimientos y todo lo
  *      que cuelga de ellos).
  *   2. Crea el catalogo del balance, con su orden, categoria y alias.
- *   3. Carga el historial: reportes de cada servicio por mes y los BRES
- *      cerrados con las cifras del balance. Post-consulta es el propio centro:
- *      su historial queda como reporte de post-consulta, para el promedio.
+ *   3. El historial del balance va aparte: scripts/cargarHistorialBalance.js.
  *   4. Crea la existencia del centro (bodega + post-consulta) al cierre del
  *      ultimo mes, con los lotes del semaforo. Lo que no tiene lote conocido
  *      queda en cuarentena para registrar su lote en el inventario fisico.
  */
 
-const { entero } = require('../src/services/importacionBodega.service');
-const { normalizarAlias } = require('../src/services/bodega.service');
+const { CATEGORIAS_NO_PRESCRIBIBLES } = require('../src/services/bodega.service');
 
 // Fin del ultimo mes en hora de Guatemala (UTC-6), un minuto antes del corte.
 function finDelMes(periodo) {
@@ -22,7 +19,7 @@ function finDelMes(periodo) {
   return new Date(Date.UTC(anio, mes, 1) + 6 * 3600000 - 60000);
 }
 
-module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, mapaServicios, meses, conciliacion, existenciaCentro }) {
+module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, meses, conciliacion, existenciaCentro }) {
   const admin = await prisma.usuario.findFirst({ where: { establecimientoId: eid, rol: 'admin' } });
   const ultimo = meses[meses.length - 1];
   const fechaInicial = finDelMes(ultimo.periodo);
@@ -64,6 +61,7 @@ module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, map
         unidadMedida: 'unidad',
         unidadEntrega: 'unidad',
         ordenFormulario: c.orden,
+        prescribible: !CATEGORIAS_NO_PRESCRIBIBLES.includes(c.categoria),
       })),
     });
     const creados = await tx.insumo.findMany({ where: { establecimientoId: eid }, select: { id: true, ordenFormulario: true } });
@@ -73,57 +71,10 @@ module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, map
       skipDuplicates: true,
     });
 
-    // --- 3. Historial ------------------------------------------------------------
-    for (const m of meses) {
-      for (const [nombreServicio, ubicacion] of mapaServicios) {
-        if (!ubicacion) continue;
-        const renglones = [];
-        m.renglones.forEach((r) => {
-          const clave = catalogo.find((c) => normalizarAlias(c.nombre) === normalizarAlias(r.nombre))?.clave;
-          const s = r.servicios.find((x) => x.servicio === nombreServicio);
-          if (!clave || !s) return;
-          const valores = [s.saldoAnterior, s.entradas, s.entregado, s.noEntregado, s.saldoSiguiente].map(entero);
-          if (valores.every((v) => v === 0)) return;
-          renglones.push({
-            insumoId: idDe.get(clave),
-            saldoAnterior: valores[0],
-            entradas: Math.max(0, valores[1]),
-            entregado: Math.max(0, valores[2]),
-            noEntregado: Math.max(0, valores[3]),
-            saldoSiguiente: valores[4],
-            promedioAnotado: s.promedio === null || s.promedio === undefined ? null : entero(s.promedio),
-          });
-        });
-        if (!renglones.length) continue;
-        const rep = await tx.reporteServicio.create({
-          data: { ubicacionId: ubicacion.id, periodo: m.periodo, capturadoPor: admin.id, revisado: true, importado: true, observacion: `Importado de ${m.hoja}` },
-        });
-        await tx.reporteServicioRenglon.createMany({ data: renglones.map((x) => ({ ...x, reporteId: rep.id })), skipDuplicates: true });
-      }
-
-      // El BRES del mes, cerrado, con las cifras que el centro envio.
-      const bres = await tx.bres.create({
-        data: { establecimientoId: eid, periodo: m.periodo, estado: 'cerrado', generadoPor: admin.id, cerradoEn: finDelMes(m.periodo), observaciones: `Importado del balance ${m.hoja}` },
-      });
-      const vistos = new Set();
-      const filas = [];
-      for (const r of m.renglones) {
-        const clave = catalogo.find((c) => normalizarAlias(c.nombre) === normalizarAlias(r.nombre))?.clave;
-        if (!clave || vistos.has(clave) || !r.totales) continue;
-        vistos.add(clave);
-        const t = r.totales;
-        const J = Number(t.J) || 0;
-        filas.push({
-          bresId: bres.id,
-          insumoId: idDe.get(clave),
-          saldoInicial: entero(t.B), entradas: entero(t.C), reajustes: 0, entregado: entero(t.D), noEntregado: entero(t.E),
-          demandaReal: entero(t.F), saldoFinal: entero(t.H), existenciaBodega: entero(t.I),
-          pmdr: J, med: J > 0 && Number.isFinite(Number(t.K)) ? Math.round(Number(t.K) * 100) / 100 : null,
-          cantidadMaxima: entero(t.L), cantidadSolicitar: entero(t.M), cantidadMinima: Math.round(J * 2),
-        });
-      }
-      await tx.bresRenglon.createMany({ data: filas });
-    }
+    // --- 3. Historial ---------------------------------------------------------------
+    // El historial del balance (reportes de cada servicio y totales de cada
+    // mes) lo carga scripts/cargarHistorialBalance.js, que lo lee tal como lo
+    // muestra Excel y lo comprueba celda por celda con verificarBalance.js.
 
     // --- 4. Existencia inicial con sus lotes ---------------------------------------
     for (const { c, lotes: lotesConciliados, sinLote } of conciliacion) {
@@ -178,7 +129,6 @@ module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, map
       data: [
         { usuarioId: admin.id, accion: 'eliminar', entidad: 'insumo', detalle: `Inventario de prueba eliminado: ${insumos.length} insumos, ${lotes.length} lotes` },
         { usuarioId: admin.id, accion: 'crear', entidad: 'insumo', detalle: `Catálogo del balance ${ultimo.hoja}: ${catalogo.length} insumos, ${duenoAlias.size} alias` },
-        { usuarioId: admin.id, accion: 'crear', entidad: 'reporte_servicio', detalle: `Historial importado: ${meses.length} meses (${meses[0].periodo} a ${ultimo.periodo}) y sus BRES` },
         { usuarioId: admin.id, accion: 'crear', entidad: 'lote', detalle: `Existencia inicial al cierre de ${ultimo.hoja}: ${conciliacion.reduce((s, x) => s + existenciaCentro(x.c.clave), 0)} unidades` },
       ],
     });
@@ -187,5 +137,5 @@ module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, map
   for (const vista of ['saldo_insumo', 'consumo_diario', 'cobertura_comunidad']) {
     await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${vista}`).catch(() => {});
   }
-  console.log('Carga aplicada.');
+  console.log('Carga aplicada. Falta el historial del balance: scripts/cargarHistorialBalance.js');
 };

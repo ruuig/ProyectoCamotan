@@ -24,6 +24,9 @@ const CATEGORIAS = [
   { clave: 'tuberculosis', etiqueta: 'Tuberculosis', color: 'rojo' },
 ];
 const CLAVES_CATEGORIA = CATEGORIAS.map((c) => c.clave);
+// Se usan en el servicio y no se entregan al paciente: un insumo nuevo de
+// estas categorias no aparece en la receta del medico.
+const CATEGORIAS_NO_PRESCRIBIBLES = ['medico_quirurgico', 'laboratorio'];
 const ORDEN_CATEGORIA = new Map(CATEGORIAS.map((c, i) => [c.clave, i]));
 
 /**
@@ -106,38 +109,47 @@ function numeroTraslado(anio, correlativo) {
  * que vence primero. Solo lotes disponibles y no vencidos.
  */
 function lotesPepe(lotes, cantidad, ahora = new Date()) {
+  const esUsable = (lote) => lote.estado === 'disponible'
+    && lote.cantidadActual > 0
+    && new Date(lote.fechaVence) >= new Date(ahora);
   const usables = lotes
-    .filter((l) => l.estado === 'disponible' && l.cantidadActual > 0 && new Date(l.fechaVence) >= new Date(ahora))
-    .sort((a, b) => new Date(a.fechaVence) - new Date(b.fechaVence));
+    .filter(esUsable)
+    .sort((loteA, loteB) => new Date(loteA.fechaVence) - new Date(loteB.fechaVence));
+
   const propuesta = [];
-  let falta = cantidad;
-  for (const l of usables) {
-    if (falta <= 0) break;
-    const toma = Math.min(l.cantidadActual, falta);
-    propuesta.push({ loteId: l.id, numeroLote: l.numeroLote, fechaVence: l.fechaVence, cantidad: toma });
-    falta -= toma;
+  let pendiente = cantidad;
+  for (const lote of usables) {
+    if (pendiente <= 0) break;
+    const cantidadDelLote = Math.min(lote.cantidadActual, pendiente);
+    propuesta.push({ loteId: lote.id, numeroLote: lote.numeroLote, fechaVence: lote.fechaVence, cantidad: cantidadDelLote });
+    pendiente -= cantidadDelLote;
   }
-  return { propuesta, faltante: Math.max(0, falta) };
+  return { propuesta, faltante: Math.max(0, pendiente) };
 }
 
 /**
  * Propuesta de distribucion de un insumo entre los servicios.
  *
- * iguales: la cantidad entre el numero de servicios, como hoy.
+ * iguales: la cantidad entre los lugares del centro (lugares, 32 por
+ *   defecto), como la columna "Saldo Actual / 32" del inventario de cierre:
+ *   cuanto le toca a cada lugar. Si hay menos servicios que lugares, lo de
+ *   los lugares que sobran se queda en bodega.
  * consumo: en proporcion al promedio de entregas reportadas por cada uno.
  *
- * En ambos modos se redondea hacia abajo a multiplos del empaque: no se
- * manda media caja. Lo que sobra por el redondeo queda en bodega.
+ * Por lugar se redondea al entero, como lo muestra el Excel; con empaque se
+ * baja al multiplo del empaque: no se manda media caja. Nunca se reparte mas
+ * de lo que hay.
  *
  * servicios: [{ id, nombre, promedio }]
  */
-function propuestaDistribucion({ cantidad, servicios, modo = 'iguales', empaque = 1 }) {
+function propuestaDistribucion({ cantidad, servicios, modo = 'iguales', empaque = 1, lugares = null }) {
   const n = servicios.length;
   if (n === 0 || cantidad <= 0) {
     return { modo, filas: [], asignado: 0, sobrante: Math.max(0, cantidad), aviso: null };
   }
 
-  const redondear = (x) => Math.floor(x / empaque) * empaque;
+  const haciaAbajo = (x) => Math.floor(x / empaque) * empaque;
+  const redondear = (x) => (empaque > 1 ? haciaAbajo(x) : Math.round(x));
   let aviso = null;
   let pesos;
   const totalConsumo = servicios.reduce((s, x) => s + (x.promedio ?? 0), 0);
@@ -146,15 +158,20 @@ function propuestaDistribucion({ cantidad, servicios, modo = 'iguales', empaque 
     pesos = servicios.map((s) => (s.promedio ?? 0) / totalConsumo);
   } else {
     if (modo === 'consumo') aviso = 'Ningún servicio tiene entregas reportadas: se reparte en partes iguales';
-    pesos = servicios.map(() => 1 / n);
+    const entre = Math.max(n, lugares ?? n);
+    pesos = servicios.map(() => 1 / entre);
   }
 
-  const filas = servicios.map((s, i) => ({
+  let filas = servicios.map((s, i) => ({
     ubicacionId: s.id,
     nombre: s.nombre,
     promedio: s.promedio ?? 0,
     cantidad: redondear(cantidad * pesos[i]),
   }));
+  // Redondear al entero puede pasarse de lo que hay: entonces, hacia abajo.
+  if (filas.reduce((s, f) => s + f.cantidad, 0) > cantidad) {
+    filas = filas.map((f, i) => ({ ...f, cantidad: haciaAbajo(cantidad * pesos[i]) }));
+  }
   const asignado = filas.reduce((s, f) => s + f.cantidad, 0);
   return { modo: aviso ? 'iguales' : modo, filas, asignado, sobrante: cantidad - asignado, aviso };
 }
@@ -198,39 +215,46 @@ function ultimosPeriodos(periodo, n) {
 // --- Balance y BRES con la formula del centro -----------------------------------------
 
 /**
- * Una fila del BRES (columnas B a M de MD/Bodega.md seccion 7).
+ * Una fila de los totales del balance (columnas B a M de MD/Bodega.md
+ * seccion 7), con las mismas formulas del Excel del centro:
  *
- * B saldo anterior del municipio, C entradas a bodega, D entregado (centro +
- * servicios), E no entregado, G reajustes, I existencia fisica en bodega,
- * demandas: demanda (D + E) de los meses del promedio, incluido el actual.
+ *   B saldo anterior: el saldo siguiente (H) del mes previo.
+ *   C entradas a bodega.   D entregado (post-consulta + servicios).
+ *   E no entregado.        F demanda = D + E.
+ *   saldo x demanda = B + C - D: lo que deberia haber; si no coincide con H,
+ *     algo no se reporto.
+ *   H saldo siguiente = la suma de los saldos de cada servicio (post-consulta
+ *     incluida) mas la existencia fisica en bodega (I): lo que hay.
+ *   J promedio = la suma del promedio de cada servicio.
+ *   K meses de existencia = H / J.   L maximo = J x nivel maximo.
+ *   M cantidad a solicitar = L - I (el MSPAS resta H). Negativa si sobra: el
+ *     balance la muestra asi, y el formulario de pedido la toma como cero.
+ *
+ * saldos: saldo siguiente de cada servicio. promedios: el de cada servicio.
  */
-function filaBres({ B, C, D, E, G, I, demandas, config }) {
+function filaBres({ B, C, D, E, G = 0, I, saldos, promedios, config }) {
   const F = D + E;
-  const H = B + C - D + G;
-  const conDatos = demandas.filter((d) => d !== null && d !== undefined);
-  const J = conDatos.length ? conDatos.reduce((s, d) => s + d, 0) / conDatos.length : 0;
+  const H = saldos.reduce((s, x) => s + x, 0) + I;
+  const J = promedios.reduce((s, x) => s + x, 0);
   const K = J > 0 ? H / J : null;
   const L = J * config.nivelMaximoMeses;
   const minimo = J * config.nivelMinimoMeses;
-  // El centro resta la existencia de bodega; el MSPAS, el saldo total.
   const restar = config.formulaPedido === 'mspas' ? H : I;
-  const M = Math.max(0, Math.ceil(L - restar));
+  const M = L - restar;
   return {
-    B, C, D, E, F, G, H, I,
-    J: Math.round(J * 100) / 100,
-    K: K === null ? null : Math.round(K * 10) / 10,
-    L: Math.ceil(L),
-    M,
+    B, C, D, E, F, G, H, I, J, K, L, M,
+    saldoPorDemanda: B + C - D,
     minimo: Math.ceil(minimo),
     bajoMinimo: J > 0 && H < minimo,
     sinConsumo: J === 0,
-    mesesConDatos: conDatos.length,
+    mesesConDatos: promedios.length,
   };
 }
 
 module.exports = {
   CATEGORIAS,
   CLAVES_CATEGORIA,
+  CATEGORIAS_NO_PRESCRIBIBLES,
   ordenarInsumos,
   normalizarAlias,
   RANGOS_CENTRO,

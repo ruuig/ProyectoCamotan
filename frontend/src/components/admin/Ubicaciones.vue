@@ -60,56 +60,61 @@ onMounted(cargar);
 </script>
 
 <template>
-  <div class="space-y-5">
-    <form class="panel max-w-3xl space-y-4 p-relleno" @submit.prevent="crear">
-      <h2 class="font-titulo text-titulo-seccion font-medium text-tinta">Agregar servicio</h2>
-      <div class="grid gap-4 sm:grid-cols-3">
-        <div class="sm:col-span-3">
-          <label for="ubNombre" class="etiqueta-campo">Nombre</label>
-          <input id="ubNombre" v-model="nuevo.nombre" required minlength="2" maxlength="120" placeholder="C/C Nuevo" class="campo" />
-        </div>
-        <div>
-          <label for="ubTipo" class="etiqueta-campo">Tipo</label>
-          <select id="ubTipo" v-model="nuevo.tipo" class="campo">
-            <option v-for="t in tipos" :key="t.valor" :value="t.valor">{{ t.etiqueta }}</option>
-          </select>
-        </div>
-        <div class="sm:col-span-2">
-          <label for="ubCom" class="etiqueta-campo">Comunidad</label>
-          <input id="ubCom" v-model="nuevo.comunidad" maxlength="120" class="campo" />
-        </div>
-      </div>
-      <button type="submit" class="boton-primario"><Icono nombre="agregar" :tamano="18" /> Agregar</button>
-    </form>
-
-    <p v-if="error" role="alert" class="aviso aviso-urgente">{{ error }}</p>
-    <p v-if="aviso" class="aviso aviso-informativo">{{ aviso }}</p>
-
-    <div class="panel">
-      <header class="panel-encabezado">
-        <h2 class="panel-titulo">Ubicaciones</h2>
-        <span class="text-sm text-apagado">{{ lista.filter((u) => u.activo).length }} activas</span>
+  <div class="ubicaciones">
+    <section class="b-panel min-w-0">
+      <header class="b-panel-cabeza">
+        <h2 class="b-panel-titulo">Servicios</h2>
+        <span class="text-sm font-semibold text-apagado">{{ lista.filter((u) => u.activo).length }} activos</span>
       </header>
-      <ul class="lista">
-        <li v-for="u in lista" :key="u.id" class="flex flex-wrap items-center gap-3 px-relleno py-2.5" :class="u.activo ? '' : 'opacity-60'">
+      <ul class="servicios">
+        <li v-for="u in lista" :key="u.id" :class="u.activo ? '' : 'inactivo'">
           <input
             :value="u.nombre"
             :aria-label="`Nombre de ${u.nombre}`"
-            class="campo !min-h-0 min-w-[14rem] flex-1 !py-1.5"
+            class="b-campo !h-[38px] min-w-0 flex-1"
             :disabled="u.tipo === 'bodega'"
             @change="renombrar(u, $event.target.value)"
           />
-          <span class="w-40 text-sm text-tinta-2">{{ u.tipoEtiqueta }}</span>
-          <button
-            v-if="u.tipo !== 'bodega'"
-            type="button"
-            class="boton-secundario !min-h-0 !py-1.5"
-            @click="alternar(u)"
-          >
+          <span class="tipo">{{ u.tipoEtiqueta }}</span>
+          <button v-if="u.tipo !== 'bodega'" type="button" class="b-btn chico w-[110px]" :class="u.activo ? 'secundario' : 'exito'" @click="alternar(u)">
             {{ u.activo ? 'Desactivar' : 'Activar' }}
           </button>
+          <span v-else class="w-[110px]" />
         </li>
       </ul>
-    </div>
+    </section>
+
+    <form class="b-panel self-start" @submit.prevent="crear">
+      <header class="b-panel-cabeza"><h2 class="b-panel-titulo">Agregar servicio</h2></header>
+      <div class="b-panel-cuerpo b-rejilla">
+        <div class="c12">
+          <label for="ubNombre" class="b-etiqueta">Nombre</label>
+          <input id="ubNombre" v-model="nuevo.nombre" required minlength="2" maxlength="120" placeholder="C/C Nuevo" class="b-campo" />
+        </div>
+        <div class="c12">
+          <label for="ubTipo" class="b-etiqueta">Tipo</label>
+          <select id="ubTipo" v-model="nuevo.tipo" class="b-campo">
+            <option v-for="t in tipos" :key="t.valor" :value="t.valor">{{ t.etiqueta }}</option>
+          </select>
+        </div>
+        <div class="c12">
+          <label for="ubCom" class="b-etiqueta">Comunidad <span class="b-opcional">opcional</span></label>
+          <input id="ubCom" v-model="nuevo.comunidad" maxlength="120" class="b-campo" />
+        </div>
+        <p v-if="error" role="alert" class="c12 b-aviso error">{{ error }}</p>
+        <p v-if="aviso" class="c12 b-aviso ok">{{ aviso }}</p>
+        <button type="submit" class="c12 b-btn primario"><Icono nombre="agregar" :tamano="20" /> Agregar</button>
+      </div>
+    </form>
   </div>
 </template>
+
+<style scoped>
+.ubicaciones { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
+@media (max-width: 1000px) { .ubicaciones { grid-template-columns: 1fr; } }
+.servicios { max-height: calc(100vh - 360px); min-height: 260px; overflow-y: auto; }
+.servicios li { display: flex; align-items: center; gap: 12px; padding: 7px 18px; border-top: 1px solid #EEF2F6; }
+.servicios li:first-child { border-top: none; }
+.servicios li.inactivo { opacity: .55; }
+.tipo { width: 170px; font-size: 13px; font-weight: 600; color: #64748B; }
+</style>

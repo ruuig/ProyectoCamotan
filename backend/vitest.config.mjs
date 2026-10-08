@@ -1,4 +1,6 @@
 import { config } from 'dotenv';
+import os from 'os';
+import path from 'path';
 import { defineConfig } from 'vitest/config';
 
 config();
@@ -21,6 +23,7 @@ export default defineConfig({
     // atenciones de un archivo aparecen en la cola que otro esta comprobando.
     fileParallelism: false,
     testTimeout: 20000,
-    env: { DATABASE_URL: urlPruebas },
+    // Los respaldos de las pruebas van a una carpeta temporal, no a la del sistema.
+    env: { DATABASE_URL: urlPruebas, RESPALDOS_DIR: path.join(os.tmpdir(), 'camotan_respaldos_pruebas') },
   },
 });

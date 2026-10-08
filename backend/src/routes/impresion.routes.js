@@ -25,6 +25,8 @@ const registrar = z.object({
     'comprobante_traslado',
     'tarjeta_control',
     'oficio_baja',
+    'requisicion',
+    'kardex',
     // Farmacia: registro diario de post-consulta.
     'sigsa4',
     'sigsa3cs',

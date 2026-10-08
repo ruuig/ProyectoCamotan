@@ -31,12 +31,13 @@ async function datos3cs(req) {
       paciente: { include: { lugarPoblado: { select: { nombre: true } } } },
       diagnosticos: true,
       prescripciones: { include: { insumo: { select: { nombreGenerico: true, presentacion: true } } } },
+      recetasExternas: { orderBy: { creadaEn: 'asc' } },
       medico: { select: { id: true, nombre: true } },
     },
   });
   const [establecimiento, medico] = await Promise.all([
     prisma.establecimiento.findUnique({ where: { id: establecimientoId } }),
-    medicoId ? prisma.usuario.findFirst({ where: { id: Number(medicoId), establecimientoId }, select: { nombre: true } }) : null,
+    medicoId ? prisma.usuario.findFirst({ where: { id: Number(medicoId), establecimientoId }, select: { nombre: true, cargo: true } }) : null,
   ]);
   return {
     desde,
@@ -47,6 +48,7 @@ async function datos3cs(req) {
       municipio: establecimiento.municipio,
       servicio: establecimiento.nombre,
       responsable: medico?.nombre ?? null,
+      cargo: medico?.cargo ?? null,
     },
     renglones: renglonesSigsa3cs(atenciones, { sensibles: puedeVerSensibles(req.usuario) }),
   };
@@ -70,7 +72,7 @@ async function medicos(req, res) {
 
 const COLUMNAS = [
   ['Día de la consulta', 8], ['No. historia clínica', 12], ['Nombres y apellidos del paciente', 30], ['CUI', 16],
-  ['1/ Sexo', 6], ['2/ Pueblo', 7], ['3/ Comunidad lingüística', 9], ['4/ Nacimiento: día', 7], ['Mes', 5], ['Año', 6], ['Edad', 8],
+  ['1/ Sexo', 6], ['2/ Pueblo', 7], ['3/ Comunidad lingüística', 9], ['4/ Nacimiento: día', 7], ['Mes', 5], ['Año', 6],
   ['5/ Discapacidad', 9], ['6/ Orientación sexual', 9], ['7/ Escolaridad', 9], ['8/ Profesión u oficio', 16],
   ['Comunidad y/o dirección exacta', 22], ['Municipio', 14], ['9/ Agrícola migrante', 8], ['10/ Consulta', 8], ['11/ Control', 7],
   ['12/ Semana de gestación', 8], ['13/ Viene', 6], ['14/ Fue', 6], ['Referido a', 16],
@@ -79,37 +81,72 @@ const COLUMNAS = [
   ['15/ Lugar de notificación', 9], ['Número de notificación', 12], ['Nombres y apellidos del acompañante', 24],
 ];
 
-async function sigsa3csExcel(req, res) {
-  const d = await datos3cs(req);
-  const libro = new ExcelJS.Workbook();
-  const hoja = libro.addWorksheet('SIGSA-3CS', { pageSetup: { orientation: 'landscape', paperSize: 5, fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+/** Varios valores en una misma celda, uno por línea, como se escribe a mano. */
+const unoPorLinea = (lista, campo) => lista.map((elemento) => elemento[campo]).join('\n');
+
+/** Valores de una fila de la hoja, en el orden de las columnas del formulario. */
+function filaDelRenglon(renglon) {
+  const { nacimiento, diagnosticos, tratamiento } = renglon;
+  return [
+    renglon.dia, renglon.historiaClinica, renglon.nombre, renglon.cui,
+    renglon.sexo, renglon.pueblo, renglon.comunidadLinguistica,
+    nacimiento.dia, nacimiento.mes, nacimiento.anio,
+    renglon.discapacidad, renglon.orientacionSexual, renglon.escolaridad, renglon.profesion,
+    renglon.comunidad, renglon.municipio, renglon.migrante,
+    renglon.consulta, renglon.control, renglon.semanasGestacion,
+    renglon.viene, renglon.fue, renglon.referidoA,
+    unoPorLinea(diagnosticos, 'descripcion'), unoPorLinea(diagnosticos, 'cie'),
+    unoPorLinea(tratamiento, 'descripcion'), unoPorLinea(tratamiento, 'presentacion'),
+    unoPorLinea(tratamiento, 'cantidad'),
+    renglon.notificacionLugar, renglon.notificacionNumero, renglon.acompanante,
+  ];
+}
+
+/** Las filas del encabezado del formulario, sobre la tabla. */
+function escribirEncabezado(hoja, { encabezado, desde, hasta }) {
   hoja.addRow(['FOR-SIGSA-3CS · Registro diario de consulta en centro de salud']);
-  hoja.addRow([`Área de Salud: ${d.encabezado.areaSalud}`, '', '', `Distrito de Salud: ${d.encabezado.distrito}`, '', '', '', `Municipio: ${d.encabezado.municipio}`, '', '', '', `Servicio de Salud: ${d.encabezado.servicio}`]);
-  hoja.addRow([`Responsable de la información: ${d.encabezado.responsable ?? ''}`, '', '', `Del ${d.desde} al ${d.hasta}`]);
+  hoja.addRow([
+    `Área de Salud: ${encabezado.areaSalud}`, '', '', `Distrito de Salud: ${encabezado.distrito}`, '', '', '',
+    `Municipio: ${encabezado.municipio}`, '', '', '', `Servicio de Salud: ${encabezado.servicio}`,
+  ]);
+  hoja.addRow([
+    `Responsable de la información: ${encabezado.responsable ?? ''}`, '', '',
+    `Cargo: ${encabezado.cargo ?? ''}`, '', '', `Del ${desde} al ${hasta}`,
+  ]);
   hoja.addRow([]);
-  const cabeza = hoja.addRow(COLUMNAS.map((c) => c[0]));
-  cabeza.font = { bold: true, size: 9 };
-  cabeza.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
-  cabeza.height = 42;
-  COLUMNAS.forEach((c, i) => { hoja.getColumn(i + 1).width = c[1]; });
-  const lineas = (lista, campo) => lista.map((x) => x[campo]).join('\n');
-  for (const r of d.renglones) {
-    const fila = hoja.addRow([
-      r.dia, r.historiaClinica, r.nombre, r.cui, r.sexo, r.pueblo, r.comunidadLinguistica,
-      r.nacimiento.dia, r.nacimiento.mes, r.nacimiento.anio, r.nacimiento.edad,
-      r.discapacidad, r.orientacionSexual, r.escolaridad, r.profesion, r.comunidad, r.municipio, r.migrante,
-      r.consulta, r.control, r.semanasGestacion, r.viene, r.fue, r.referidoA,
-      lineas(r.diagnosticos, 'descripcion'), lineas(r.diagnosticos, 'cie'),
-      lineas(r.tratamiento, 'descripcion'), lineas(r.tratamiento, 'presentacion'), lineas(r.tratamiento, 'cantidad'),
-      r.notificacionLugar, r.notificacionNumero, r.acompanante,
-    ]);
+}
+
+/** Registro diario de consulta en hoja de cálculo, para trasladarlo al SIGSA web. */
+async function sigsa3csExcel(req, res) {
+  const datos = await datos3cs(req);
+  const libro = new ExcelJS.Workbook();
+  const hoja = libro.addWorksheet('SIGSA-3CS', {
+    pageSetup: { orientation: 'landscape', paperSize: 5, fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+  });
+
+  escribirEncabezado(hoja, datos);
+
+  const titulos = hoja.addRow(COLUMNAS.map(([titulo]) => titulo));
+  titulos.font = { bold: true, size: 9 };
+  titulos.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
+  titulos.height = 42;
+  COLUMNAS.forEach(([, ancho], indice) => { hoja.getColumn(indice + 1).width = ancho; });
+
+  for (const renglon of datos.renglones) {
+    const fila = hoja.addRow(filaDelRenglon(renglon));
     fila.alignment = { wrapText: true, vertical: 'top' };
     fila.font = { size: 9 };
   }
+
+  // Los títulos quedan fijos al desplazarse por la hoja.
   hoja.views = [{ state: 'frozen', ySplit: 5 }];
-  await req.bitacora({ accion: 'exportar', entidad: 'sigsa3cs', detalle: `SIGSA-3CS del ${d.desde} al ${d.hasta} en Excel (${d.renglones.length} consultas)` });
+  await req.bitacora({
+    accion: 'exportar',
+    entidad: 'sigsa3cs',
+    detalle: `SIGSA-3CS del ${datos.desde} al ${datos.hasta} en Excel (${datos.renglones.length} consultas)`,
+  });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="sigsa3cs-${d.desde}-${d.hasta}.xlsx"`);
+  res.setHeader('Content-Disposition', `attachment; filename="sigsa3cs-${datos.desde}-${datos.hasta}.xlsx"`);
   await libro.xlsx.write(res);
   res.end();
 }

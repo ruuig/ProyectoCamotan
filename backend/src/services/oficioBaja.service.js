@@ -49,11 +49,15 @@ async function solicitar(establecimientoId, { loteId, cantidad, causa, detalle, 
 
   if (!lote) throw fallo(404, 'no_encontrado', 'Lote no encontrado');
 
-  if (lote.cantidadActual < cantidad) {
+  // La baja sale de la bodega: lo que este en farmacia se devuelve antes.
+  const enBodega = lote.cantidadActual - lote.cantidadFarmacia;
+  if (enBodega < cantidad) {
     throw fallo(
       400,
       'cantidad_excede_existencia',
-      `El lote solo tiene ${lote.cantidadActual} y se quieren dar de baja ${cantidad}`,
+      lote.cantidadFarmacia > 0
+        ? `En bodega hay ${enBodega} de este lote y ${lote.cantidadFarmacia} en farmacia. Farmacia debe devolverlo a bodega antes de darlo de baja`
+        : `El lote solo tiene ${enBodega} y se quieren dar de baja ${cantidad}`,
     );
   }
 
@@ -235,7 +239,9 @@ async function candidatos(establecimientoId, ahora = new Date()) {
       numeroLote: l.numeroLote,
       insumo: l.insumo.nombreGenerico,
       unidadEntrega: l.insumo.unidadEntrega,
-      cantidadActual: l.cantidadActual,
+      cantidadActual: l.cantidadActual - l.cantidadFarmacia,
+      // Si una parte sigue en farmacia, tiene que volver a bodega para darla de baja.
+      enFarmacia: l.cantidadFarmacia,
       fechaVence: l.fechaVence,
       estado: l.estado,
       costoUnitario: l.costoUnitario === null ? null : Number(l.costoUnitario),

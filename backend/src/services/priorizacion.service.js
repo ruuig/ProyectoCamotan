@@ -24,20 +24,33 @@ const MAX_AUSENCIAS = 2;
 
 const UMBRAL_ESPERA_LARGA_MIN = 90;
 
-function calcularPuntaje({ gravedad, condiciones, inicioEspera, ausencias, tiempoViaje = null }, ahora) {
-  const g = PESO_GRAVEDAD[gravedad] ?? 0;
+/** Puntos por el tiempo de espera: a mas minutos esperando, mas puntos. */
+function puntosPorEspera(minutosEsperando) {
+  if (minutosEsperando >= 90) return 30;
+  if (minutosEsperando >= 60) return 25;
+  if (minutosEsperando >= 30) return 15;
+  return 5;
+}
 
-  // Si coexisten varias condiciones se toma SOLO la de mayor puntaje
-  const c = condiciones?.length
-    ? Math.max(...condiciones.map((x) => PESO_CONDICION[x] ?? 0))
+/**
+ * Puntaje de prioridad de un paciente en la cola: mientras mas alto, antes
+ * se atiende. Suma gravedad, condicion, espera y distancia, y resta las
+ * ausencias. Nunca es negativo.
+ */
+function calcularPuntaje({ gravedad, condiciones, inicioEspera, ausencias, tiempoViaje = null }, ahora) {
+  const puntosGravedad = PESO_GRAVEDAD[gravedad] ?? 0;
+
+  // Si coexisten varias condiciones se toma solo la de mayor puntaje.
+  const puntosCondicion = condiciones?.length
+    ? Math.max(...condiciones.map((condicion) => PESO_CONDICION[condicion] ?? 0))
     : 0;
 
-  const min = (ahora - inicioEspera) / 60000;
-  const e = min >= 90 ? 30 : min >= 60 ? 25 : min >= 30 ? 15 : 5;
+  const minutosEsperando = (ahora - inicioEspera) / 60000;
+  const puntosEspera = puntosPorEspera(minutosEsperando);
+  const puntosDistancia = tramoDistancia(tiempoViaje)?.puntos ?? 0;
+  const penalizacion = ausencias * PENALIZACION_AUSENCIA;
 
-  const d = tramoDistancia(tiempoViaje)?.puntos ?? 0;
-
-  return Math.max(0, g + c + e + d - (ausencias * PENALIZACION_AUSENCIA));
+  return Math.max(0, puntosGravedad + puntosCondicion + puntosEspera + puntosDistancia - penalizacion);
 }
 
 // --- Explicacion del puntaje ---------------------------------------------

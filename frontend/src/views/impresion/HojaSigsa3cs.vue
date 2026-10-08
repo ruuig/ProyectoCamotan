@@ -10,6 +10,7 @@ import { establecimiento as cargarEstablecimiento, registrarImpresion } from '..
  * consulta van uno debajo del otro en su casilla, como se escribe a mano.
  */
 const route = useRoute();
+const imprimir = () => window.print();
 const datos = ref(null);
 const est = ref(null);
 const error = ref('');
@@ -50,7 +51,7 @@ const anio = computed(() => route.query.desde?.slice(0, 4) ?? '');
 </script>
 
 <template>
-  <div v-if="datos" class="tres-cs">
+  <div v-if="datos" class="tres-cs hoja-propia">
     <section v-for="(hoja, h) in hojas" :key="h" class="hoja" :class="h > 0 ? 'salto' : ''">
       <header class="encabezado">
         <div>
@@ -67,7 +68,7 @@ const anio = computed(() => route.query.desde?.slice(0, 4) ?? '');
         <span><b>Mes:</b> {{ mes }}</span>
         <span><b>Año:</b> {{ anio }}</span>
         <span class="ancho"><b>Responsable de la información:</b> {{ datos.encabezado.responsable ?? '' }}</span>
-        <span><b>Cargo:</b> ____________</span>
+        <span><b>Cargo:</b> {{ datos.encabezado.cargo || '____________' }}</span>
         <span><b>Firma:</b> ____________</span>
       </div>
 
@@ -128,8 +129,8 @@ const anio = computed(() => route.query.desde?.slice(0, 4) ?? '');
               <td class="c">{{ r.sexo }}</td>
               <td class="c">{{ r.pueblo }}</td>
               <td class="c">{{ r.comunidadLinguistica }}</td>
-              <template v-if="r.nacimiento.edad"><td colspan="3" class="c">{{ r.nacimiento.edad }}</td></template>
-              <template v-else><td class="c">{{ r.nacimiento.dia }}</td><td class="c">{{ r.nacimiento.mes }}</td><td class="c">{{ r.nacimiento.anio }}</td></template>
+              <!-- Sin fecha conocida, la edad va solo en su casilla: días, meses o años. -->
+              <td class="c">{{ r.nacimiento.dia }}</td><td class="c">{{ r.nacimiento.mes }}</td><td class="c">{{ r.nacimiento.anio }}</td>
               <td class="c">{{ r.discapacidad }}</td>
               <td class="c">{{ r.orientacionSexual }}</td>
               <td class="c">{{ r.escolaridad }}</td>
@@ -158,7 +159,7 @@ const anio = computed(() => route.query.desde?.slice(0, 4) ?? '');
       </table>
       <p class="pagina">Hoja {{ h + 1 }} de {{ hojas.length }} · {{ datos.renglones.length }} consultas · del {{ datos.desde }} al {{ datos.hasta }}</p>
     </section>
-    <div class="no-imprimir controles"><button type="button" class="boton-primario" @click="window.print()">Imprimir</button></div>
+    <div class="no-imprimir controles"><button type="button" class="boton-primario" @click="imprimir">Imprimir</button></div>
   </div>
   <p v-else-if="error" class="p-8 text-red-700">{{ error }}</p>
   <p v-else class="p-8">Preparando el SIGSA-3CS…</p>

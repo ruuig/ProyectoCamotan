@@ -86,6 +86,21 @@ describe('propuestaDistribucion', () => {
     const r = b.propuestaDistribucion({ cantidad: 7, servicios, modo: 'iguales', empaque: 1 });
     expect(r.asignado).toBeLessThanOrEqual(7);
   });
+
+  it('en partes iguales divide entre los 32 lugares del centro, como el inventario de cierre', () => {
+    const treinta = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, nombre: `S${i + 1}`, promedio: 0 }));
+    // Acetaminofén gotero, septiembre 2026: 2,291 ÷ 32 = 71.6, el Excel muestra 72.
+    const r = b.propuestaDistribucion({ cantidad: 2291, servicios: treinta, modo: 'iguales', lugares: 32 });
+    expect(new Set(r.filas.map((f) => f.cantidad))).toEqual(new Set([72]));
+    // Lo de los dos lugares que no son servicios se queda en bodega.
+    expect(r.sobrante).toBe(2291 - 72 * 30);
+  });
+
+  it('si redondear se pasa de lo que hay, reparte hacia abajo', () => {
+    const treinta = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, nombre: `S${i + 1}`, promedio: 0 }));
+    const r = b.propuestaDistribucion({ cantidad: 16, servicios: treinta, modo: 'iguales', lugares: 32 });
+    expect(r.asignado).toBeLessThanOrEqual(16);
+  });
 });
 
 describe('filaReporte', () => {
@@ -104,37 +119,50 @@ describe('filaReporte', () => {
   });
 });
 
-describe('filaBres con la fórmula del centro', () => {
+describe('filaBres con las fórmulas del balance del centro', () => {
   const config = { nivelMinimoMeses: 2, nivelMaximoMeses: 4, formulaPedido: 'centro' };
+  // Bodega con 150; dos servicios con 30 y 25 de saldo; promedios 60, 25 y 15.
+  const base = { B: 300, C: 200, D: 90, E: 10, I: 150, saldos: [30, 25], promedios: [60, 25, 15], config };
 
-  it('calcula F, H, J, K, L y M', () => {
-    const f = b.filaBres({ B: 100, C: 200, D: 90, E: 10, G: -5, I: 150, demandas: [100, 100, 100], config });
+  it('H es lo que hay: los saldos de cada servicio más la existencia de bodega', () => {
+    const f = b.filaBres(base);
     expect(f.F).toBe(100);
     expect(f.H).toBe(205);
+    // B + C - D: lo que debería haber; la diferencia con H es lo que no se reportó.
+    expect(f.saldoPorDemanda).toBe(410);
+  });
+
+  it('J es la suma de los promedios de cada servicio, y K, L y M salen de ahí', () => {
+    const f = b.filaBres(base);
     expect(f.J).toBe(100);
-    expect(f.K).toBe(2.1);
+    expect(f.K).toBe(2.05);
     expect(f.L).toBe(400);
     // El centro resta la existencia de bodega (I), no el saldo total.
     expect(f.M).toBe(250);
   });
 
   it('con la fórmula del MSPAS resta el saldo total', () => {
-    const f = b.filaBres({ B: 100, C: 200, D: 90, E: 10, G: -5, I: 150, demandas: [100], config: { ...config, formulaPedido: 'mspas' } });
-    expect(f.M).toBe(195);
+    expect(b.filaBres({ ...base, config: { ...config, formulaPedido: 'mspas' } }).M).toBe(195);
   });
 
-  it('si la cantidad a pedir sale negativa, se muestra 0', () => {
-    expect(b.filaBres({ B: 0, C: 1000, D: 10, E: 0, G: 0, I: 990, demandas: [10], config }).M).toBe(0);
+  it('si sobra, la cantidad a solicitar sale negativa, como en el balance', () => {
+    expect(b.filaBres({ ...base, I: 990, promedios: [10] }).M).toBe(-950);
+  });
+
+  it('no redondea: los promedios con decimales pasan tal cual', () => {
+    const f = b.filaBres({ ...base, promedios: [38.3] });
+    expect(f.L).toBeCloseTo(153.2);
+    expect(f.M).toBeCloseTo(3.2);
   });
 
   it('sin consumo, meses de existencia queda vacío en lugar de dividir entre cero', () => {
-    const f = b.filaBres({ B: 5, C: 0, D: 0, E: 0, G: 0, I: 5, demandas: [0, 0], config });
+    const f = b.filaBres({ ...base, promedios: [0, 0] });
     expect(f.K).toBeNull();
     expect(f.sinConsumo).toBe(true);
   });
 
   it('marca bajo el mínimo', () => {
-    expect(b.filaBres({ B: 50, C: 0, D: 0, E: 0, G: 0, I: 50, demandas: [100], config }).bajoMinimo).toBe(true);
+    expect(b.filaBres({ ...base, saldos: [], I: 50, promedios: [100] }).bajoMinimo).toBe(true);
   });
 });
 

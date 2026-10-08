@@ -11,7 +11,9 @@ const app = express();
 // registraria siempre la misma direccion.
 app.set('trust proxy', 1);
 
-app.use(cors());
+// Content-Disposition se expone para que el navegador sepa el nombre del
+// archivo que descarga (respaldos) cuando el frontend esta en otro dominio.
+app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
 // Los catalogos llegan como CSV dentro del JSON (el CIE-10 completo pesa unos
 // megas); el resto de los cuerpos son pequenos.
 app.use(express.json({ limit: '4mb' }));
@@ -24,10 +26,16 @@ if (require.main === module) {
   require('./jobs/recalcularCola').iniciar();
   require('./jobs/refrescarVistas').iniciar();
   require('./jobs/evaluarAlertas').iniciar();
+  require('./jobs/respaldoAutomatico').iniciar();
 
-  app.listen(puerto, () => {
+  const servidor = app.listen(puerto, () => {
     console.log(`Servidor escuchando en el puerto ${puerto}`);
   });
+  // El proxy reutiliza conexiones: si el servidor las cierra antes (5 s por
+  // defecto), la primera peticion despues de una pausa llega a un socket
+  // cerrado y falla sin respuesta.
+  servidor.keepAliveTimeout = 65000;
+  servidor.headersTimeout = 66000;
 }
 
 module.exports = app;

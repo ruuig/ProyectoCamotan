@@ -62,6 +62,15 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+// Un CUI que pasa el dígito verificador de RENAP, inscrito en Camotán (2005).
+function cuiValido(semilla) {
+  for (let n = Number(semilla) % 90000000 + 10000000; ; n += 1) {
+    const base = String(n).padStart(8, '0');
+    const v = [...base].reduce((t, d, i) => t + Number(d) * (i + 2), 0) % 11;
+    if (v < 10) return `${base}${v}2005`;
+  }
+}
+
 describe('POST /api/v1/pacientes', () => {
   it('registra un paciente con sus condiciones', async () => {
     const respuesta = await comoPreconsulta(request(app).post('/api/v1/pacientes')).send(
@@ -185,7 +194,7 @@ describe('busqueda de pacientes', () => {
   });
 
   it('encuentra por CUI', async () => {
-    const cui = `29${Date.now().toString().slice(-11)}`;
+    const cui = cuiValido(Date.now());
     await comoPreconsulta(request(app).post('/api/v1/pacientes')).send(
       pacienteBase({ nombres: 'Fermin', apellidos: 'Lemus Oliva', cui }),
     );
@@ -510,7 +519,7 @@ describe('Numero de expediente generado por el sistema', () => {
 
 describe('CUI al registrar', () => {
   it('se guarda desde el registro rápido y no se repite en otro expediente', async () => {
-    const cui = `9${String(Date.now()).slice(-12)}`;
+    const cui = cuiValido(Date.now() + 7);
     const datos = {
       nombres: 'Rosa', apellidos: `Cui ${MARCA}`, fechaNacimiento: '1985-02-03', sexo: 'F',
       comunidad: 'Tisipe', confirmarDuplicado: true,

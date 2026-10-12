@@ -182,7 +182,22 @@ async function hojaDeEntrega(req, res, next) {
   const ahora = new Date();
   const atencion = await prisma.atencion.findFirst({
     where: { id: Number(req.params.id), establecimientoId: req.usuario.establecimientoId },
-    include: INCLUIR_ATENCION,
+    include: {
+      ...INCLUIR_ATENCION,
+      // Lo ya entregado, lote por lote, para leer la entrega despues.
+      prescripciones: {
+        orderBy: { creadaEn: 'asc' },
+        include: {
+          ...INCLUIR_RECETA,
+          dispensaciones: {
+            include: {
+              usuario: { select: { nombre: true } },
+              movimientos: { include: { lote: { select: { numeroLote: true, fechaVence: true } } } },
+            },
+          },
+        },
+      },
+    },
   });
   if (!atencion) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Atención no encontrada' });
 
@@ -207,6 +222,13 @@ async function hojaDeEntrega(req, res, next) {
       aEntregar: plan?.aEntregar ?? 0,
       noAlcanza: plan?.noAtendido ?? 0,
       lotes: plan?.reparto ?? [],
+      entregas: r.dispensaciones.filter((d) => !d.anulada).flatMap((d) => d.movimientos.map((m) => ({
+        numeroLote: m.lote.numeroLote,
+        fechaVence: m.lote.fechaVence,
+        cantidad: Math.abs(m.cantidad),
+        registradaEn: d.registradaEn,
+        usuario: d.usuario.nombre,
+      }))),
     };
   });
 

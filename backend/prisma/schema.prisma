@@ -40,6 +40,10 @@ model Establecimiento {
   lugares                   LugarPoblado[]
   ubicaciones               Ubicacion[]
   requisiciones             Requisicion[]
+  mediciones                MedicionTiempo[]
+  recepciones               Recepcion[]
+  criteriosTriaje           CriterioTriaje[]
+  parametroPriorizacion     ParametroPriorizacion?
   traslados                 Traslado[]
   inventarioCierreHistorico InventarioCierreHistorico[]
   cierresFarmacia           CierreFarmacia[]
@@ -98,6 +102,9 @@ model Usuario {
   requisicionesAutorizadas Requisicion[]        @relation("RequisicionAutorizadaPor")
   requisicionesDespachadas Requisicion[]        @relation("RequisicionDespachadaPor")
   requisicionesAnuladas    Requisicion[]        @relation("RequisicionAnuladaPor")
+  mediciones               MedicionTiempo[]
+  recepciones              Recepcion[]
+  parametrosPriorizacion   ParametroPriorizacion[] @relation("ParametroPriorizacionPor")
   configRespaldo       ConfiguracionRespaldo[]  @relation("ConfigRespaldoPor")
 
   @@index([establecimientoId, rol])
@@ -190,6 +197,7 @@ model Paciente {
   archivos          ArchivoPaciente[]
 
   // El expediente es correlativo interno: unico por establecimiento, no global.
+  mediciones        MedicionTiempo[]
   @@unique([establecimientoId, expediente])
   @@index([establecimientoId, apellidos, nombres])
   @@index([establecimientoId, comunidad])
@@ -452,6 +460,12 @@ model Preconsulta {
   frecRespiratoria Int?     @map("frec_respiratoria")
   satOxigeno       Int?     @map("sat_oxigeno")
   signosPeligro    String[] @map("signos_peligro")
+  // Escala de dolor 0 a 10, nivel de conciencia (AVPU) y glucosa capilar.
+  dolor            Int?     @db.SmallInt
+  conciencia       String? // alerta | confuso | voz | dolor | no_responde
+  glucosa          Int?     @db.SmallInt
+  // Por que quedo en su nivel, tal como se calculo al registrarla.
+  triaje           Json?
   registradaEn     DateTime @default(now()) @map("registrada_en")
 
   atencion Atencion @relation(fields: [atencionId], references: [id], onDelete: Cascade)
@@ -524,6 +538,10 @@ model Lote {
   recibidoEn       DateTime  @default(now()) @map("recibido_en")
   // Si entro por una requisicion a la DDRISS.
   requisicionId    Int?      @map("requisicion_id")
+  // Documento con el que llego (despacho de la DDRISS, acta de donacion).
+  recepcionId      Int?      @map("recepcion_id")
+  // Lo que dice el documento y no llego: cuenta en el saldo, no se entrega.
+  cantidadPorReponer Int     @default(0) @map("cantidad_por_reponer")
 
   // Procedencia y datos que exige la auditoria.
   fabricante        String?
@@ -549,6 +567,7 @@ model Lote {
 
   insumo          Insumo             @relation(fields: [insumoId], references: [id])
   requisicion     Requisicion?       @relation(fields: [requisicionId], references: [id])
+  recepcion       Recepcion?         @relation(fields: [recepcionId], references: [id])
   movimientos     MovimientoInsumo[]
   usuarioEstado   Usuario?           @relation("LoteEstadoPor", fields: [estadoPor], references: [id])
   conteos         ConteoFisico[]
@@ -1037,7 +1056,7 @@ model Ubicacion {
   id                Int      @id @default(autoincrement())
   establecimientoId Int      @map("establecimiento_id")
   nombre            String
-  tipo              String // bodega|centro_salud|puesto_salud|centro_comunitario
+  tipo              String // bodega|centro_salud|puesto_salud|centro_comunitario|unidad_interna
   comunidad         String?
   orden             Int      @default(0)
   activo            Boolean  @default(true)
@@ -1241,6 +1260,81 @@ model RecetaExterna {
 
   @@index([atencionId])
   @@map("receta_externa")
+}
+
+/// Criterio clinico que, segun la edad, lleva al paciente a urgente o
+/// moderado (capa 1 de la prioridad). Lo ajusta el personal medico.
+model CriterioTriaje {
+  id                Int     @id @default(autoincrement())
+  establecimientoId Int     @map("establecimiento_id")
+  campo             String // temperatura|satOxigeno|frecRespiratoria|frecCardiaca|presionSis|presionDia|dolor|conciencia|glucosa|desnutricion
+  edadDesdeMeses    Int     @default(0) @map("edad_desde_meses")
+  edadHastaMeses    Int?    @map("edad_hasta_meses")
+  soloEmbarazo      Boolean @default(false) @map("solo_embarazo")
+  operador          String // mayor_igual | menor
+  valor             Decimal @db.Decimal(6, 1)
+  nivel             String // urgente | moderado
+  etiqueta          String
+  activo            Boolean @default(true)
+  orden             Int     @default(0)
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+
+  @@index([establecimientoId, activo], map: "criterio_triaje_establecimiento")
+  @@map("criterio_triaje")
+}
+
+/// Puntos dentro de cada nivel y tiempo maximo de espera (capas 2 y 3).
+model ParametroPriorizacion {
+  establecimientoId Int       @id @map("establecimiento_id")
+  puntos            Json
+  actualizadoPor    Int?      @map("actualizado_por")
+  actualizadoEn     DateTime? @map("actualizado_en")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  usuario         Usuario?        @relation("ParametroPriorizacionPor", fields: [actualizadoPor], references: [id])
+
+  @@map("parametro_priorizacion")
+}
+
+/// Lo que llega a bodega con un documento: despacho de la DDRISS, donacion...
+model Recepcion {
+  id                Int      @id @default(autoincrement())
+  establecimientoId Int      @map("establecimiento_id")
+  numeroDocumento   String?  @map("numero_documento")
+  procedencia       String   @default("despacho") // despacho|donacion|traslado|prestamo
+  remitente         String
+  acta              String?
+  fecha             DateTime @db.Date
+  observaciones     String?
+  registradaPor     Int      @map("registrada_por")
+  registradaEn      DateTime @default(now()) @map("registrada_en")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  usuario         Usuario         @relation(fields: [registradaPor], references: [id])
+  lotes           Lote[]
+
+  @@index([establecimientoId, fecha], map: "recepcion_fecha")
+  @@map("recepcion")
+}
+
+/// Tiempo de registro y de consulta de fichas (objetivo 1 de la tesis).
+model MedicionTiempo {
+  id                Int      @id @default(autoincrement())
+  establecimientoId Int      @map("establecimiento_id")
+  usuarioId         Int      @map("usuario_id")
+  tipo              String // registro | consulta
+  pantalla          String?
+  milisegundos      Int
+  pacienteId        Int?     @map("paciente_id")
+  registradaEn      DateTime @default(now()) @map("registrada_en")
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  usuario         Usuario         @relation(fields: [usuarioId], references: [id])
+  paciente        Paciente?       @relation(fields: [pacienteId], references: [id], onDelete: SetNull)
+
+  @@index([establecimientoId, tipo, registradaEn], map: "medicion_tiempo_tipo_fecha")
+  @@map("medicion_tiempo")
 }
 
 /// Boleta de Referencia y Contrarreferencia del MSPAS. Una por atencion, con

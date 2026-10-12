@@ -6,6 +6,8 @@ const { evaluarSignosVitales } = require('../services/signosVitales.service');
 const { compararConAnterior } = require('../services/antropometria.service');
 const { evaluarMedicion } = require('../services/antropometriaDatos.service');
 const { ETIQUETA_CLASIFICACION } = require('./antropometria.controller');
+const { triaje, bajaDe } = require('../services/triaje.service');
+const { parametros } = require('../services/parametrosPriorizacion.service');
 
 // Los patrones de crecimiento de la OMS cubren hasta los 5 anios.
 const EDAD_MAX_ANTROPOMETRIA_MESES = 60;
@@ -126,19 +128,33 @@ async function registrarPreconsulta(req, res, next) {
   }
 
   const marcados = signosPeligro.map((codigo) => porCodigo.get(codigo));
-  const hayUrgente = marcados.some((signo) => signo.gravedadSugerida === 'urgente');
-  const gravedadSugerida = hayUrgente ? 'urgente' : marcados.length > 0 ? 'moderado' : null;
 
-  // Si el sistema propone urgente y el personal elige algo menor, debe
-  // justificarlo por escrito.
-  const gravedadFinal = gravedad ?? gravedadSugerida ?? atencion.gravedad;
-  const bajaLaGravedad = gravedadSugerida === 'urgente' && gravedadFinal !== 'urgente';
+  // El nivel lo deciden los criterios clinicos (signos vitales por edad,
+  // dolor, conciencia, glucosa, desnutricion) y los signos de peligro: gana el
+  // mas grave. El personal puede elegir otro; si es menor, lo justifica.
+  const { edadMeses: edadTriaje } = calcularEdad(atencion.paciente.fechaNacimiento);
+  const embarazada = (await prisma.episodioEmbarazo.count({ where: { pacienteId: atencion.pacienteId, estado: 'activo' } })) > 0
+    || atencion.paciente.condiciones.some((c) => c.tipo === 'embarazo');
+  const { criterios } = await parametros(establecimientoId);
+  // En menores de 5, la desnutricion aguda (puntaje Z) tambien sube el nivel.
+  const nutricion = edadTriaje < EDAD_MAX_ANTROPOMETRIA_MESES && medicion.peso != null && medicion.talla != null
+    ? await evaluarMedicion({ sexo: atencion.paciente.sexo, edadMeses: edadTriaje, peso: medicion.peso, talla: medicion.talla, perimetroBraquial: medicion.perimetroBraquial })
+    : null;
+  const resultadoTriaje = triaje(
+    { ...medicion, clasificacionNutricional: nutricion?.clasificacion ?? null },
+    { edadMeses: edadTriaje, embarazada },
+    criterios,
+    marcados,
+  );
+  const gravedadSugerida = resultadoTriaje.nivel;
+  const gravedadFinal = gravedad ?? gravedadSugerida;
+  const bajaLaGravedad = bajaDe(gravedadSugerida, gravedadFinal);
 
   if (bajaLaGravedad && !justificacionGravedad) {
     return next({
       status: 400,
       codigo: 'justificacion_requerida',
-      mensaje: 'Se marco un signo de peligro urgente. Debe justificar por escrito una gravedad menor',
+      mensaje: `El sistema sugiere ${gravedadSugerida} (${resultadoTriaje.motivos.map((m) => m.texto).join(', ')}). Para elegir una gravedad menor, justifíquelo por escrito`,
       detalles: { gravedadSugerida, gravedadSolicitada: gravedadFinal },
     });
   }
@@ -177,7 +193,13 @@ async function registrarPreconsulta(req, res, next) {
 
   const { preconsulta, antropometria } = await prisma.$transaction(async (tx) => {
     const creada = await tx.preconsulta.create({
-      data: { ...signosVitales, unidadPeso, atencionId: atencion.id, signosPeligro },
+      data: {
+        ...signosVitales,
+        unidadPeso,
+        atencionId: atencion.id,
+        signosPeligro,
+        triaje: { sugerido: gravedadSugerida, elegido: gravedadFinal, motivos: resultadoTriaje.motivos, justificacion: bajaLaGravedad ? justificacionGravedad : null },
+      },
     });
 
     await tx.atencion.update({
@@ -229,6 +251,7 @@ async function registrarPreconsulta(req, res, next) {
     preconsulta,
     gravedad: gravedadFinal,
     gravedadSugerida,
+    motivosTriaje: resultadoTriaje.motivos,
     signosPeligroMarcados: marcados.map((s) => ({
       codigo: s.codigo,
       descripcion: s.descripcion,

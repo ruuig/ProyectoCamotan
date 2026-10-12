@@ -299,7 +299,13 @@ async function generarBres(req, res) {
   res.status(201).json(datos);
 }
 
-async function cerrarBres(req, res) {
+async function cerrarBres(req, res, next) {
+  // Cerrar congela el mes: se confirma con la contrasena de quien lo hace.
+  const { compararPassword } = require('../services/auth.service');
+  const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
+  if (!req.body?.password || !(await compararPassword(req.body.password, usuario?.passwordHash))) {
+    return next({ status: 403, codigo: 'contrasena_incorrecta', mensaje: 'La contraseña no es correcta' });
+  }
   const bres = await bresService.cerrar(req.usuario.establecimientoId, req.params.periodo);
 
   await req.bitacora({

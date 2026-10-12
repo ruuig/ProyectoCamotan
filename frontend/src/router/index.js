@@ -21,7 +21,6 @@ const HojaBres = () => import('../views/impresion/HojaBres.vue');
 const OficioBajaImpreso = () => import('../views/impresion/OficioBaja.vue');
 
 // Pantallas de logistica: se cargan al entrar a inventario, no en el arranque.
-const RecibirLote = () => import('../views/inventario/RecibirLote.vue');
 const DetalleLote = () => import('../views/inventario/DetalleLote.vue');
 const InventarioCierre = () => import('../views/inventario/InventarioCierre.vue');
 const VistaBres = () => import('../views/inventario/VistaBres.vue');
@@ -42,6 +41,8 @@ const HojaRequisicion = () => import('../views/impresion/HojaRequisicion.vue');
 const HojaKardex = () => import('../views/impresion/HojaKardex.vue');
 const VistaRequisiciones = () => import('../views/inventario/VistaRequisiciones.vue');
 const VistaKardex = () => import('../views/inventario/VistaKardex.vue');
+const VistaHoy = () => import('../views/inventario/VistaHoy.vue');
+const VistaRecibir = () => import('../views/inventario/VistaRecibir.vue');
 
 import FormularioPreconsulta from '../views/preconsulta/FormularioPreconsulta.vue';
 import VistaCola from '../views/cola/VistaCola.vue';
@@ -52,6 +53,7 @@ import DetalleInsumo from '../views/inventario/DetalleInsumo.vue';
 import VistaDispensacion from '../views/inventario/VistaDispensacion.vue';
 import VistaControlFarmacia from '../views/inventario/VistaControlFarmacia.vue';
 import VistaConsolidado from '../views/admin/VistaConsolidado.vue';
+const VistaTiempos = () => import('../views/admin/VistaTiempos.vue');
 import VistaAdministracion from '../views/admin/VistaAdministracion.vue';
 
 // Farmacia no entra al expediente clinico.
@@ -132,6 +134,8 @@ const router = createRouter({
             // Farmacia pide a bodega con requisición, como los demás servicios.
             { path: 'requisiciones', name: 'requisiciones', component: VistaRequisiciones, meta: { roles: [...BODEGA, 'farmacia'] } },
             { path: 'kardex', name: 'kardex', component: VistaKardex, meta: { roles: BODEGA } },
+            { path: 'hoy', name: 'bodega-hoy', component: VistaHoy, meta: { roles: BODEGA } },
+            { path: 'recibir', name: 'recibir', component: VistaRecibir, meta: { roles: BODEGA } },
             { path: 'trazabilidad', name: 'trazabilidad', component: VistaTrazabilidad, meta: { roles: BODEGA } },
             { path: 'reportes', name: 'reportes-servicios', component: VistaReportes, meta: { roles: BODEGA } },
             // El balance quedo dentro del BRES como "Detalle por servicio".
@@ -142,7 +146,8 @@ const router = createRouter({
             { path: 'retiros/:id', name: 'retiro-detalle', component: VistaRetiros, meta: { roles: BODEGA } },
             { path: 'lotes/:id', name: 'lote-detalle', component: DetalleLote, meta: { roles: BODEGA } },
             { path: ':id', name: 'insumo-detalle', component: DetalleInsumo, meta: { roles: BODEGA } },
-            { path: ':id/recibir', name: 'recibir-lote', component: RecibirLote, meta: { roles: BODEGA } },
+            // Recibir un producto suelto lleva a la recepción con documento.
+            { path: ':id/recibir', name: 'recibir-lote', redirect: (to) => ({ path: '/inventario/recibir', query: { insumo: to.params.id } }) },
           ],
         },
       ],
@@ -168,6 +173,12 @@ const router = createRouter({
       children: [
         { path: '', name: 'consolidado', component: VistaConsolidado, meta: { roles: ['admin'] } },
       ],
+    },
+    // Tiempos de registro y consulta: no esta en el menu, se entra por la direccion.
+    {
+      path: '/tiempos',
+      component: LayoutPrincipal,
+      children: [{ path: '', name: 'tiempos', component: VistaTiempos, meta: { roles: ['admin'] } }],
     },
     {
       path: '/administracion',

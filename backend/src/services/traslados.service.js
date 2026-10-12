@@ -10,9 +10,9 @@ const { descontarDeLote, pasarEntreUbicaciones } = require('./movimientos.servic
 
 /** null si se puede trasladar ahi; si no, el error para la respuesta. */
 function errorDestino(ubicacion) {
-  const aFarmacia = ubicacion?.tipo === 'centro_salud';
-  if (!ubicacion || !ubicacion.activo || !(aFarmacia || esServicioQueReporta(ubicacion))) {
-    return { status: 400, codigo: 'destino_invalido', mensaje: 'Solo se traslada a la farmacia del centro, a puestos de salud y a centros comunitarios activos' };
+  const valido = ubicacion?.tipo === 'centro_salud' || ubicacion?.tipo === 'unidad_interna' || (ubicacion && esServicioQueReporta(ubicacion));
+  if (!ubicacion || !ubicacion.activo || !valido) {
+    return { status: 400, codigo: 'destino_invalido', mensaje: 'Se entrega a la farmacia, a las unidades del centro, a puestos de salud y a centros comunitarios activos' };
   }
   return null;
 }
@@ -68,7 +68,8 @@ async function registrarTraslado(tx, { establecimientoId, ubicacion, usuarioId, 
         loteId: r.loteId,
         cantidad: r.cantidad,
         usuarioId,
-        tipo: 'traslado',
+        // Las unidades del centro lo usan ahi mismo: no reportan cada mes.
+        tipo: ubicacion.tipo === 'unidad_interna' ? 'consumo_interno' : 'traslado',
         servicio: ubicacion.nombre,
         trasladoId: creado.id,
         motivo: `Traslado ${documento}`,

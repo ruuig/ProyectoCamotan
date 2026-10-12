@@ -660,8 +660,9 @@ async function exportarBres(req, res) {
  * periodo para imprimirlos juntos. Sin periodo, la historia completa.
  */
 async function kardex(req, res) {
-  const { periodo, insumoId } = req.query;
-  const rango = periodo ? limitesDePeriodo(periodo) : {};
+  const { periodo, insumoId, desde } = req.query;
+  // "Desde" sirve para lo que falta pasar a las tarjetas: desde la ultima vez.
+  const rango = desde ? { desde: new Date(`${desde}T06:00:00Z`) } : periodo ? limitesDePeriodo(periodo) : {};
   const tarjetas = await kardexDe(req.usuario.establecimientoId, {
     insumoIds: insumoId ? [insumoId] : null,
     desde: rango.desde ?? null,

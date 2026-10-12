@@ -126,7 +126,9 @@ function esLoteFEFO(loteId, lotes, cantidadRequerida, ahora = new Date()) {
 function enUbicacion(lotes, ubicacion) {
   return lotes.map((l) => {
     const farmacia = l.cantidadFarmacia ?? 0;
-    return { ...l, cantidadActual: ubicacion === 'farmacia' ? farmacia : l.cantidadActual - farmacia };
+    // En bodega, lo que dice el documento y no llego no se puede entregar.
+    const porReponer = l.cantidadPorReponer ?? 0;
+    return { ...l, cantidadActual: ubicacion === 'farmacia' ? farmacia : Math.max(0, l.cantidadActual - farmacia - porReponer) };
   });
 }
 

@@ -507,6 +507,97 @@ async function recibir(req, res, next) {
   res.json({ requisicion: vista(await cargar(req)) });
 }
 
+/**
+ * Entregar en un solo paso: la bodega registra lo que entrega y eso genera la
+ * requisicion (solicitada = autorizada = despachada). Los lotes salen por PEPE.
+ * El numero del formulario puede quedar para despues.
+ */
+async function entregar(req, res, next) {
+  const establecimientoId = req.usuario.establecimientoId;
+  const { ubicacion, error: fallaSolicitante } = await solicitante({ ...req, body: { ...req.body, direccion: 'servicio' } });
+  if (fallaSolicitante) return next(fallaSolicitante);
+  const { filas, insumos, error } = await prepararRenglones(establecimientoId, req.body.renglones.map((g) => ({ ...g, cantidadSolicitada: g.cantidad })));
+  if (error) return next(error);
+
+  const ids = [...new Set(filas.map((f) => f.insumoId).filter(Boolean))];
+  const lotes = await prisma.lote.findMany({ where: { insumoId: { in: ids }, insumo: { establecimientoId } } });
+  const enBodega = enUbicacion(lotes, 'bodega');
+  const movimientos = [];
+  const faltan = [];
+  for (const f of filas.filter((x) => x.insumoId)) {
+    const { propuesta, faltante } = lotesPepe(enBodega.filter((l) => l.insumoId === f.insumoId), f.cantidadSolicitada);
+    if (faltante > 0) faltan.push(`${f.descripcion}: hay ${f.cantidadSolicitada - faltante}`);
+    movimientos.push(...propuesta.map((p) => ({ loteId: p.loteId, cantidad: p.cantidad })));
+  }
+  if (faltan.length) return next({ status: 409, codigo: 'sin_existencia', mensaje: `No alcanza en bodega. ${faltan.join('; ')}` });
+
+  const ahora = new Date();
+  let creada;
+  try {
+    creada = await prisma.$transaction(async (tx) => {
+      const r = await tx.requisicion.create({
+        data: {
+          ...datosCabecera({ ...req.body, direccion: 'servicio', fechaSolicitud: req.body.fechaSolicitud ?? new Date(ahora.getTime() - 6 * 3600000).toISOString().slice(0, 10) }, ubicacion),
+          establecimientoId,
+          tipos: req.body.tipos?.length ? req.body.tipos : tiposSugeridos(insumos),
+          estado: 'despachada',
+          registradaPor: req.usuario.id,
+          autorizadaPor: req.usuario.id,
+          autorizadaEn: ahora,
+          despachadaPor: req.usuario.id,
+          despachadaEn: ahora,
+          recibidoPor: req.body.solicitante,
+          renglones: {
+            create: filas.map(({ cantidadAutorizada, ...f }) => ({ ...f, cantidadAutorizada: f.cantidadSolicitada, cantidadDespachada: f.cantidadSolicitada })),
+          },
+        },
+      });
+      if (movimientos.length) {
+        await registrarTraslado(tx, {
+          establecimientoId, ubicacion, usuarioId: req.usuario.id, recibidoPor: req.body.solicitante, renglones: movimientos,
+          observacion: req.body.observaciones ?? null, requisicion: { id: r.id, numero: r.numero },
+        });
+      }
+      return r;
+    });
+  } catch (e) {
+    if (e.code === 'P2002') return next(NUMERO_REPETIDO);
+    throw e;
+  }
+  await req.bitacora({
+    accion: 'crear',
+    entidad: 'requisicion',
+    entidadId: creada.id,
+    detalle: `Entrega a ${ubicacion.nombre} con requisición ${creada.numero ?? 'sin número'}: ${filas.length} renglón(es)`,
+  });
+  res.status(201).json({ requisicion: vista(await cargar(req, creada.id)) });
+}
+
+/** Anotar o corregir el numero del formulario despues de entregar. */
+async function anotarNumero(req, res, next) {
+  const r = await cargar(req);
+  if (!r || !permitida(req, r.ubicacion)) return next(NO_ENCONTRADA);
+  try {
+    await prisma.requisicion.update({ where: { id: r.id }, data: { numero: req.body.numero } });
+  } catch (e) {
+    if (e.code === 'P2002') return next(NUMERO_REPETIDO);
+    throw e;
+  }
+  await req.bitacora({ accion: 'actualizar', entidad: 'requisicion', entidadId: r.id, detalle: `Número del formulario: ${r.numero ?? '(vacío)'} → ${req.body.numero}` });
+  res.json({ requisicion: vista(await cargar(req)) });
+}
+
+/** Quien firmo la ultima requisicion de cada servicio: se propone en la siguiente. */
+async function solicitantes(req, res) {
+  const ultimas = await prisma.requisicion.findMany({
+    where: { establecimientoId: req.usuario.establecimientoId, direccion: 'servicio' },
+    orderBy: { registradaEn: 'desc' },
+    distinct: ['ubicacionId'],
+    select: { ubicacionId: true, solicitante: true, jefe: true, unidadSeccion: true },
+  });
+  res.json({ solicitantes: Object.fromEntries(ultimas.map((u) => [u.ubicacionId, u])) });
+}
+
 async function anular(req, res, next) {
   const r = await cargar(req);
   if (!r || !permitida(req, r.ubicacion)) return next(NO_ENCONTRADA);
@@ -527,4 +618,6 @@ async function anular(req, res, next) {
   res.json({ requisicion: vista(await cargar(req)) });
 }
 
-module.exports = { listar, obtener, crear, actualizar, autorizar, despachar, recibir, anular, existencias, ALMACEN_SUPERIOR };
+module.exports = {
+  listar, obtener, crear, actualizar, autorizar, despachar, recibir, anular, entregar, anotarNumero, solicitantes, existencias, ALMACEN_SUPERIOR,
+};

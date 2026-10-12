@@ -27,14 +27,17 @@ const puedeRegistrar = computed(() => ['admin', 'preconsulta'].includes(auth.rol
  * con seis colores compitiendo no se distingue lo importante de lo demas.
  */
 function prioridad(e) {
-  if (e.gravedad === 'urgente') {
+  const nivel = e.nivel ?? e.gravedad;
+  if (nivel === 'urgente') {
     return { texto: 'Urgente', punto: 'bg-urgente-500', texto_clase: 'text-urgente-700' };
   }
-  if (e.minutosEsperando >= 90) {
-    return { texto: 'Espera larga', punto: 'bg-atencion-500', texto_clase: 'text-atencion-700' };
+  if (nivel === 'moderado') {
+    return { texto: e.subio ? 'Moderado · por espera' : 'Moderado', punto: 'bg-atencion-500', texto_clase: 'text-atencion-700' };
   }
-  return { texto: 'En orden', punto: 'bg-slate-300', texto_clase: 'text-slate-500' };
+  return { texto: 'Leve', punto: 'bg-estable-500', texto_clase: 'text-slate-600' };
 }
+const clinicos = (e) => e.factores.filter((f) => f.tipo === 'clinico' || f.tipo === 'espera_excedida');
+const otros = (e) => e.factores.filter((f) => f.tipo !== 'clinico' && f.tipo !== 'espera_excedida');
 
 async function cargar() {
   cargando.value = true;
@@ -176,8 +179,8 @@ onUnmounted(() => clearInterval(temporizador));
         <article
           v-for="(e, indice) in datos.cola"
           :key="e.id"
-          class="tarjeta overflow-hidden"
-          :class="indice === 0 ? 'border-mspas-700 ring-1 ring-mspas-700' : ''"
+          class="tarjeta overflow-hidden en-cola"
+          :class="[`nivel-${e.nivel ?? e.gravedad}`, indice === 0 ? 'border-mspas-700 ring-1 ring-mspas-700' : '']"
         >
           <p
             v-if="indice === 0"
@@ -205,15 +208,16 @@ onUnmounted(() => clearInterval(temporizador));
               </RouterLink>
               <p class="text-slate-600">{{ e.motivoConsulta }}</p>
 
-              <!-- Unica senal de color de la fila -->
-              <p class="flex items-center gap-2 text-sm font-medium" :class="prioridad(e).texto_clase">
-                <span class="h-2 w-2 rounded-full" :class="prioridad(e).punto" />
-                {{ prioridad(e).texto }}
+              <p class="flex flex-wrap items-center gap-2">
+                <span class="nivel-tag"><Icono :nombre="(e.nivel ?? e.gravedad) === 'leve' ? 'correcto' : 'alerta'" :tamano="14" /> {{ prioridad(e).texto }}</span>
               </p>
 
               <!-- El porque, en texto llano -->
-              <p class="text-slate-500">
-                {{ e.factores.map((f) => f.etiqueta).join(' · ') }}
+              <p v-if="clinicos(e).length" class="font-semibold" :class="prioridad(e).texto_clase">
+                {{ clinicos(e).map((f) => f.etiqueta).join(' · ') }}
+              </p>
+              <p v-if="otros(e).length" class="text-slate-500">
+                {{ otros(e).map((f) => f.etiqueta).join(' · ') }}
               </p>
 
               <p
@@ -227,7 +231,7 @@ onUnmounted(() => clearInterval(temporizador));
             <div class="shrink-0 text-right">
               <p
                 class="text-3xl font-semibold tabular-nums"
-                :class="e.minutosEsperando >= 90 ? 'text-urgente-600' : 'text-slate-700'"
+                :class="e.excedido ? 'text-urgente-600' : 'text-slate-700'"
               >
                 {{ e.minutosEsperando }}
               </p>
@@ -320,3 +324,14 @@ onUnmounted(() => clearInterval(temporizador));
     </template>
   </div>
 </template>
+
+<style scoped>
+.en-cola { border-left-width: 8px; }
+.en-cola.nivel-urgente { border-left-color: #C03535; }
+.en-cola.nivel-moderado { border-left-color: #E8930C; }
+.en-cola.nivel-leve { border-left-color: #1E8E5E; }
+.nivel-tag { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 7px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #fff; }
+.nivel-urgente .nivel-tag { background: #C03535; }
+.nivel-moderado .nivel-tag { background: #E8930C; }
+.nivel-leve .nivel-tag { background: #1E8E5E; }
+</style>

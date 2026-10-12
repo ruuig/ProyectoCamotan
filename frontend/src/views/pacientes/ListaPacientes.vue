@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
+import { cronometro } from '../../dominio/cronometro';
 import servicio from '../../services/pacientes';
 import catalogos from '../../services/catalogos';
 import Icono from '../../components/comunes/Icono.vue';
@@ -133,6 +134,13 @@ onMounted(async () => {
     // El filtro de comunidad queda vacío; la búsqueda por texto sigue sirviendo.
   }
 });
+
+// Tiempo de consulta: de la primera tecla en la búsqueda hasta abrir la ficha.
+const reloj = cronometro('consulta', 'lista_pacientes');
+function abrirFicha(id) {
+  reloj.terminar(id);
+  router.push(`/pacientes/${id}`);
+}
 </script>
 
 <template>
@@ -152,7 +160,7 @@ onMounted(async () => {
       <div class="flex flex-wrap gap-3">
         <label class="b-buscar min-w-[260px] flex-1">
           <Icono nombre="buscar" :tamano="20" />
-          <input v-model="filtros.buscar" type="search" class="b-campo grande" placeholder="Nombre, CUI, expediente o teléfono" aria-label="Buscar paciente" />
+          <input v-model="filtros.buscar" type="search" class="b-campo grande" placeholder="Nombre, CUI, expediente o teléfono" aria-label="Buscar paciente" @input="filtros.buscar ? reloj.iniciar() : reloj.reiniciar()" />
         </label>
         <div class="w-full sm:w-[260px]">
           <select v-model="filtros.lugarPobladoId" aria-label="Comunidad" class="b-campo grande">
@@ -209,7 +217,7 @@ onMounted(async () => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in pacientes" :key="p.id" class="fila" @click="router.push(`/pacientes/${p.id}`)">
+          <tr v-for="p in pacientes" :key="p.id" class="fila" @click="abrirFicha(p.id)">
             <td>
               <span class="codigo" :class="p.expedientePapel ? '' : 'sin-papel'">
                 <b>{{ p.expedientePapel || p.expediente }}</b>
@@ -217,7 +225,7 @@ onMounted(async () => {
               </span>
             </td>
             <td>
-              <RouterLink :to="`/pacientes/${p.id}`" class="nombre" @click.stop>{{ p.apellidos }}, {{ p.nombres }}</RouterLink>
+              <RouterLink :to="`/pacientes/${p.id}`" class="nombre" @click.stop="reloj.terminar(p.id)">{{ p.apellidos }}, {{ p.nombres }}</RouterLink>
               <span v-if="p.embarazoActivo" class="b-estado disponible ml-2">Embarazo</span>
               <span v-if="p.conAlertas" class="b-estado retirado ml-2">Alertas</span>
               <span class="block truncate text-[13px] text-apagado">

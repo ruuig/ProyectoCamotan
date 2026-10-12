@@ -137,8 +137,8 @@ onMounted(async () => {
         </p>
       </div>
       <div class="b-acciones">
-        <RouterLink :to="`/imprimir/tarjeta-control/${id}`" target="_blank" class="b-btn secundario"><Icono nombre="imprimir" :tamano="20" /> Tarjeta de control</RouterLink>
-        <RouterLink :to="`/inventario/${id}/recibir`" class="b-btn primario"><Icono nombre="recibir" :tamano="20" :grosor="2" /> Recibir lote</RouterLink>
+        <RouterLink :to="`/inventario/kardex?insumo=${id}`" class="b-btn secundario"><Icono nombre="hojaCalculo" :tamano="20" /> Kardex</RouterLink>
+        <RouterLink :to="`/inventario/recibir?insumo=${id}`" class="b-btn primario"><Icono nombre="recibir" :tamano="20" :grosor="2" /> Recibir lote</RouterLink>
       </div>
     </header>
 

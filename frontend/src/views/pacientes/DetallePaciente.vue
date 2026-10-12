@@ -6,6 +6,7 @@ import inventario from '../../services/inventario';
 import { useAuthStore } from '../../stores/auth';
 import BloqueAntropometria from '../../components/comunes/BloqueAntropometria.vue';
 import Icono from '../../components/comunes/Icono.vue';
+import HojaAnterior from '../../components/consulta/HojaAnterior.vue';
 
 /**
  * Expediente del paciente.
@@ -22,6 +23,9 @@ const auth = useAuthStore();
 
 const paciente = ref(null);
 const atenciones = ref([]);
+// La hoja completa de una consulta: la leen médico, preconsulta y dirección.
+const hojaAbierta = ref(null);
+const puedeVerHoja = computed(() => ['admin', 'medico', 'preconsulta'].includes(auth.rol));
 const insumos = ref(null);
 const error = ref('');
 const abriendo = ref(false);
@@ -306,6 +310,9 @@ onMounted(() => {
               <small v-if="a.diagnosticoTxt && a.motivoConsulta">Motivo: {{ a.motivoConsulta }}</small>
               <small v-if="a.tratamiento">{{ a.tratamiento }}</small>
             </span>
+            <button v-if="puedeVerHoja && a.estado === 'atendido'" type="button" class="ver-hoja" @click="hojaAbierta = a.id">
+              Ver hoja <Icono nombre="irA" :tamano="14" />
+            </button>
           </li>
         </ol>
         <p v-else class="b-vacio">Sin atenciones registradas.</p>
@@ -358,6 +365,7 @@ onMounted(() => {
         </section>
       </div>
     </div>
+    <HojaAnterior :atencion-id="hojaAbierta" @cerrar="hojaAbierta = null" />
   </section>
 
   <section v-else>
@@ -367,6 +375,8 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.ver-hoja { align-self: center; flex-shrink: 0; display: inline-flex; align-items: center; gap: 2px; padding: 6px 12px; border: 2px solid #CBD5E1; border-radius: 9px; font-size: 13px; font-weight: 800; color: #172A5A; background: #fff; }
+.ver-hoja:hover { border-color: #172A5A; background: #EEF2FA; }
 .encabezado { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; padding: 18px 20px; }
 .codigo { display: inline-flex; flex-direction: column; align-items: center; min-width: 128px; padding: 6px 14px; border: 2px solid #172A5A; border-radius: 12px; line-height: 1.1; }
 .codigo b { font-size: 34px; font-weight: 700; color: #172A5A; font-variant-numeric: tabular-nums; }

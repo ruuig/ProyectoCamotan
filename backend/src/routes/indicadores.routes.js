@@ -101,4 +101,21 @@ router.get(
   asincrono(consolidado.exportar),
 );
 
+// --- Tiempo de registro y consulta de fichas ---------------------------------
+// Lo envia la pantalla sola; se ve en /tiempos, que no esta en el menu.
+const mediciones = require('../controllers/mediciones.controller');
+
+router.post(
+  '/mediciones',
+  autorizar('admin', 'preconsulta', 'medico'),
+  validar(z.object({
+    tipo: z.enum(['registro', 'consulta']),
+    pantalla: z.string().trim().max(40).optional().nullable(),
+    milisegundos: z.coerce.number().int().min(0).max(24 * 3600000),
+    pacienteId: z.coerce.number().int().positive().optional().nullable(),
+  })),
+  asincrono(mediciones.registrar),
+);
+router.get('/mediciones', autorizar('admin'), asincrono(mediciones.resumen));
+
 module.exports = router;

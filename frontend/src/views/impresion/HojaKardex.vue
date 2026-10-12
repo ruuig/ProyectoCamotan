@@ -102,7 +102,7 @@ const paginas = computed(() => {
   const enc = datos.value?.encabezado ?? {};
   for (const t of datos.value?.tarjetas ?? []) {
     const renglones = [];
-    if (route.query.periodo && t.saldoAnterior) {
+    if ((route.query.periodo || route.query.desde) && t.saldoAnterior) {
       renglones.push({ id: 'ant', remitenteDestinatario: 'Saldo anterior', saldo: t.saldoAnterior, valorSaldo: t.valorAnterior });
     }
     renglones.push(...t.filas);
@@ -134,6 +134,7 @@ onMounted(async () => {
   try {
     const q = {};
     if (route.query.periodo) q.periodo = route.query.periodo;
+    if (route.query.desde) q.desde = route.query.desde;
     if (route.query.insumoId) q.insumoId = route.query.insumoId;
     datos.value = await bodega.kardex(q);
     registrarImpresion('kardex', `${route.query.periodo ?? 'historia'}${route.query.insumoId ? ` insumo ${route.query.insumoId}` : ''}`);

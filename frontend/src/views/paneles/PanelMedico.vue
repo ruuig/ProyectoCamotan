@@ -6,6 +6,7 @@ import CodigoPaciente from '../../components/comunes/CodigoPaciente.vue';
 import Icono from '../../components/comunes/Icono.vue';
 import Etiqueta from '../../components/comunes/Etiqueta.vue';
 import EstadoVacio from '../../components/comunes/EstadoVacio.vue';
+import CodificarCie from '../../components/consulta/CodificarCie.vue';
 
 const datos = ref(null);
 const error = ref('');
@@ -25,6 +26,12 @@ const ICONO_ALERTA = {
 };
 
 const TONO_GRAVEDAD = { urgente: 'urgente', moderado: 'atencion', leve: 'neutro' };
+
+// Por qué el paciente tiene esa prioridad: lo que encontró la preconsulta.
+const motivosSiguiente = computed(() => datos.value?.siguiente?.preconsulta?.triaje?.motivos ?? []);
+const clinicos = (e) => e.factores.filter((f) => f.tipo === 'clinico' || f.tipo === 'espera_excedida');
+const otros = (e) => e.factores.filter((f) => f.tipo === 'condicion' || f.tipo === 'distancia');
+const quitarCodificada = (id) => { datos.value.porCodificar = datos.value.porCodificar.filter((a) => a.id !== id); };
 
 const ETIQUETA_CONDICION = {
   embarazo: 'Embarazo',
@@ -147,6 +154,17 @@ onUnmounted(() => clearInterval(temporizador));
                   {{ ETIQUETA_CONDICION[c] ?? c }}
                 </span>
               </div>
+
+              <ul v-if="motivosSiguiente.length" class="mt-3 flex flex-wrap gap-2" aria-label="Por qué tiene esta prioridad">
+                <li
+                  v-for="m in motivosSiguiente"
+                  :key="m.texto"
+                  class="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-sm font-bold"
+                  :class="m.nivel === 'urgente' ? 'text-urgente-700' : 'text-atencion-700'"
+                >
+                  <Icono nombre="alerta" :tamano="15" /> {{ m.texto }}
+                </li>
+              </ul>
 
               <p class="mt-4 border-t border-white/20 pt-4">
                 <span class="text-celeste-200">Motivo: </span>
@@ -304,8 +322,9 @@ onUnmounted(() => clearInterval(temporizador));
         </div>
       </div>
 
-      <!-- COLUMNA LATERAL: la cola -->
-      <aside class="panel self-start">
+      <!-- COLUMNA LATERAL: la cola y lo que falta codificar -->
+      <div class="space-y-5 self-start">
+      <aside class="panel">
         <header class="panel-encabezado">
           <h2 class="panel-titulo">
             <Icono nombre="cola" :tamano="20" class="text-celeste-400" />
@@ -316,25 +335,21 @@ onUnmounted(() => clearInterval(temporizador));
 
         <EstadoVacio v-if="datos.cola.length === 0" icono="correcto" titulo="Nadie en espera" />
         <ol v-else class="lista">
-          <li v-for="(e, i) in datos.cola" :key="e.id" class="flex items-start gap-3 px-5 py-3.5">
-            <span
-              class="w-5 shrink-0 text-right font-semibold tabular-nums"
-              :class="i === 0 ? 'text-mspas-700' : 'text-slate-400'"
-            >
-              {{ i + 1 }}
-            </span>
+          <li v-for="(e, i) in datos.cola" :key="e.id" class="en-cola" :class="`nivel-${e.nivel ?? e.gravedad}`">
+            <span class="posicion" :class="i === 0 ? 'primero' : ''">{{ i + 1 }}</span>
             <div class="min-w-0 flex-1">
-              <p class="truncate font-medium text-slate-900">{{ e.paciente.nombreCompleto }}</p>
-              <p class="truncate text-slate-500">{{ e.motivoConsulta }}</p>
-              <!-- Por que esta en esa posicion, en palabras -->
-              <p class="mt-0.5 truncate text-sm text-slate-500">
-                {{ e.factores.map((f) => f.etiqueta).join(' · ') }}
+              <p class="flex items-center gap-2">
+                <span class="nivel">{{ (e.nivel ?? e.gravedad) === 'urgente' ? 'Urgente' : (e.nivel ?? e.gravedad) === 'moderado' ? 'Moderado' : 'Leve' }}</span>
+                <span class="truncate font-medium text-slate-900">{{ e.paciente.nombreCompleto }}</span>
               </p>
+              <p class="truncate text-sm text-slate-500">{{ e.motivoConsulta }}</p>
+              <!-- Por que esta en esa posicion, en palabras -->
+              <p v-if="clinicos(e).length" class="mt-0.5 text-sm font-semibold" :class="(e.nivel ?? e.gravedad) === 'urgente' ? 'text-urgente-700' : 'text-atencion-700'">
+                {{ clinicos(e).map((f) => f.etiqueta).join(' · ') }}
+              </p>
+              <p v-if="otros(e).length" class="truncate text-xs font-semibold text-slate-500">{{ otros(e).map((f) => f.etiqueta).join(' · ') }}</p>
             </div>
-            <span
-              class="shrink-0 tabular-nums"
-              :class="e.minutosEsperando >= 90 ? 'font-semibold text-urgente-700' : 'text-slate-500'"
-            >
+            <span class="shrink-0 tabular-nums" :class="e.excedido ? 'font-bold text-urgente-700' : 'text-slate-500'" :title="e.excedido ? 'Pasó el tiempo máximo de su nivel' : ''">
               {{ e.minutosEsperando }} min
             </span>
           </li>
@@ -350,6 +365,20 @@ onUnmounted(() => clearInterval(temporizador));
           </p>
         </div>
       </aside>
+
+      <aside v-if="datos.porCodificar?.length" class="panel">
+        <header class="panel-encabezado">
+          <h2 class="panel-titulo">
+            <Icono nombre="consulta" :tamano="20" class="text-celeste-400" />
+            Por codificar
+          </h2>
+          <span class="contador">{{ datos.porCodificar.length }}</span>
+        </header>
+        <ul class="max-h-[420px] overflow-y-auto">
+          <CodificarCie v-for="a in datos.porCodificar" :key="a.id" :atencion="a" @codificada="quitarCodificada" />
+        </ul>
+      </aside>
+      </div>
     </div>
   </section>
 
@@ -361,3 +390,17 @@ onUnmounted(() => clearInterval(temporizador));
     <p v-else class="text-slate-500">Cargando panel...</p>
   </section>
 </template>
+
+<style scoped>
+.contador { min-width: 28px; padding: 2px 8px; border-radius: 8px; background: #FFF4D6; color: #8A5A06; font-weight: 800; text-align: center; }
+.en-cola { display: flex; align-items: flex-start; gap: 12px; padding: 12px 18px 12px 14px; border-left: 4px solid transparent; }
+.en-cola.nivel-urgente { border-left-color: #C03535; }
+.en-cola.nivel-moderado { border-left-color: #E8930C; }
+.en-cola.nivel-leve { border-left-color: #22A06B; }
+.posicion { width: 26px; height: 26px; flex-shrink: 0; display: grid; place-items: center; border-radius: 8px; background: #EEF2F6; font-weight: 800; font-size: 13px; color: #475569; font-variant-numeric: tabular-nums; }
+.posicion.primero { background: #172A5A; color: #fff; }
+.nivel { flex-shrink: 0; padding: 1px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.nivel-urgente .nivel { background: #FDECEC; color: #A52A2A; }
+.nivel-moderado .nivel { background: #FFF4D6; color: #8A5A06; }
+.nivel-leve .nivel { background: #E2F5EA; color: #145C3C; }
+</style>

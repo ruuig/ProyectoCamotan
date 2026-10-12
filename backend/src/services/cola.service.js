@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const { parametros } = require('./parametrosPriorizacion.service');
 const {
   ordenarCola,
   resumenCola,
@@ -74,12 +75,18 @@ function pasoElHorario(ahora = new Date()) {
 }
 
 // Da forma a lo que consume la interfaz, con el dato ya interpretado.
-function aEntradaDeCola(entrada) {
+function aEntradaDeCola(entrada, posicion = null) {
   const { atencion, puntaje, factores, minutosEsperando: espera } = entrada;
   return {
     id: atencion.id,
+    posicion,
     estado: atencion.estado,
     gravedad: atencion.gravedad,
+    // Nivel con el que se ordena: sube si un leve paso su tiempo maximo.
+    nivel: entrada.nivel ?? atencion.gravedad,
+    subio: entrada.subio ?? false,
+    excedido: entrada.excedido ?? false,
+    triaje: atencion.preconsulta?.triaje ?? null,
     motivoConsulta: atencion.motivoConsulta,
     ausencias: atencion.ausencias,
     registradaEn: atencion.registradaEn,
@@ -114,11 +121,13 @@ async function obtenerCola(establecimientoId, ahora = new Date()) {
     }),
   ]);
 
-  const ordenada = ordenarCola(enEspera, ahora);
+  const { puntos } = await parametros(establecimientoId);
+  const ordenada = ordenarCola(enEspera, ahora, puntos);
   const resumen = resumenCola(ordenada);
 
   return {
-    cola: ordenada.map(aEntradaDeCola),
+    cola: ordenada.map((e, i) => aEntradaDeCola(e, i + 1)),
+    tiempoMaximo: puntos.tiempoMaximo,
     enAtencion: enAtencion.map((a) =>
       aEntradaDeCola({ atencion: a, puntaje: 0, minutosEsperando: minutosEsperando(a, ahora) }),
     ),

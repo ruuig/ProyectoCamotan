@@ -10,6 +10,7 @@ const bitacoraControlador = require('../controllers/bitacora.controller');
 const signosControlador = require('../controllers/signosPeligro.controller');
 const admin = require('../controllers/admin.controller');
 const respaldos = require('../controllers/respaldos.controller');
+const triaje = require('../controllers/triaje.controller');
 
 const router = express.Router();
 
@@ -143,5 +144,25 @@ router.get(
   validar(esquemasBitacora.consulta, 'query'),
   asincrono(bitacoraControlador.listar),
 );
+
+// --- Prioridad: criterios clinicos, puntos y tiempos ---------------------------
+// Son decisiones medicas: cambiarlas pide la autorizacion del director y queda
+// en la bitacora con el antes y el despues.
+router.get('/priorizacion', soloAdmin, asincrono(triaje.obtener));
+router.put(
+  '/priorizacion/puntos',
+  soloAdmin,
+  validar(esquemas.guardarPuntosPrioridad),
+  asincrono(exigirAutorizacionDirector('cambiar puntos y tiempos de la prioridad')),
+  asincrono(triaje.guardarPuntos),
+);
+router.put(
+  '/priorizacion/criterios',
+  soloAdmin,
+  validar(esquemas.guardarCriteriosTriaje),
+  asincrono(exigirAutorizacionDirector('cambiar criterios clínicos de la prioridad')),
+  asincrono(triaje.guardarCriterios),
+);
+router.post('/priorizacion/probar', soloAdmin, validar(esquemas.probarPrioridad), asincrono(triaje.probar));
 
 module.exports = router;

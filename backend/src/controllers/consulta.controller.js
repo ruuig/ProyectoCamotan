@@ -16,7 +16,10 @@ const {
 } = require('../services/hojaEvolucion.service');
 const { semanasDeGestacion } = require('../services/embarazo.service');
 const { resumenAntecedentes } = require('../services/resumenFicha.service');
-const { sitiosExamen } = require('../services/fichaClinica.service');
+const { sitiosExamen, SITIOS_EXAMEN, SITIO_PIES } = require('../services/fichaClinica.service');
+const { ETIQUETA_CONCIENCIA } = require('../services/triaje.service');
+
+const SITIO_HUESOS = { clave: 'huesos_articulaciones', etiqueta: 'Huesos y articulaciones' };
 
 /** Diagnosticos de consultas cerradas del paciente, para sugerir el tipo. */
 async function diagnosticosPrevios(pacienteId, excluirId) {
@@ -59,6 +62,8 @@ async function obtener(req, res, next) {
         diagnosticoCie: true,
         diagnosticoTxt: true,
         tratamiento: true,
+        medico: { select: { nombre: true } },
+        prescripciones: { select: { id: true } },
       },
     }),
     prisma.antropometria.findFirst({
@@ -77,10 +82,17 @@ async function obtener(req, res, next) {
 
   // Resumen de antecedentes: el medico lo ve en la consulta, aunque llenarlos
   // no es parte de su flujo.
-  const [secciones, previos, embarazo] = await Promise.all([
+  const codigosPeligro = atencion.preconsulta?.signosPeligro ?? [];
+  const [secciones, previos, embarazo, signosPeligro] = await Promise.all([
     prisma.seccionPaciente.findMany({ where: { pacienteId: atencion.pacienteId } }),
     diagnosticosPrevios(atencion.pacienteId, atencion.id),
     prisma.episodioEmbarazo.findFirst({ where: { pacienteId: atencion.pacienteId, estado: 'activo' } }),
+    codigosPeligro.length
+      ? prisma.signoPeligro.findMany({
+        where: { establecimientoId: atencion.establecimientoId, codigo: { in: codigosPeligro } },
+        select: { descripcion: true, gravedadSugerida: true },
+      })
+      : [],
   ]);
   const antecedentes = resumenAntecedentes(pacienteCompleto, secciones);
 
@@ -100,6 +112,7 @@ async function obtener(req, res, next) {
     historial,
     antropometria,
     ficha,
+    signosPeligro,
     fichaPaciente: antecedentes.ficha,
     antecedentes: antecedentes.secciones,
     sitiosExamen: sitiosExamen(antecedentes.ficha.clave),
@@ -492,4 +505,124 @@ async function crearRecetaExterna(req, res, next) {
   res.status(201).json({ receta });
 }
 
-module.exports = { sugerenciaTipo, obtener, registrarConsulta, codificar, crearPrescripcion, crearRecetaExterna, alertasPaciente, corregirConsulta, correccionesDe, corregirSignosVitales };
+
+// --- Hoja de una consulta anterior ----------------------------------------------
+
+const etiquetaDe3cs = (lista, valor) => (valor == null ? null : lista.find((o) => o.valor === valor)?.etiqueta ?? String(valor));
+
+/** Estado de entrega de una receta: lo que el paciente se llevo. */
+function estadoReceta(p) {
+  const validas = p.dispensaciones.filter((d) => !d.anulada);
+  const entregado = validas.reduce((t, d) => t + d.cantidad, 0);
+  const noHabia = p.demandaNoAtendida.reduce((t, d) => t + d.cantidad, 0);
+  let estado = 'sin_entregar';
+  if (entregado >= p.cantidad) estado = 'entregada';
+  else if (entregado > 0) estado = 'parcial';
+  else if (noHabia > 0) estado = 'no_habia';
+  return {
+    id: p.id,
+    medicamento: [p.insumo.nombreGenerico, p.insumo.concentracion, p.insumo.formaFarmaceutica].filter(Boolean).join(' '),
+    cantidad: p.cantidad,
+    indicaciones: p.indicaciones,
+    entregado,
+    noHabia,
+    estado,
+    entregadaEn: validas.at(-1)?.registradaEn ?? null,
+  };
+}
+
+/**
+ * Todo lo que el medico escribio en una consulta, tal como lo dejo, para
+ * leerlo en la siguiente visita. Solo lectura.
+ */
+async function hoja(req, res, next) {
+  const a = await prisma.atencion.findFirst({
+    where: { id: req.params.id, establecimientoId: req.usuario.establecimientoId },
+    include: {
+      preconsulta: true,
+      diagnosticos: { orderBy: { orden: 'asc' } },
+      prescripciones: {
+        orderBy: { creadaEn: 'asc' },
+        include: { insumo: true, dispensaciones: true, demandaNoAtendida: true },
+      },
+      recetasExternas: { orderBy: { creadaEn: 'asc' } },
+      referencia: true,
+      medico: { select: { nombre: true } },
+      clinica: { select: { nombre: true } },
+      paciente: { select: { nombres: true, apellidos: true, expediente: true, expedientePapel: true, fechaNacimiento: true, sexo: true } },
+    },
+  });
+  if (!a) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Atención no encontrada' });
+
+  const signos = a.preconsulta?.signosPeligro?.length
+    ? await prisma.signoPeligro.findMany({
+      where: { establecimientoId: a.establecimientoId, codigo: { in: a.preconsulta.signosPeligro } },
+      select: { codigo: true, descripcion: true },
+    })
+    : [];
+  const sitios = [...SITIOS_EXAMEN, SITIO_PIES, SITIO_HUESOS];
+  const examen = a.examenSitios ?? null;
+  const p = a.preconsulta;
+
+  await req.bitacora({ accion: 'leer', entidad: 'atencion', entidadId: a.id, detalle: 'Hoja de consulta anterior' });
+
+  res.json({
+    id: a.id,
+    estado: a.estado,
+    paciente: a.paciente,
+    registradaEn: a.registradaEn,
+    cerradaEn: a.cerradaEn,
+    medico: a.medico?.nombre ?? null,
+    clinica: a.clinica?.nombre ?? null,
+    gravedad: a.gravedad,
+    acompanante: a.acompanante,
+    preconsulta: p && {
+      peso: p.peso, unidadPeso: p.unidadPeso, talla: p.talla, temperatura: p.temperatura,
+      presion: p.presionSis && p.presionDia ? `${p.presionSis}/${p.presionDia}` : null,
+      frecCardiaca: p.frecCardiaca, frecRespiratoria: p.frecRespiratoria, satOxigeno: p.satOxigeno,
+      dolor: p.dolor, conciencia: p.conciencia ? ETIQUETA_CONCIENCIA[p.conciencia] : null, glucosa: p.glucosa,
+      signosPeligro: signos.map((x) => x.descripcion),
+      triaje: p.triaje ?? null,
+    },
+    motivoConsulta: a.motivoConsulta,
+    historiaEnfermedad: a.historiaEnfermedad,
+    examenFisico: a.examenFisico,
+    examenSitios: examen && {
+      anormales: sitios.filter((x) => examen.sitios?.[x.clave] === false).map((x) => x.etiqueta),
+      normales: sitios.filter((x) => examen.sitios?.[x.clave] === true).map((x) => x.etiqueta),
+      hallazgosAnormales: examen.hallazgosAnormales ?? null,
+      otrosHallazgos: examen.otrosHallazgos ?? null,
+    },
+    diagnosticos: a.diagnosticos.length
+      ? a.diagnosticos.map((d) => ({ descripcion: d.descripcion, cie: d.cie }))
+      : (a.diagnosticoTxt ? [{ descripcion: a.diagnosticoTxt, cie: a.diagnosticoCie }] : []),
+    otrosProblemas: a.otrosProblemas,
+    tratamiento: a.tratamiento,
+    recetas: a.prescripciones.map(estadoReceta),
+    recetasExternas: a.recetasExternas.map((r) => ({ medicamento: r.medicamento, cantidad: r.cantidad, indicaciones: r.indicaciones })),
+    laboratorios: a.laboratorios,
+    orientacion: a.orientacionIntegral,
+    proximaCita: a.proximaCita,
+    referencia: a.referencia && {
+      servicioDestino: a.referencia.servicioDestino,
+      motivo: a.referencia.motivo,
+      contrarreferencia: a.referencia.contraRecibidaEn ? {
+        recibidaEn: a.referencia.contraRecibidaEn,
+        diagnostico: a.referencia.contraDiagnostico,
+        tratamiento: a.referencia.contraTratamiento,
+        recomendaciones: a.referencia.contraRecomendaciones,
+      } : null,
+    },
+    sigsa: {
+      tipoConsulta: etiquetaDe3cs(CATALOGOS_3CS.tipoConsulta, a.tipoConsulta),
+      control: etiquetaDe3cs(CATALOGOS_3CS.controlSigsa, a.controlSigsa),
+      semanasGestacion: a.semanasGestacion,
+      referenciaViene: etiquetaDe3cs(CATALOGOS_3CS.referenciaViene, a.referenciaViene),
+      referenciaFue: etiquetaDe3cs(CATALOGOS_3CS.referenciaFue, a.referenciaFue),
+      referidoA: a.referidoA,
+    },
+    correcciones: await historial(a.id),
+  });
+}
+
+module.exports = { hoja, sugerenciaTipo, obtener, registrarConsulta, codificar, crearPrescripcion, crearRecetaExterna, alertasPaciente, corregirConsulta, correccionesDe, corregirSignosVitales };

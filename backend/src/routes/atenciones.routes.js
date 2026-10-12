@@ -8,6 +8,7 @@ const controlador = require('../controllers/atenciones.controller');
 const cola = require('../controllers/cola.controller');
 const consulta = require('../controllers/consulta.controller');
 const referencias = require('../controllers/referencias.controller');
+const triaje = require('../controllers/triaje.controller');
 const idempotencia = require('../middleware/idempotencia');
 
 const router = express.Router();
@@ -21,6 +22,9 @@ const medicos = autorizar('admin', 'medico');
 // --- Cola ------------------------------------------------------------------
 
 router.get('/cola', clinicos, asincrono(cola.cola));
+
+// Lo que la preconsulta va mostrando mientras se escriben los signos.
+router.post('/triaje/evaluar', clinicos, validar(esquemas.evaluarTriaje), asincrono(triaje.evaluar));
 router.get('/resumen-dia', clinicos, asincrono(cola.resumenDia));
 router.get('/siguiente', medicos, asincrono(cola.siguiente));
 
@@ -66,6 +70,14 @@ router.get(
   clinicos,
   validar(esquemas.parametroId, 'params'),
   asincrono(consulta.obtener),
+);
+
+// Hoja completa de una consulta anterior, solo lectura.
+router.get(
+  '/:id/hoja',
+  clinicos,
+  validar(esquemas.parametroId, 'params'),
+  asincrono(consulta.hoja),
 );
 
 router.patch(

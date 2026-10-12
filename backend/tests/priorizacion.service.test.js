@@ -275,7 +275,7 @@ describe('explicarPuntaje', () => {
     expect(cola[0].factores.map((f) => f.etiqueta)).toEqual([
       'Caso urgente',
       'Embarazada',
-      'Recien llegado',
+      'Recién llegado',
     ]);
   });
 });

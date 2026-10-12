@@ -8,14 +8,16 @@ import EstanteCategoria from '../../components/bodega/diseno/EstanteCategoria.vu
 import ReglaCobertura from '../../components/bodega/diseno/ReglaCobertura.vue';
 import SelloVence from '../../components/bodega/diseno/SelloVence.vue';
 import { CATEGORIA, estiloCategoria, situacion, miles, decimal, general } from '../../components/bodega/diseno/PiezasBodega';
-import { periodoActual, nombrePeriodo } from '../../dominio/bodega';
+import { periodoActual, periodoPrevio } from '../../dominio/bodega';
+import SelectorMes from '../../components/bodega/SelectorMes.vue';
 
 /**
  * Existencias de la bodega con las cifras del balance: lo que hay, para
  * cuántos meses alcanza y cuánto pedir. A la derecha, el insumo elegido.
  */
 const router = useRouter();
-const periodo = periodoActual();
+// Abre en el último mes cerrado, que es el que coincide con el BRES.
+const periodo = ref(periodoPrevio(periodoActual()));
 const balance = ref(null);
 const semaforo = ref(null);
 const error = ref('');
@@ -28,16 +30,19 @@ const orden = ref('alfabetico');
 const elegidoId = ref(null);
 const servicioId = ref(null);
 
-onMounted(async () => {
+async function cargar() {
+  error.value = '';
   try {
-    const [b, s] = await Promise.all([bodega.balance({ periodo }), bodega.semaforo({})]);
+    const [b, s] = await Promise.all([bodega.balance({ periodo: periodo.value }), semaforo.value ? null : bodega.semaforo({})]);
     balance.value = b;
-    semaforo.value = s;
-    servicioId.value = b.servicios[0]?.id ?? null;
+    if (s) semaforo.value = s;
+    servicioId.value ??= b.servicios[0]?.id ?? null;
   } catch (fallo) {
     error.value = fallo.message;
   }
-});
+}
+onMounted(cargar);
+watch(periodo, cargar);
 
 const minimo = computed(() => balance.value?.configuracion.nivelMinimoMeses ?? 2);
 const maximo = computed(() => balance.value?.configuracion.nivelMaximoMeses ?? 4);
@@ -115,7 +120,7 @@ const filasServicio = computed(() => {
     <header class="b-cabecera">
       <div class="flex items-baseline gap-4">
         <h1 class="b-titulo">Existencias</h1>
-        <span class="b-antetitulo">{{ nombrePeriodo(periodo) }}</span>
+        <SelectorMes v-model="periodo" etiqueta="Mes de las existencias" />
       </div>
       <div class="b-acciones">
         <div class="b-segmentado" role="radiogroup" aria-label="Vista">
@@ -239,7 +244,7 @@ const filasServicio = computed(() => {
 
           <div class="mt-5 grid grid-cols-2 gap-2">
             <RouterLink :to="`/inventario/${elegido.insumoId}`" class="b-btn secundario">Ver ficha</RouterLink>
-            <RouterLink :to="`/inventario/${elegido.insumoId}/recibir`" class="b-btn primario"><Icono nombre="recibir" :tamano="20" :grosor="2" /> Recibir</RouterLink>
+            <RouterLink :to="`/inventario/recibir?insumo=${elegido.insumoId}`" class="b-btn primario"><Icono nombre="recibir" :tamano="20" :grosor="2" /> Recibir</RouterLink>
           </div>
         </aside>
       </div>

@@ -29,6 +29,18 @@ export default {
   recibirRequisicion: (id, datos, clave) => http.post(`/bodega/requisiciones/${id}/recibir`, datos, clave ? { 'Idempotency-Key': clave } : undefined),
   anularRequisicion: (id, motivo) => http.post(`/bodega/requisiciones/${id}/anular`, { motivo }),
   kardex: (parametros) => http.get(`/bodega/kardex?${consulta(parametros)}`),
+  entregar: (datos, clave) => http.post('/bodega/requisiciones/entregar', datos, clave ? { 'Idempotency-Key': clave } : undefined),
+  anotarNumero: (id, numero) => http.patch(`/bodega/requisiciones/${id}/numero`, { numero }),
+  solicitantes: () => http.get('/bodega/requisiciones/solicitantes'),
+
+  // Recepción: lo que llega con su documento.
+  recepciones: () => http.get('/bodega/recepciones'),
+  recepcion: (id) => http.get(`/bodega/recepciones/${id}`),
+  recibir: (datos, clave) => http.post('/bodega/recepciones', datos, clave ? { 'Idempotency-Key': clave } : undefined),
+  faltantes: () => http.get('/bodega/recepciones/faltantes'),
+  reponer: (loteId, cantidad) => http.post(`/bodega/lotes/${loteId}/reponer`, { cantidad }),
+
+  hoy: (parametros) => http.get(`/bodega/hoy?${consulta(parametros)}`),
 
   estadoReportes: (periodo) => http.get(`/bodega/reportes?${consulta({ periodo })}`),
   reporte: (ubicacionId, periodo) => http.get(`/bodega/reportes/${ubicacionId}/${periodo}`),

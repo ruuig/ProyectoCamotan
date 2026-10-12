@@ -19,6 +19,39 @@ const { fusionarCambios } = require('../services/fichaPaciente.service');
 const { etapaDeVida, camposVisibles } = require('../services/etapaVida.service');
 const { describirEpisodio, fechaProbableParto } = require('../services/embarazo.service');
 const { CAMPOS_SENSIBLES } = require('../schemas/pacientes.schema');
+const { analizarCui } = require('../services/cui.service');
+
+const MOTIVO_CUI = {
+  verificador: 'El CUI no es válido: el dígito verificador no corresponde. Revise los números.',
+  departamento: 'El CUI no es válido: los dígitos del departamento no existen.',
+  municipio: 'El CUI no es válido: los dígitos del municipio no existen en ese departamento.',
+};
+
+/**
+ * Lo que se deduce sin preguntar: la comunidad del catalogo es del municipio
+ * del centro, y el CUI dice donde se inscribio el nacimiento. Solo llena lo
+ * que no se escribio a mano. Devuelve un error si el CUI no es valido.
+ */
+const vacio = (v) => v === undefined || v === null || v === '';
+
+async function completarDerivados(datos, establecimientoId, { conLugar }) {
+  if (datos.cui) {
+    const cui = analizarCui(datos.cui);
+    if (!cui.valido && cui.motivo !== 'incompleto') {
+      return { status: 400, codigo: 'cui_invalido', mensaje: MOTIVO_CUI[cui.motivo] };
+    }
+    if (cui.valido) {
+      if (vacio(datos.departamentoNacimiento)) datos.departamentoNacimiento = cui.departamento;
+      if (vacio(datos.municipioNacimiento) && cui.municipio) datos.municipioNacimiento = cui.municipio;
+    }
+  }
+  if (conLugar) {
+    const est = await prisma.establecimiento.findUnique({ where: { id: establecimientoId }, select: { municipio: true, departamento: true } });
+    if (vacio(datos.municipioResidencia)) datos.municipioResidencia = est.municipio;
+    if (vacio(datos.departamentoResidencia)) datos.departamentoResidencia = est.departamento;
+  }
+  return null;
+}
 const {
   SIMILITUD_MINIMA,
   interpretarTexto,
@@ -386,6 +419,9 @@ async function crear(req, res, next) {
     datos.comunidad = lugar.nombre;
   }
 
+  const errorDerivado = await completarDerivados(datos, establecimientoId, { conLugar: Boolean(datos.lugarPobladoId) });
+  if (errorDerivado) return next(errorDerivado);
+
   const cuiRegistrado = await errorCuiRegistrado(datos.cui, establecimientoId);
   if (cuiRegistrado) return next(cuiRegistrado);
 
@@ -498,6 +534,9 @@ async function actualizar(req, res, next) {
     }
     datos.comunidad = lugar.nombre;
   }
+
+  const errorDerivado = await completarDerivados(datos, establecimientoId, { conLugar: Boolean(datos.lugarPobladoId) });
+  if (errorDerivado) return next(errorDerivado);
 
   const existente = await prisma.paciente.findFirst({
     where: { id: req.params.id, establecimientoId },

@@ -8,6 +8,7 @@ import Etiqueta from '../../components/comunes/Etiqueta.vue';
 import CodigoPaciente from '../../components/comunes/CodigoPaciente.vue';
 import CampoSiNo from '../../components/ficha/CampoSiNo.vue';
 import FilaDiagnostico from '../../components/consulta/FilaDiagnostico.vue';
+import HojaAnterior from '../../components/consulta/HojaAnterior.vue';
 import { equivalencia } from '../../dominio/unidadesPeso';
 
 /**
@@ -118,6 +119,27 @@ const vitales = computed(() => {
     return { ...v, valor, nota };
   }).filter((v) => v.valor !== null && v.valor !== undefined);
 });
+
+// Lo que preconsulta encontró: el porqué de la prioridad, arriba de todo.
+const motivosTriaje = computed(() => {
+  const t = datos.value?.atencion?.preconsulta?.triaje;
+  const motivos = (t?.motivos ?? []).map((m) => ({ texto: m.texto ?? m.etiqueta, nivel: m.nivel }));
+  for (const s of datos.value?.signosPeligro ?? []) {
+    if (!motivos.some((m) => m.texto === s.descripcion)) motivos.push({ texto: s.descripcion, nivel: s.gravedadSugerida });
+  }
+  return motivos;
+});
+const triajeBajado = computed(() => {
+  const t = datos.value?.atencion?.preconsulta?.triaje;
+  return t?.justificacion && t.sugerido !== t.elegido ? t : null;
+});
+
+// Consulta anterior abierta en el panel lateral.
+const hojaAbierta = ref(null);
+function copiarTratamiento(texto) {
+  hoja.tratamiento = hoja.tratamiento ? `${hoja.tratamiento}\n${texto}` : texto;
+  hojaAbierta.value = null;
+}
 
 const camposEnAlerta = computed(
   () => new Set((datos.value?.alertas ?? []).filter((a) => a.tipo === 'signo_vital').map((a) => a.detalle?.campo)),
@@ -511,6 +533,21 @@ onMounted(() => {
       </div>
     </header>
 
+    <div v-if="motivosTriaje.length || triajeBajado" class="franja-triaje" :class="`nivel-${datos.atencion.gravedad}`" role="alert">
+      <div class="sello">
+        <Icono nombre="alerta" :tamano="22" />
+        <span>{{ datos.atencion.gravedad }}</span>
+      </div>
+      <div class="min-w-0 flex-1 py-3 pr-4">
+        <ul class="flex flex-wrap gap-2">
+          <li v-for="m in motivosTriaje" :key="m.texto" class="motivo" :class="m.nivel">{{ m.texto }}</li>
+        </ul>
+        <p v-if="triajeBajado" class="franja-nota">
+          <b>Bajado de {{ triajeBajado.sugerido }}:</b> {{ triajeBajado.justificacion }}
+        </p>
+      </div>
+    </div>
+
     <p v-if="error" role="alert" class="aviso aviso-urgente">
       <Icono nombre="alerta" :tamano="20" class="mt-0.5 shrink-0 text-empeora" />
       <span class="text-tinta-2">
@@ -528,7 +565,6 @@ onMounted(() => {
         <article class="panel">
           <header class="panel-encabezado">
             <h2 class="panel-titulo">Peso y signos vitales</h2>
-            <span class="text-sm text-apagado">De preconsulta; se corrigen con rastro</span>
           </header>
           <div class="p-relleno">
             <p v-if="vitales.length === 0" class="text-apagado">Preconsulta no registró signos vitales en esta visita.</p>
@@ -1015,16 +1051,24 @@ onMounted(() => {
         <div v-if="datos.historial.length" class="panel">
           <header class="panel-encabezado"><h2 class="panel-titulo">Consultas anteriores</h2></header>
           <ul class="lista">
-            <li v-for="h in datos.historial" :key="h.id" class="px-4 py-2.5">
-              <p class="text-sm font-bold text-tinta">{{ h.diagnosticoTxt || h.motivoConsulta }}</p>
-              <p class="text-sm text-apagado">
-                <span v-if="h.diagnosticoCie" class="font-mono">{{ h.diagnosticoCie }} · </span>{{ fecha(h.registradaEn) }}
-              </p>
+            <li v-for="h in datos.historial" :key="h.id">
+              <button type="button" class="anterior" @click="hojaAbierta = h.id">
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-bold text-tinta">{{ h.diagnosticoTxt || h.motivoConsulta || 'Sin diagnóstico' }}</span>
+                  <span class="block text-sm text-apagado">
+                    <span v-if="h.diagnosticoCie" class="font-mono">{{ h.diagnosticoCie }} · </span>{{ fecha(h.registradaEn) }}
+                    <span v-if="h.prescripciones?.length"> · {{ h.prescripciones.length }} med.</span>
+                  </span>
+                </span>
+                <span class="ver">Ver hoja <Icono nombre="irA" :tamano="14" /></span>
+              </button>
             </li>
           </ul>
         </div>
       </aside>
     </div>
+
+    <HojaAnterior :atencion-id="hojaAbierta" :puede-copiar="!yaCerrada" @cerrar="hojaAbierta = null" @copiar-tratamiento="copiarTratamiento" />
   </section>
 
   <section v-else class="mx-auto max-w-3xl">
@@ -1037,6 +1081,20 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.franja-triaje { display: flex; align-items: stretch; gap: 16px; overflow: hidden; border: 2px solid #F3BDBD; border-radius: 14px; background: #fff; }
+.franja-triaje.nivel-moderado { border-color: #F5D58A; }
+.franja-triaje.nivel-leve { border-color: #B5E2CB; }
+.sello { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; width: 112px; padding: 10px; color: #fff; background: #C03535; font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.nivel-moderado .sello { background: #E8930C; }
+.nivel-leve .sello { background: #1E8E5E; }
+.motivo { padding: 5px 12px; border-radius: 8px; font-size: 15px; font-weight: 700; }
+.motivo.urgente { background: #FDECEC; color: #8C1D1D; }
+.motivo.moderado { background: #FFF1D6; color: #7A4F05; }
+.franja-nota { margin-top: 8px; font-size: 14px; color: #475569; }
+.anterior { display: flex; width: 100%; align-items: center; gap: 10px; padding: 10px 16px; text-align: left; }
+.anterior:hover { background: #F2F4F7; }
+.anterior .ver { flex-shrink: 0; display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px; border: 2px solid #CBD5E1; border-radius: 8px; font-size: 12px; font-weight: 800; color: #172A5A; background: #fff; }
+.anterior:hover .ver { border-color: #172A5A; }
 .lista-receta { margin-top: 6px; overflow: hidden; border: 1px solid var(--linea, #DDE3EC); border-radius: 10px; background: #fff; }
 .opcion-receta { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; text-align: left; border-top: 1px solid var(--linea-suave, #EDF0F5); }
 li:first-child > .opcion-receta { border-top: none; }

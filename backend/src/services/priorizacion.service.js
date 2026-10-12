@@ -1,22 +1,74 @@
 // Corazon de la cola de atencion. Funciones puras: reciben datos, devuelven
 // datos. Sin acceso a base de datos, para poder probarse en aislamiento.
+//
+// La prioridad tiene tres capas:
+//   1. El nivel (urgente, moderado, leve) lo deciden los criterios clinicos y
+//      los signos de peligro en la preconsulta (triaje.service). El nivel manda:
+//      un moderado pasa antes que cualquier leve.
+//   2. Dentro de cada nivel ordenan los puntos: condicion del paciente, espera,
+//      distancia y ausencias.
+//   3. Quien pasa el tiempo maximo de su nivel sube un nivel (leve a moderado),
+//      para que nadie se quede esperando indefinidamente.
+// Los puntos y tiempos son parametros del establecimiento (puntos); si no se
+// pasan, rigen los de la tesis.
 
-const PESO_GRAVEDAD = { urgente: 40, moderado: 25, leve: 10 };
-const PESO_CONDICION = { embarazo: 30, menor_5: 30, adulto_mayor: 25, discapacidad: 25 };
-const PENALIZACION_AUSENCIA = 10;
+const { RANGO } = require('./triaje.service');
+
+const PUNTOS_INICIALES = {
+  gravedad: { urgente: 40, moderado: 25, leve: 10 },
+  condicion: { embarazo: 30, menor_5: 30, menor_2_meses: 10, adulto_mayor: 25, discapacidad: 25 },
+  espera: [{ desde: 0, puntos: 5 }, { desde: 30, puntos: 15 }, { desde: 60, puntos: 25 }, { desde: 90, puntos: 30 }],
+  distancia: [{ desde: 30, puntos: 5 }, { desde: 60, puntos: 10 }, { desde: 120, puntos: 15 }],
+  ausencia: 10,
+  tiempoMaximo: { moderado: 60, leve: 120 },
+};
+
+// Compatibilidad con quien lee las constantes de antes.
+const PESO_GRAVEDAD = PUNTOS_INICIALES.gravedad;
+const PESO_CONDICION = PUNTOS_INICIALES.condicion;
+const PENALIZACION_AUSENCIA = PUNTOS_INICIALES.ausencia;
+
+/** Une lo guardado con los valores iniciales, para que nunca falte un dato. */
+function normalizarPuntos(guardado) {
+  const g = guardado ?? {};
+  return {
+    gravedad: { ...PUNTOS_INICIALES.gravedad, ...g.gravedad },
+    condicion: { ...PUNTOS_INICIALES.condicion, ...g.condicion },
+    espera: Array.isArray(g.espera) && g.espera.length ? g.espera : PUNTOS_INICIALES.espera,
+    distancia: Array.isArray(g.distancia) ? g.distancia : PUNTOS_INICIALES.distancia,
+    ausencia: Number.isFinite(g.ausencia) ? g.ausencia : PUNTOS_INICIALES.ausencia,
+    tiempoMaximo: { ...PUNTOS_INICIALES.tiempoMaximo, ...g.tiempoMaximo },
+  };
+}
+
+/** El tramo que corresponde a un valor: el de mayor "desde" que no lo pase. */
+function tramo(tramos, valor) {
+  if (valor === null || valor === undefined) return null;
+  return [...tramos].sort((a, b) => b.desde - a.desde).find((t) => valor >= t.desde) ?? null;
+}
+
+const horas = (min) => (min >= 60 ? `${Math.round((min / 60) * 10) / 10} h` : `${min} min`);
+
+/** "1 a 2 h de viaje", "más de 2 h de viaje": el tramo dicho en palabras. */
+function etiquetaDistancia(tramos, t) {
+  const siguiente = [...tramos].sort((a, b) => a.desde - b.desde).find((x) => x.desde > t.desde);
+  if (!siguiente) return `Viene de lejos: más de ${horas(t.desde)} de viaje`;
+  const rango = t.desde >= 60 && siguiente.desde >= 60
+    ? `${t.desde / 60} a ${siguiente.desde / 60} h`
+    : siguiente.desde <= 60 ? `${t.desde} a ${siguiente.desde} min` : `${horas(t.desde)} a ${horas(siguiente.desde)}`;
+  return `Viene de lejos: ${rango} de viaje`;
+}
 
 // Quien viene de lejos pierde el dia si no lo atienden: el tiempo de viaje de
 // su comunidad, registrado por el personal, suma puntos por tramos.
-const TRAMOS_DISTANCIA = [
-  { desde: 120, puntos: 15, etiqueta: 'Viene de lejos: más de 2 h de viaje' },
-  { desde: 60, puntos: 10, etiqueta: 'Viene de lejos: 1 a 2 h de viaje' },
-  { desde: 30, puntos: 5, etiqueta: 'Viene de lejos: 30 a 60 min de viaje' },
-];
+const TRAMOS_DISTANCIA = PUNTOS_INICIALES.distancia
+  .map((t) => ({ ...t, etiqueta: etiquetaDistancia(PUNTOS_INICIALES.distancia, t) }))
+  .sort((a, b) => b.desde - a.desde);
 
 /** Puntos por el tiempo de viaje; sin dato registrado no suma. */
-function tramoDistancia(minutos) {
-  if (minutos === null || minutos === undefined) return null;
-  return TRAMOS_DISTANCIA.find((t) => minutos >= t.desde) ?? null;
+function tramoDistancia(minutos, tramos = PUNTOS_INICIALES.distancia) {
+  const t = tramo(tramos, minutos);
+  return t ? { desde: t.desde, puntos: t.puntos, etiqueta: etiquetaDistancia(tramos, t) } : null;
 }
 
 // A la segunda ausencia el paciente sale del sistema y debe registrarse de nuevo.
@@ -25,32 +77,32 @@ const MAX_AUSENCIAS = 2;
 const UMBRAL_ESPERA_LARGA_MIN = 90;
 
 /** Puntos por el tiempo de espera: a mas minutos esperando, mas puntos. */
-function puntosPorEspera(minutosEsperando) {
-  if (minutosEsperando >= 90) return 30;
-  if (minutosEsperando >= 60) return 25;
-  if (minutosEsperando >= 30) return 15;
-  return 5;
+function puntosPorEspera(minutosEsperando, tramos = PUNTOS_INICIALES.espera) {
+  return tramo(tramos, Math.max(0, minutosEsperando))?.puntos ?? 0;
+}
+
+function puntosCondicion(condiciones, edadMeses, puntos) {
+  const base = condiciones?.length ? Math.max(...condiciones.map((c) => puntos.condicion[c] ?? 0)) : 0;
+  // El menor de 2 meses pesa mas que cualquier otro menor de 5.
+  const extra = edadMeses != null && edadMeses < 2 ? puntos.condicion.menor_2_meses ?? 0 : 0;
+  return base + extra;
 }
 
 /**
- * Puntaje de prioridad de un paciente en la cola: mientras mas alto, antes
- * se atiende. Suma gravedad, condicion, espera y distancia, y resta las
- * ausencias. Nunca es negativo.
+ * Puntaje de prioridad de un paciente: suma gravedad, condicion, espera y
+ * distancia, y resta las ausencias. Nunca es negativo. Ordena dentro de cada
+ * nivel.
  */
-function calcularPuntaje({ gravedad, condiciones, inicioEspera, ausencias, tiempoViaje = null }, ahora) {
-  const puntosGravedad = PESO_GRAVEDAD[gravedad] ?? 0;
-
-  // Si coexisten varias condiciones se toma solo la de mayor puntaje.
-  const puntosCondicion = condiciones?.length
-    ? Math.max(...condiciones.map((condicion) => PESO_CONDICION[condicion] ?? 0))
-    : 0;
-
-  const minutosEsperando = (ahora - inicioEspera) / 60000;
-  const puntosEspera = puntosPorEspera(minutosEsperando);
-  const puntosDistancia = tramoDistancia(tiempoViaje)?.puntos ?? 0;
-  const penalizacion = ausencias * PENALIZACION_AUSENCIA;
-
-  return Math.max(0, puntosGravedad + puntosCondicion + puntosEspera + puntosDistancia - penalizacion);
+function calcularPuntaje({ gravedad, condiciones, inicioEspera, ausencias, tiempoViaje = null, edadMeses = null }, ahora, puntos = PUNTOS_INICIALES) {
+  const minutos = (ahora - inicioEspera) / 60000;
+  return Math.max(
+    0,
+    (puntos.gravedad[gravedad] ?? 0)
+      + puntosCondicion(condiciones, edadMeses, puntos)
+      + puntosPorEspera(minutos, puntos.espera)
+      + (tramo(puntos.distancia, tiempoViaje)?.puntos ?? 0)
+      - ausencias * puntos.ausencia,
+  );
 }
 
 // --- Explicacion del puntaje ---------------------------------------------
@@ -75,49 +127,40 @@ function etiquetaEspera(minutos) {
   if (minutos >= 90) return 'Más de 90 min esperando';
   if (minutos >= 60) return 'Más de 1 hora esperando';
   if (minutos >= 30) return 'Más de 30 min esperando';
-  return 'Recien llegado';
+  return 'Recién llegado';
 }
 
 /**
  * Desglosa el puntaje en los factores que lo formaron, cada uno con su
  * nombre en palabras y los puntos que aporto.
  */
-function explicarPuntaje({ gravedad, condiciones, inicioEspera: inicio, ausencias, tiempoViaje = null }, ahora) {
+function explicarPuntaje({ gravedad, condiciones, inicioEspera: inicio, ausencias, tiempoViaje = null, edadMeses = null }, ahora, puntos = PUNTOS_INICIALES) {
   const factores = [];
 
-  const g = PESO_GRAVEDAD[gravedad] ?? 0;
-  if (g > 0) {
-    factores.push({ etiqueta: ETIQUETA_GRAVEDAD[gravedad] ?? gravedad, puntos: g, tipo: 'gravedad' });
-  }
+  const g = puntos.gravedad[gravedad] ?? 0;
+  if (g > 0) factores.push({ etiqueta: ETIQUETA_GRAVEDAD[gravedad] ?? gravedad, puntos: g, tipo: 'gravedad' });
 
   // Solo cuenta la condicion de mayor peso, y es esa la que se explica.
   const conPuntos = (condiciones ?? [])
-    .map((tipo) => ({ tipo, puntos: PESO_CONDICION[tipo] ?? 0 }))
+    .map((tipo) => ({ tipo, puntos: puntos.condicion[tipo] ?? 0 }))
     .filter((c) => c.puntos > 0)
     .sort((a, b) => b.puntos - a.puntos);
-
   if (conPuntos.length > 0) {
     const mayor = conPuntos[0];
-    factores.push({
-      etiqueta: ETIQUETA_CONDICION[mayor.tipo] ?? mayor.tipo,
-      puntos: mayor.puntos,
-      tipo: 'condicion',
-    });
+    factores.push({ etiqueta: ETIQUETA_CONDICION[mayor.tipo] ?? mayor.tipo, puntos: mayor.puntos, tipo: 'condicion' });
+  }
+  if (edadMeses != null && edadMeses < 2 && puntos.condicion.menor_2_meses) {
+    factores.push({ etiqueta: 'Menor de 2 meses', puntos: puntos.condicion.menor_2_meses, tipo: 'condicion' });
   }
 
   const min = Math.max(0, Math.floor((new Date(ahora) - new Date(inicio)) / 60000));
-  const e = min >= 90 ? 30 : min >= 60 ? 25 : min >= 30 ? 15 : 5;
-  factores.push({ etiqueta: etiquetaEspera(min), puntos: e, tipo: 'espera' });
+  factores.push({ etiqueta: etiquetaEspera(min), puntos: puntosPorEspera(min, puntos.espera), tipo: 'espera' });
 
-  const tramo = tramoDistancia(tiempoViaje);
-  if (tramo) factores.push({ etiqueta: tramo.etiqueta, puntos: tramo.puntos, tipo: 'distancia' });
+  const t = tramoDistancia(tiempoViaje, puntos.distancia);
+  if (t) factores.push({ etiqueta: t.etiqueta, puntos: t.puntos, tipo: 'distancia' });
 
   if (ausencias > 0) {
-    factores.push({
-      etiqueta: `${ausencias} ausencia(s)`,
-      puntos: -(ausencias * PENALIZACION_AUSENCIA),
-      tipo: 'ausencia',
-    });
+    factores.push({ etiqueta: `${ausencias} ausencia(s)`, puntos: -(ausencias * puntos.ausencia), tipo: 'ausencia' });
   }
 
   return factores;
@@ -133,9 +176,18 @@ function minutosEsperando(atencion, ahora = new Date()) {
   return Math.max(0, Math.floor((new Date(ahora) - inicioEspera(atencion)) / 60000));
 }
 
+function edadEnMeses(fechaNacimiento, ahora) {
+  if (!fechaNacimiento) return null;
+  const n = new Date(fechaNacimiento);
+  const a = new Date(ahora);
+  let meses = (a.getUTCFullYear() - n.getUTCFullYear()) * 12 + (a.getUTCMonth() - n.getUTCMonth());
+  if (a.getUTCDate() < n.getUTCDate()) meses -= 1;
+  return Math.max(0, meses);
+}
+
 // Convierte una atencion de base de datos en la entrada que espera
 // calcularPuntaje, resolviendo las condiciones vigentes del paciente.
-function datosDePuntaje(atencion) {
+function datosDePuntaje(atencion, ahora = new Date()) {
   const condiciones = (atencion.paciente?.condiciones ?? [])
     .filter((c) => !c.vigenteHasta)
     .map((c) => c.tipo);
@@ -152,40 +204,63 @@ function datosDePuntaje(atencion) {
     inicioEspera: inicioEspera(atencion),
     ausencias: atencion.ausencias ?? 0,
     tiempoViaje: atencion.paciente?.lugarPoblado?.tiempoViajeMinutos ?? null,
+    edadMeses: edadEnMeses(atencion.paciente?.fechaNacimiento, ahora),
   };
 }
 
-function puntajeDeAtencion(atencion, ahora = new Date()) {
-  return calcularPuntaje(datosDePuntaje(atencion), new Date(ahora));
+function puntajeDeAtencion(atencion, ahora = new Date(), puntos = PUNTOS_INICIALES) {
+  return calcularPuntaje(datosDePuntaje(atencion, ahora), new Date(ahora), puntos);
 }
 
 /**
- * Ordena la cola. La urgencia manda sobre el puntaje: un caso urgente pasa
- * antes que cualquier otro aunque otro acumule mas puntos por espera.
- * Entre iguales, primero el que lleva mas tiempo esperando.
+ * Nivel con el que se ordena: el de la preconsulta, salvo que un leve haya
+ * pasado su tiempo maximo, que entonces sube a moderado. "Excedido" avisa
+ * que ya paso el tiempo de su nivel.
  */
-function ordenarCola(atenciones, ahora = new Date()) {
+function nivelEnCola(gravedad, minutos, puntos = PUNTOS_INICIALES) {
+  const maximo = puntos.tiempoMaximo[gravedad];
+  const excedido = maximo != null && minutos >= maximo;
+  if (gravedad === 'leve' && excedido) return { nivel: 'moderado', subio: true, excedido };
+  return { nivel: gravedad, subio: false, excedido };
+}
+
+/**
+ * Ordena la cola. El nivel manda: urgentes, luego moderados, luego leves.
+ * Dentro del nivel, mas puntos primero; entre iguales, el que mas espera.
+ */
+function ordenarCola(atenciones, ahora = new Date(), puntos = PUNTOS_INICIALES) {
   const momento = new Date(ahora);
 
   return atenciones
-    .map((atencion) => ({
-      atencion,
-      puntaje: puntajeDeAtencion(atencion, momento),
-      // Por que esta donde esta: el personal debe poder verlo, no deducirlo.
-      factores: explicarPuntaje(datosDePuntaje(atencion), momento),
-      minutosEsperando: minutosEsperando(atencion, momento),
-      urgente: atencion.gravedad === 'urgente',
-    }))
-    .sort((a, b) => {
-      if (a.urgente !== b.urgente) return a.urgente ? -1 : 1;
-      if (b.puntaje !== a.puntaje) return b.puntaje - a.puntaje;
-      return b.minutosEsperando - a.minutosEsperando;
-    });
+    .map((atencion) => {
+      const datos = datosDePuntaje(atencion, momento);
+      const espera = minutosEsperando(atencion, momento);
+      const { nivel, subio, excedido } = nivelEnCola(atencion.gravedad, espera, puntos);
+      // Por que esta donde esta: primero lo clinico, despues los puntos.
+      const clinicos = (atencion.preconsulta?.triaje?.motivos ?? [])
+        .map((m) => ({ etiqueta: m.texto ?? m.etiqueta, puntos: 0, tipo: 'clinico', nivel: m.nivel }));
+      const factores = [
+        ...clinicos,
+        ...(subio ? [{ etiqueta: `Pasó ${puntos.tiempoMaximo.leve} min esperando: sube a moderado`, puntos: 0, tipo: 'espera_excedida' }] : []),
+        ...explicarPuntaje(datos, momento, puntos),
+      ];
+      return {
+        atencion,
+        nivel,
+        subio,
+        excedido,
+        puntaje: calcularPuntaje(datos, momento, puntos),
+        factores,
+        minutosEsperando: espera,
+        urgente: nivel === 'urgente',
+      };
+    })
+    .sort((a, b) => RANGO[b.nivel] - RANGO[a.nivel] || b.puntaje - a.puntaje || b.minutosEsperando - a.minutosEsperando);
 }
 
 // El siguiente a pasar cuando se libere la clinica.
-function siguienteEnCola(atenciones, ahora = new Date()) {
-  return ordenarCola(atenciones, ahora)[0] ?? null;
+function siguienteEnCola(atenciones, ahora = new Date(), puntos = PUNTOS_INICIALES) {
+  return ordenarCola(atenciones, ahora, puntos)[0] ?? null;
 }
 
 // --- Jornada -------------------------------------------------------------
@@ -229,6 +304,10 @@ function resumenCola(cola) {
 }
 
 module.exports = {
+  PUNTOS_INICIALES,
+  normalizarPuntos,
+  nivelEnCola,
+  puntosPorEspera,
   TRAMOS_DISTANCIA,
   tramoDistancia,
   PESO_GRAVEDAD,

@@ -1,44 +1,55 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { RouterLink } from 'vue-router';
+import { ref, computed, onMounted, watch } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
+import SelectorMes from '../../components/bodega/SelectorMes.vue';
 import bodega from '../../services/bodega';
 import inventario from '../../services/inventario';
 import Icono from '../../components/comunes/Icono.vue';
 import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
 import { miles } from '../../components/bodega/diseno/PiezasBodega';
-import { fecha } from '../../dominio/bodega';
+import { fecha, periodoActual } from '../../dominio/bodega';
 
 /**
  * Kardex de cada producto de la bodega: cada ingreso y cada despacho con su
  * requisición, a dónde fue, la entrada, la salida y la existencia. Se copia
  * a la tarjeta oficial o se imprime encima de ella.
  */
+const route = useRoute();
 const insumos = ref([]);
 const elegido = ref(null);
-const periodo = ref(new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 7));
-const todo = ref(false);
+const periodo = ref(periodoActual());
+// mes | desde (lo que falta pasar a las tarjetas) | todo
+const modo = ref(route.query.desde ? 'desde' : 'mes');
+const desde = ref(route.query.desde ?? new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 8) + '01');
 const tarjeta = ref(null);
+const movidos = ref([]);
 const error = ref('');
 const cargando = ref(false);
 
-const q = computed(() => (todo.value ? {} : { periodo: periodo.value }));
+const q = computed(() => (modo.value === 'todo' ? {} : modo.value === 'desde' ? { desde: desde.value } : { periodo: periodo.value }));
 const enlaceTodos = computed(() => `/imprimir/kardex?${new URLSearchParams(q.value)}`);
 const enlaceUno = computed(() => `/imprimir/kardex?${new URLSearchParams({ ...q.value, insumoId: elegido.value?.id ?? '' })}`);
 const dinero = (v) => (v == null ? '' : `Q ${Number(v).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 async function ver() {
-  if (!elegido.value) return;
   error.value = '';
   cargando.value = true;
   try {
-    const r = await bodega.kardex({ ...q.value, insumoId: elegido.value.id });
-    tarjeta.value = r.tarjetas[0] ?? null;
+    if (elegido.value) {
+      const r = await bodega.kardex({ ...q.value, insumoId: elegido.value.id });
+      tarjeta.value = r.tarjetas[0] ?? null;
+    } else {
+      // Sin producto elegido: los que se movieron en el tramo, para pasarlos a sus tarjetas.
+      const r = await bodega.kardex(q.value);
+      movidos.value = r.tarjetas.map((t) => ({ ...t.insumo, renglones: t.filas.length, saldo: t.saldoFinal }));
+    }
   } catch (fallo) {
     error.value = fallo.message;
   } finally {
     cargando.value = false;
   }
 }
+watch([modo, periodo, desde], ver);
 
 function elegir(i) {
   elegido.value = i;
@@ -48,6 +59,9 @@ function elegir(i) {
 onMounted(async () => {
   try {
     insumos.value = (await inventario.insumos()).insumos;
+    const pedido = route.query.insumo && insumos.value.find((x) => String(x.id) === String(route.query.insumo));
+    if (pedido) elegido.value = pedido;
+    await ver();
   } catch (fallo) {
     error.value = fallo.message;
   }
@@ -59,9 +73,12 @@ onMounted(async () => {
     <header class="b-cabecera">
       <h1 class="b-titulo">Kardex</h1>
       <div class="flex flex-wrap items-center gap-2">
-        <input v-model="periodo" type="month" :disabled="todo" aria-label="Mes" class="b-campo w-[170px]" @change="ver" />
-        <label class="flex items-center gap-1.5 text-sm font-semibold"><input v-model="todo" type="checkbox" @change="ver" /> Toda la historia</label>
-        <RouterLink :to="enlaceTodos" target="_blank" class="b-btn secundario chico"><Icono nombre="imprimir" :tamano="16" /> Todos los que se movieron</RouterLink>
+        <div class="b-segmentado" role="radiogroup" aria-label="Tramo">
+          <button v-for="m in [['mes', 'Un mes'], ['desde', 'Desde una fecha'], ['todo', 'Toda la historia']]" :key="m[0]" type="button" role="radio" :aria-checked="modo === m[0]" :class="modo === m[0] ? 'on' : ''" @click="modo = m[0]">{{ m[1] }}</button>
+        </div>
+        <SelectorMes v-if="modo === 'mes'" v-model="periodo" />
+        <input v-else-if="modo === 'desde'" v-model="desde" type="date" aria-label="Desde" class="b-campo w-[180px]" />
+        <RouterLink :to="enlaceTodos" target="_blank" class="b-btn secundario chico"><Icono nombre="imprimir" :tamano="16" /> Imprimir todos los que se movieron</RouterLink>
       </div>
     </header>
 
@@ -72,7 +89,7 @@ onMounted(async () => {
         <span class="b-etiqueta">Producto</span>
         <div v-if="elegido" class="elegido">
           <span class="min-w-0 flex-1 truncate font-semibold text-tinta">{{ elegido.nombreGenerico }} <span class="font-normal text-apagado">{{ elegido.concentracion }}</span></span>
-          <button type="button" class="quitar" aria-label="Cambiar producto" @click="elegido = null; tarjeta = null"><Icono nombre="cerrar" :tamano="16" /></button>
+          <button type="button" class="quitar" aria-label="Cambiar producto" @click="elegido = null; tarjeta = null; ver()"><Icono nombre="cerrar" :tamano="16" /></button>
         </div>
         <BuscadorInsumo v-else :insumos="insumos" placeholder="Buscar producto" @elegir="elegir" />
       </div>
@@ -129,7 +146,26 @@ onMounted(async () => {
         </table>
       </div>
     </div>
-    <p v-else-if="!cargando" class="b-vacio mt-6">Elija un producto para ver su kardex.</p>
+    <div v-else-if="!cargando" class="mt-4">
+      <p class="mb-2 text-sm font-semibold text-apagado">
+        {{ movidos.length }} {{ movidos.length === 1 ? 'producto se movió' : 'productos se movieron' }}
+        {{ modo === 'desde' ? `desde el ${fecha(desde)}` : modo === 'mes' ? 'en el mes' : 'en total' }}. Elija uno para ver sus renglones.
+      </p>
+      <div class="b-tabla-marco movidos">
+        <table class="b-tabla">
+          <thead><tr><th>Producto</th><th>Unidad</th><th class="n">Renglones</th><th class="n">Existencia</th></tr></thead>
+          <tbody>
+            <tr v-for="m in movidos" :key="m.id" class="cursor-pointer" @click="elegir(insumos.find((x) => x.id === m.id) ?? m)">
+              <td class="font-semibold text-tinta">{{ m.nombreGenerico }} <span class="font-normal text-apagado">{{ m.concentracion }}</span></td>
+              <td>{{ m.unidadEntrega }}</td>
+              <td class="n">{{ m.renglones }}</td>
+              <td class="n fuerte">{{ miles(m.saldo) }}</td>
+            </tr>
+            <tr v-if="!movidos.length"><td colspan="4" class="b-vacio">No hubo movimientos en ese tramo.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -140,6 +176,7 @@ onMounted(async () => {
 .resumen div { min-width: 120px; padding: 8px 14px; border: 2px solid #E2E8F0; border-radius: 12px; }
 .resumen dt { font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; }
 .resumen dd { font-weight: 800; color: #14244A; font-variant-numeric: tabular-nums; }
+.movidos { max-height: max(360px, calc(100vh - 380px)); }
 .kardex { max-height: max(360px, calc(100vh - 380px)); }
 .grupo { text-align: center; border-bottom: 1px solid #E2E8F0; }
 .anterior td { background: #F8FAFC; font-weight: 700; color: #475569; }

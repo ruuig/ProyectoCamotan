@@ -85,18 +85,23 @@ module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, mes
         const previo = porNumero.get(l.lote);
         porNumero.set(l.lote, previo ? { ...previo, cantidad: previo.cantidad + l.cantidad } : { ...l });
       }
+      // El vencimiento viene como mes y año: sirve hasta el último día del mes.
+      const finDeMes = (v) => {
+        const d = new Date(`${v}T12:00:00Z`);
+        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 12));
+      };
       const aCrear = [...porNumero.values()].map((l) => ({
         numeroLote: l.lote,
-        fechaVence: new Date(`${l.vence}T12:00:00Z`),
+        fechaVence: finDeMes(l.vence),
         cantidad: l.cantidad,
-        estado: new Date(`${l.vence}T12:00:00Z`) < hoy ? 'vencido' : 'disponible',
+        estado: finDeMes(l.vence) < hoy ? 'vencido' : 'disponible',
         motivoEstado: null,
       }));
       if (sinLote > 0) {
         aCrear.push({
           numeroLote: 'SIN-LOTE',
           // Sin fecha conocida: se registra la real en el inventario fisico.
-          fechaVence: new Date(Date.UTC(hoy.getUTCFullYear() + 1, hoy.getUTCMonth(), 1)),
+          fechaVence: new Date(Date.UTC(hoy.getUTCFullYear() + 1, hoy.getUTCMonth() + 1, 0, 12)),
           cantidad: sinLote,
           estado: 'cuarentena',
           motivoEstado: 'Saldo importado sin lote ni vencimiento: registrar el lote real en el inventario físico',

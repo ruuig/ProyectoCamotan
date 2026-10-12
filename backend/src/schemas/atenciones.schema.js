@@ -28,6 +28,11 @@ const preconsulta = z
     frecCardiaca: opcionalEntero(20, 300, 'Frecuencia cardiaca fuera de lo posible'),
     frecRespiratoria: opcionalEntero(5, 120, 'Frecuencia respiratoria fuera de lo posible'),
     satOxigeno: opcionalEntero(0, 100, 'Saturacion fuera de lo posible'),
+    // Escala de dolor, nivel de conciencia (AVPU) y glucosa capilar: tambien
+    // deciden la prioridad.
+    dolor: opcionalEntero(0, 10, 'El dolor va de 0 a 10'),
+    conciencia: z.enum(['alerta', 'confuso', 'voz', 'dolor', 'no_responde']).optional().nullable(),
+    glucosa: opcionalEntero(10, 900, 'Glucosa fuera de lo posible'),
     // Perimetro braquial (MUAC) y cefalico no viven en preconsulta sino en
     // antropometria. Se capturan aqui porque es el momento en que se miden.
     perimetroBraquial: opcionalDecimal(50, 400, 'Perimetro braquial fuera de lo posible'),
@@ -210,6 +215,22 @@ const contrarreferencia = z.object({
   fechaAlta: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional().nullable(),
 });
 
+// Evaluar el triaje mientras se escribe, antes de guardar.
+const evaluarTriaje = z.object({
+  atencionId: z.coerce.number().int().positive().optional(),
+  pacienteId: z.coerce.number().int().positive().optional(),
+  temperatura: opcionalDecimal(25, 45, 'Temperatura fuera de lo posible'),
+  presionSis: opcionalEntero(40, 300, 'Presion sistolica fuera de lo posible'),
+  presionDia: opcionalEntero(20, 200, 'Presion diastolica fuera de lo posible'),
+  frecCardiaca: opcionalEntero(20, 300, 'Frecuencia cardiaca fuera de lo posible'),
+  frecRespiratoria: opcionalEntero(5, 120, 'Frecuencia respiratoria fuera de lo posible'),
+  satOxigeno: opcionalEntero(0, 100, 'Saturacion fuera de lo posible'),
+  dolor: opcionalEntero(0, 10, 'El dolor va de 0 a 10'),
+  conciencia: z.enum(['alerta', 'confuso', 'voz', 'dolor', 'no_responde']).optional().nullable(),
+  glucosa: opcionalEntero(10, 900, 'Glucosa fuera de lo posible'),
+  signosPeligro: z.array(z.string().trim().min(1)).default([]),
+}).refine((d) => d.atencionId || d.pacienteId, { message: 'Indique la atención o el paciente' });
+
 const sugerenciaTipo = z.object({
   cie: z.string().trim().max(10).optional(),
   descripcion: z.string().trim().max(300).optional(),
@@ -232,4 +253,5 @@ module.exports = {
   cancelar,
   referencia,
   contrarreferencia,
+  evaluarTriaje,
 };

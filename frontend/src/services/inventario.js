@@ -62,7 +62,7 @@ export default {
   vistaPreviaBres: (periodo) => http.get(`/inventario/bres/${periodo}/vista-previa`),
   bresDe: (periodo) => http.get(`/inventario/bres/${periodo}`),
   generarBres: (datos) => http.post('/inventario/bres', datos),
-  cerrarBres: (periodo) => http.post(`/inventario/bres/${periodo}/cerrar`),
+  cerrarBres: (periodo, password) => http.post(`/inventario/bres/${periodo}/cerrar`, { password }),
   demandaDiaria: (periodo) => http.get(`/inventario/demanda-diaria/${periodo}`),
 
   // --- Retiro sanitario ----------------------------------------------------

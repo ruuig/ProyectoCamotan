@@ -943,9 +943,13 @@ describe('BRES', () => {
     });
     expect(generado.status).toBe(201);
 
+    const sinClave = await farm(request(app).post(`/api/v1/inventario/bres/${periodoActual()}/cerrar`)).send({ password: 'otra' });
+    expect(sinClave.status).toBe(403);
+    expect(sinClave.body.error.codigo).toBe('contrasena_incorrecta');
+
     const cerrado = await farm(
       request(app).post(`/api/v1/inventario/bres/${periodoActual()}/cerrar`),
-    );
+    ).send({ password: 'Camotan2026!' });
     expect(cerrado.status).toBe(200);
 
     const otraVez = await farm(request(app).post('/api/v1/inventario/bres')).send({

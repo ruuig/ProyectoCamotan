@@ -4,6 +4,7 @@ const { puntajeDeAtencion, MAX_AUSENCIAS, mismaJornada } = require('../services/
 const { alertasDeAtencion } = require('../services/alertasClinicas.service');
 const { asignarClinicaLibre } = require('../jobs/recalcularCola');
 const { buscarClinicaLibre, sincronizarDisponibilidad } = require('../services/clinicas.service');
+const { parametros } = require('../services/parametrosPriorizacion.service');
 
 async function cola(req, res) {
   const datos = await obtenerCola(req.usuario.establecimientoId);
@@ -65,6 +66,7 @@ async function cambiarEstado(req, res, next) {
       puntaje: puntajeDeAtencion(
         await prisma.atencion.findUnique({ where: { id: atencion.id }, include: INCLUIR_PACIENTE }),
         ahora,
+        (await parametros(establecimientoId)).puntos,
       ),
       llamadaEn: atencion.llamadaEn ?? ahora,
       iniciadaEn: ahora,

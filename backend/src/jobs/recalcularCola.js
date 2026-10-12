@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const { ordenarCola } = require('../services/priorizacion.service');
 const { INCLUIR_PACIENTE } = require('../services/cola.service');
+const { parametros } = require('../services/parametrosPriorizacion.service');
 const { buscarClinicaLibre, sincronizarDisponibilidad } = require('../services/clinicas.service');
 
 const INTERVALO_MS = 5 * 60 * 1000;
@@ -22,7 +23,8 @@ async function asignarClinicaLibre(establecimientoId, ahora = new Date()) {
     include: INCLUIR_PACIENTE,
   });
 
-  const siguiente = ordenarCola(enEspera, ahora)[0];
+  const { puntos } = await parametros(establecimientoId);
+  const siguiente = ordenarCola(enEspera, ahora, puntos)[0];
   if (!siguiente) return null;
 
   // Se persiste el puntaje solo en este momento, junto al cambio de estado.

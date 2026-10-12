@@ -162,9 +162,24 @@ async function panelMedico(establecimientoId, ahora = new Date()) {
     },
   });
 
+  // Consultas cerradas sin codigo CIE-10: el medico las completa cuando
+  // tenga un momento; el SIGSA las necesita codificadas.
+  const porCodificar = await prisma.atencion.findMany({
+    where: { establecimientoId, estado: 'atendido', diagnosticoCie: null },
+    select: {
+      id: true,
+      diagnosticoTxt: true,
+      cerradaEn: true,
+      paciente: { select: { id: true, nombres: true, apellidos: true } },
+    },
+    orderBy: { cerradaEn: 'desc' },
+    take: 30,
+  });
+
   return {
     rol: 'medico',
     siguiente,
+    porCodificar,
     atendidosHoy: atendidosHoy.map((a) => ({
       id: a.id,
       gravedad: a.gravedad,

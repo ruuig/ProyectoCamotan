@@ -7,10 +7,12 @@ import AdminBodega from '../../components/admin/AdminBodega.vue';
 import AdminCatalogos from '../../components/admin/AdminCatalogos.vue';
 import AdminCentro from '../../components/admin/AdminCentro.vue';
 import AdminRespaldos from '../../components/admin/AdminRespaldos.vue';
+import AdminPrioridad from '../../components/admin/AdminPrioridad.vue';
 
 /** Administración: cada pestaña es una parte del sistema que configura dirección. */
 const PESTANAS = [
   { clave: 'personal', texto: 'Personal' },
+  { clave: 'prioridad', texto: 'Prioridad' },
   { clave: 'firmas', texto: 'Firmas' },
   { clave: 'bodega', texto: 'Bodega' },
   { clave: 'catalogos', texto: 'Catálogos' },
@@ -48,6 +50,7 @@ watch(pestana, (p) => router.replace({ query: { pestana: p } }));
 
     <div class="b-cuerpo">
       <AdminPersonal v-if="pestana === 'personal'" />
+      <AdminPrioridad v-else-if="pestana === 'prioridad'" />
       <AdminFirmas v-else-if="pestana === 'firmas'" />
       <AdminBodega v-else-if="pestana === 'bodega'" />
       <AdminCatalogos v-else-if="pestana === 'catalogos'" :inicial="subCatalogo" />

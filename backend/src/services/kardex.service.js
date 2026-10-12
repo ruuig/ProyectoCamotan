@@ -20,6 +20,8 @@ const INCLUIR = {
     select: {
       id: true, insumoId: true, numeroLote: true, fechaVence: true, costoUnitario: true, origen: true, actaDonacion: true,
       requisicion: { select: { numero: true, almacen: true } },
+      recepcion: { select: { numeroDocumento: true, remitente: true } },
+      cantidadPorReponer: true,
     },
   },
   traslado: { select: { numero: true, ubicacion: { select: { nombre: true } }, requisicion: { select: { numero: true } } } },
@@ -49,9 +51,12 @@ function describir(m) {
     case 'ingreso':
       return {
         columna: 'entrada',
-        referencia: req(m.lote.requisicion?.numero) ?? (m.lote.actaDonacion ? `Acta ${m.lote.actaDonacion}` : ''),
-        remitenteDestinatario: m.lote.requisicion?.almacen ?? ETIQUETA_ORIGEN[m.lote.origen] ?? '',
-        observaciones: m.lote.origen === 'donacion' ? 'Donación' : '',
+        referencia: m.lote.recepcion?.numeroDocumento ?? req(m.lote.requisicion?.numero) ?? (m.lote.actaDonacion ? `Acta ${m.lote.actaDonacion}` : 'Inventario inicial'),
+        remitenteDestinatario: m.lote.recepcion?.remitente ?? m.lote.requisicion?.almacen ?? ETIQUETA_ORIGEN[m.lote.origen] ?? '',
+        observaciones: [
+          m.lote.origen === 'donacion' ? 'Donación' : '',
+          m.lote.cantidadPorReponer ? `Faltan ${m.lote.cantidadPorReponer} por reclamar` : '',
+        ].filter(Boolean).join('. '),
       };
     case 'paso_farmacia':
       return {

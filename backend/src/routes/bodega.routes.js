@@ -7,6 +7,8 @@ const asincrono = require('../utils/asincrono');
 const idempotencia = require('../middleware/idempotencia');
 const bodega = require('../controllers/bodega.controller');
 const requisiciones = require('../controllers/requisiciones.controller');
+const recepciones = require('../controllers/recepciones.controller');
+const { hoy } = require('../controllers/hoy.controller');
 const { CLAVES_TIPO } = require('../services/requisiciones.service');
 const { CLAVES_CATEGORIA } = require('../services/bodega.service');
 
@@ -24,7 +26,7 @@ const categoria = z.enum(CLAVES_CATEGORIA).optional();
 
 const ubicacion = z.object({
   nombre: z.string().trim().min(2, 'El nombre es obligatorio').max(120),
-  tipo: z.enum(['centro_salud', 'puesto_salud', 'centro_comunitario']),
+  tipo: z.enum(['centro_salud', 'puesto_salud', 'centro_comunitario', 'unidad_interna']),
   comunidad: z.string().trim().max(120).optional().nullable(),
 });
 
@@ -115,6 +117,38 @@ router.get(
   }), 'query'),
   asincrono(requisiciones.listar),
 );
+router.get('/requisiciones/solicitantes', conFarmacia, asincrono(requisiciones.solicitantes));
+// Entregar en un paso: registra la entrega y genera la requisicion.
+router.post(
+  '/requisiciones/entregar',
+  conFarmacia,
+  idempotencia,
+  validar(z.object({
+    numero: z.string().trim().max(20).optional().nullable(),
+    ubicacionId: id,
+    unidadSeccion: z.string().trim().max(160).optional().nullable(),
+    codigo: z.string().trim().max(40).optional().nullable(),
+    fechaSolicitud: fecha.optional(),
+    solicitante: z.string().trim().min(3, 'Indique quién solicita').max(160),
+    jefe: z.string().trim().max(160).optional().nullable(),
+    tipos: z.array(z.enum(CLAVES_TIPO)).max(8).optional(),
+    observaciones: z.string().trim().max(1000).optional().nullable(),
+    renglones: z.array(z.object({
+      insumoId: id.optional().nullable(),
+      descripcion: z.string().trim().max(300).optional().nullable(),
+      unidadMedida: z.string().trim().max(60).optional().nullable(),
+      cantidad: z.coerce.number().int().positive('La cantidad debe ser mayor que cero'),
+    })).min(1, 'Agregue lo que se entrega').max(60),
+  })),
+  asincrono(requisiciones.entregar),
+);
+router.patch(
+  '/requisiciones/:id/numero',
+  conFarmacia,
+  validar(z.object({ id }), 'params'),
+  validar(z.object({ numero: z.string().trim().min(1, 'Escriba el número').max(20) })),
+  asincrono(requisiciones.anotarNumero),
+);
 router.get('/requisiciones/:id', conFarmacia, validar(z.object({ id }), 'params'), asincrono(requisiciones.obtener));
 router.post('/requisiciones', conFarmacia, idempotencia, validar(requisicion), asincrono(requisiciones.crear));
 router.put('/requisiciones/:id', conFarmacia, validar(z.object({ id }), 'params'), validar(requisicion), asincrono(requisiciones.actualizar));
@@ -177,9 +211,48 @@ router.post(
 router.get(
   '/kardex',
   deBodega,
-  validar(z.object({ periodo: periodo.optional(), insumoId: id.optional() }), 'query'),
+  validar(z.object({ periodo: periodo.optional(), insumoId: id.optional(), desde: fecha.optional() }), 'query'),
   asincrono(bodega.kardex),
 );
+
+// --- Recepcion: lo que llega con su documento ---------------------------------------
+router.get('/recepciones', deBodega, asincrono(recepciones.listar));
+router.get('/recepciones/faltantes', deBodega, asincrono(recepciones.faltantes));
+router.get('/recepciones/:id', deBodega, validar(z.object({ id }), 'params'), asincrono(recepciones.obtener));
+router.post(
+  '/recepciones',
+  deBodega,
+  idempotencia,
+  validar(z.object({
+    numeroDocumento: z.string().trim().max(40).optional().nullable(),
+    procedencia: z.enum(['despacho', 'donacion', 'traslado', 'prestamo']).default('despacho'),
+    remitente: z.string().trim().min(3, 'Indique de dónde viene').max(160),
+    acta: z.string().trim().max(60).optional().nullable(),
+    fecha,
+    observaciones: z.string().trim().max(1000).optional().nullable(),
+    renglones: z.array(z.object({
+      insumoId: id,
+      numeroLote: z.string().trim().min(1, 'Falta el número de lote').max(60),
+      vence: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Vencimiento: mes y año'),
+      cantidadDocumento: z.coerce.number().int().positive('La cantidad del documento debe ser mayor que cero'),
+      cantidadRecibida: z.coerce.number().int().min(0),
+      costoUnitario: z.coerce.number().min(0).optional().nullable(),
+      conforme: z.boolean().default(true),
+      observacion: z.string().trim().max(300).optional().nullable(),
+    })).min(1, 'Agregue lo que llegó').max(100),
+  })),
+  asincrono(recepciones.crear),
+);
+router.post(
+  '/lotes/:id/reponer',
+  deBodega,
+  validar(z.object({ id }), 'params'),
+  validar(z.object({ cantidad: z.coerce.number().int().positive() })),
+  asincrono(recepciones.reponer),
+);
+
+// --- Hoy: lo pendiente ---------------------------------------------------------------
+router.get('/hoy', deBodega, validar(z.object({ kardexDesde: fecha.optional() }), 'query'), asincrono(hoy));
 
 // --- Reportes de los servicios ---------------------------------------------------
 router.get('/reportes', deBodega, validar(z.object({ periodo: periodo.optional() }), 'query'), asincrono(bodega.estadoReportes));

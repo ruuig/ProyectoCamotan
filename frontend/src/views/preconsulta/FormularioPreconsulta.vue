@@ -1,7 +1,8 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter, RouterLink } from 'vue-router';
 import servicio from '../../services/pacientes';
+import http from '../../services/http';
 import { useSincronizacionStore } from '../../stores/sincronizacion';
 import Icono from '../../components/comunes/Icono.vue';
 import Etiqueta from '../../components/comunes/Etiqueta.vue';
@@ -44,8 +45,13 @@ const motivoConsulta = ref('');
 const medicion = reactive({
   peso: '', talla: '', temperatura: '', presionSis: '', presionDia: '',
   frecCardiaca: '', frecRespiratoria: '', satOxigeno: '',
-  perimetroBraquial: '', perimetroCefalico: '',
+  perimetroBraquial: '', perimetroCefalico: '', dolor: '', glucosa: '',
 });
+// Nivel de conciencia (AVPU): no es un número, va aparte.
+const conciencia = ref('');
+const CONCIENCIA = [
+  ['alerta', 'Alerta'], ['confuso', 'Confuso'], ['voz', 'Responde a la voz'], ['dolor', 'Solo al dolor'], ['no_responde', 'No responde'],
+];
 
 /*
  * Unidad del peso.
@@ -110,17 +116,72 @@ const GRUPOS_CAMPOS = [
   },
 ];
 
-const signoPorCodigo = computed(() => new Map(signos.value.map((s) => [s.codigo, s])));
-
-const gravedadSugerida = computed(() => {
-  const marcados = seleccionados.value.map((c) => signoPorCodigo.value.get(c)).filter(Boolean);
-  if (marcados.some((s) => s.gravedadSugerida === 'urgente')) return 'urgente';
-  return marcados.length > 0 ? 'moderado' : null;
+// Solo los signos que aplican al paciente: los de menores de 5, embarazadas o
+// adultos mayores no se le muestran a quien no lo es.
+const signosDelPaciente = computed(() => {
+  const edad = triaje.value?.edadMeses;
+  if (edad == null) return signos.value;
+  return signos.value.filter((s) => {
+    if (s.grupoEtario === 'menor_5') return edad < 60;
+    if (s.grupoEtario === 'embarazada') return triaje.value.embarazada;
+    if (s.grupoEtario === 'adulto_mayor') return edad >= 720;
+    return true;
+  });
 });
 
-const requiereJustificacion = computed(
-  () => gravedadSugerida.value === 'urgente' && gravedadElegida.value && gravedadElegida.value !== 'urgente',
-);
+const signoPorCodigo = computed(() => new Map(signos.value.map((s) => [s.codigo, s])));
+
+// --- Triaje en vivo ------------------------------------------------------------------
+// Mientras se escriben los signos, el servidor evalúa con los criterios del
+// centro (los mismos con que se guardará) y la pantalla va guiando.
+const triaje = ref(null);
+const evaluando = ref(false);
+const sinRed = ref(false);
+let temporizadorTriaje;
+
+async function evaluarTriaje() {
+  const cuerpo = { ...(esNueva.value ? { pacienteId: Number(route.query.paciente) } : { atencionId: Number(route.params.id) }), signosPeligro: seleccionados.value };
+  for (const k of ['temperatura', 'presionSis', 'presionDia', 'frecCardiaca', 'frecRespiratoria', 'satOxigeno', 'dolor', 'glucosa']) {
+    if (medicion[k] !== '' && medicion[k] !== null) cuerpo[k] = Number(medicion[k]);
+  }
+  if (conciencia.value) cuerpo.conciencia = conciencia.value;
+  evaluando.value = true;
+  try {
+    triaje.value = await http.post('/atenciones/triaje/evaluar', cuerpo);
+    sinRed.value = false;
+  } catch (fallo) {
+    // Sin red o un valor imposible a medio escribir: se sigue con lo último.
+    sinRed.value = fallo.codigo === 'error_red';
+  } finally {
+    evaluando.value = false;
+  }
+}
+watch([() => ({ ...medicion }), conciencia, seleccionados], () => {
+  clearTimeout(temporizadorTriaje);
+  temporizadorTriaje = setTimeout(evaluarTriaje, 350);
+}, { deep: true });
+
+const RANGO = { leve: 0, moderado: 1, urgente: 2 };
+const gravedadSugerida = computed(() => triaje.value?.nivel ?? 'leve');
+const gravedadFinal = computed(() => gravedadElegida.value || gravedadSugerida.value);
+const requiereJustificacion = computed(() => RANGO[gravedadFinal.value] < RANGO[gravedadSugerida.value]);
+
+/** Lo que dice el triaje de un campo: para pintarlo y explicarlo debajo. */
+const motivoDe = (campo) => {
+  const claves = campo === 'presionDia' ? ['presionDia', 'presionSis'] : campo === 'presionSis' ? ['presionSis', 'presionDia'] : [campo];
+  return triaje.value?.motivos.find((m) => claves.includes(m.campo)) ?? null;
+};
+const hallazgoDe = (campo) => triaje.value?.hallazgos?.find((h) => h.campo === campo) ?? null;
+function tonoCampo(campo) {
+  const m = motivoDe(campo);
+  if (m) return m.nivel === 'urgente' ? 'rojo' : 'ambar';
+  return hallazgoDe(campo) ? 'aviso' : '';
+}
+const ESTILO_NIVEL = {
+  urgente: { texto: 'Urgente', clase: 'urgente' },
+  moderado: { texto: 'Moderado', clase: 'moderado' },
+  leve: { texto: 'Leve', clase: 'leve' },
+};
 
 function soloConValor() {
   const datos = {};
@@ -130,6 +191,7 @@ function soloConValor() {
   // Se manda el número tal como se escribió y en qué unidad. El servidor lo
   // convierte: así lo que queda grabado no depende de este navegador.
   if (datos.peso !== undefined) datos.unidadPeso = unidadPeso.value;
+  if (conciencia.value) datos.conciencia = conciencia.value;
   datos.motivoConsulta = motivoConsulta.value.trim();
   return datos;
 }
@@ -148,7 +210,7 @@ async function guardar() {
         ...(esNueva.value ? { pacienteId: Number(route.query.paciente) } : {}),
         ...soloConValor(),
         signosPeligro: seleccionados.value,
-        ...(gravedadElegida.value ? { gravedad: gravedadElegida.value } : {}),
+        gravedad: gravedadFinal.value,
         ...(justificacion.value ? { justificacionGravedad: justificacion.value } : {}),
       },
       descripcion: 'Preconsulta',
@@ -188,6 +250,7 @@ onMounted(async () => {
     ]);
     signos.value = datos.signos;
     paciente.value = p?.paciente ?? null;
+    evaluarTriaje();
   } catch (fallo) {
     error.value = fallo.message;
   }
@@ -343,7 +406,8 @@ onMounted(async () => {
     </template>
 
     <!-- Formulario -->
-    <form v-else class="space-y-4" @submit.prevent="guardar">
+    <form v-else class="rejilla-pre" @submit.prevent="guardar">
+      <div class="min-w-0 space-y-4">
       <div>
         <h1 class="titulo-pagina">Registrar preconsulta</h1>
         <p v-if="paciente" class="mt-1 text-lg font-semibold text-tinta">
@@ -440,7 +504,7 @@ onMounted(async () => {
           <p v-if="grupo.nota" class="mt-0.5 text-slate-500">{{ grupo.nota }}</p>
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div class="grid gap-3 sm:grid-cols-3">
           <div v-for="campo in grupo.campos" :key="campo.clave">
             <label :for="campo.clave" class="etiqueta-campo">
               {{ campo.etiqueta }}
@@ -452,10 +516,67 @@ onMounted(async () => {
               type="number"
               :step="campo.paso"
               inputmode="decimal"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-lg tabular-nums
-                     text-slate-900 outline-none transition focus:border-celeste-400
-                     focus:ring-2 focus:ring-mspas-200"
+              class="campo-signo w-full rounded-lg border px-3 py-2.5 text-lg tabular-nums
+                     text-slate-900 outline-none transition focus:ring-2 focus:ring-mspas-200"
+              :class="tonoCampo(campo.clave)"
             />
+            <p v-if="motivoDe(campo.clave)" class="nota-signo" :class="tonoCampo(campo.clave)">{{ motivoDe(campo.clave).etiqueta }}</p>
+            <p v-else-if="hallazgoDe(campo.clave)" class="nota-signo aviso">{{ hallazgoDe(campo.clave).mensaje }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estado general: también decide la prioridad -->
+      <div class="tarjeta p-5">
+        <h2 class="panel-titulo mb-3">
+          <Icono nombre="pacientes" :tamano="19" class="text-celeste-400" />
+          Estado general
+        </h2>
+        <div class="space-y-4">
+          <fieldset>
+            <legend class="etiqueta-campo">Dolor <span class="font-normal text-slate-400">(0 sin dolor · 10 el peor)</span></legend>
+            <div class="escala" role="radiogroup" aria-label="Dolor de 0 a 10">
+              <button
+                v-for="n in 11"
+                :key="n"
+                type="button"
+                role="radio"
+                :aria-checked="String(medicion.dolor) === String(n - 1)"
+                :class="[String(medicion.dolor) === String(n - 1) ? 'on' : '', n - 1 >= 8 ? 'alto' : n - 1 >= 5 ? 'medio' : '']"
+                @click="medicion.dolor = String(medicion.dolor) === String(n - 1) ? '' : n - 1"
+              >{{ n - 1 }}</button>
+            </div>
+            <p v-if="motivoDe('dolor')" class="nota-signo" :class="tonoCampo('dolor')">{{ motivoDe('dolor').etiqueta }}</p>
+          </fieldset>
+          <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
+            <fieldset>
+              <legend class="etiqueta-campo">Nivel de conciencia</legend>
+              <div class="b-segmentado flex-wrap" role="radiogroup" aria-label="Nivel de conciencia">
+                <button
+                  v-for="[valor, texto] in CONCIENCIA"
+                  :key="valor"
+                  type="button"
+                  role="radio"
+                  :aria-checked="conciencia === valor"
+                  :class="conciencia === valor ? 'on' : ''"
+                  @click="conciencia = conciencia === valor ? '' : valor"
+                >{{ texto }}</button>
+              </div>
+              <p v-if="motivoDe('conciencia')" class="nota-signo" :class="tonoCampo('conciencia')">{{ motivoDe('conciencia').etiqueta }}</p>
+            </fieldset>
+            <div>
+              <label for="glucosa" class="etiqueta-campo">Glucosa <span class="font-normal text-slate-400">(mg/dL, si se midió)</span></label>
+              <input
+                id="glucosa"
+                v-model="medicion.glucosa"
+                type="number"
+                step="1"
+                inputmode="numeric"
+                class="campo-signo w-full rounded-lg border px-3 py-2.5 text-lg tabular-nums text-slate-900 outline-none transition focus:ring-2 focus:ring-mspas-200"
+                :class="tonoCampo('glucosa')"
+              />
+              <p v-if="motivoDe('glucosa')" class="nota-signo" :class="tonoCampo('glucosa')">{{ motivoDe('glucosa').etiqueta }}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -470,12 +591,12 @@ onMounted(async () => {
           </span>
         </h2>
         <p class="mb-3 text-slate-500">
-          Marque todo lo que observe. Los urgentes elevan la prioridad automáticamente.
+          Marque todo lo que observe: cada signo sube la prioridad según su nivel.
         </p>
 
         <div class="grid gap-2 sm:grid-cols-2">
           <label
-            v-for="signo in signos"
+            v-for="signo in signosDelPaciente"
             :key="signo.id"
             class="flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition"
             :class="seleccionados.includes(signo.codigo)
@@ -499,31 +620,53 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Gravedad propuesta -->
-      <div v-if="gravedadSugerida" class="tarjeta border-l-4 border-l-atencion-500 p-5">
-        <p class="flex items-center gap-2 font-semibold text-slate-900">
-          <Icono nombre="alerta" :tamano="20" class="text-atencion-600" />
-          Gravedad propuesta:
-          <span class="capitalize text-atencion-700">{{ gravedadSugerida }}</span>
-        </p>
+      </div>
 
-        <div class="mt-4 grid gap-4 sm:grid-cols-2">
-          <label>
-            <span class="etiqueta-campo">Gravedad a registrar</span>
-            <select v-model="gravedadElegida" class="campo">
-              <option value="">Usar la propuesta ({{ gravedadSugerida }})</option>
-              <option value="urgente">Urgente</option>
-              <option value="moderado">Moderado</option>
-              <option value="leve">Leve</option>
-            </select>
-          </label>
+      <!-- Prioridad: se ve todo el tiempo mientras se llena -->
+      <aside class="prioridad">
+        <div class="triaje" :class="`nivel-${gravedadSugerida}`">
+          <div class="triaje-cabeza">
+            <div class="flex items-center justify-between gap-2">
+              <span class="triaje-sello">Triaje</span>
+              <span v-if="evaluando" class="triaje-estado">calculando</span>
+              <span v-else-if="sinRed" class="triaje-estado">sin conexión</span>
+            </div>
+            <p class="triaje-nivel" aria-live="polite">{{ ESTILO_NIVEL[gravedadSugerida].texto }}</p>
+            <div class="medidor" aria-hidden="true">
+              <span v-for="n in ['leve', 'moderado', 'urgente']" :key="n" :class="{ lleno: RANGO[n] <= RANGO[gravedadSugerida] }" />
+            </div>
+          </div>
 
-          <label v-if="requiereJustificacion">
-            <span class="etiqueta-campo">Justificación obligatoria (mínimo 10 caracteres)</span>
-            <textarea v-model="justificacion" rows="2" required class="campo" />
+          <ul v-if="triaje?.motivos.length" class="hallazgos">
+            <li v-for="m in triaje.motivos" :key="m.campo + m.etiqueta" :class="m.nivel">
+              <span class="marca"><Icono nombre="alerta" :tamano="15" /></span>
+              <span>{{ m.texto }}</span>
+            </li>
+          </ul>
+          <p v-else class="sin-hallazgos"><Icono nombre="correcto" :tamano="18" /> Sin señales de alarma</p>
+
+          <div class="registrar-como">
+            <span class="etiqueta-campo">Registrar como</span>
+            <div class="niveles" role="radiogroup" aria-label="Gravedad a registrar">
+              <button
+                v-for="n in ['urgente', 'moderado', 'leve']"
+                :key="n"
+                type="button"
+                role="radio"
+                :aria-checked="gravedadFinal === n"
+                :class="[n, { on: gravedadFinal === n }]"
+                @click="gravedadElegida = n === gravedadSugerida ? '' : n"
+              >
+                {{ ESTILO_NIVEL[n].texto }}
+                <small v-if="n === gravedadSugerida">sugerido</small>
+              </button>
+            </div>
+          </div>
+          <label v-if="requiereJustificacion" class="mx-4 mb-4 block">
+            <span class="etiqueta-campo">Motivo para bajarlo</span>
+            <textarea v-model="justificacion" rows="2" required minlength="10" class="campo" />
           </label>
         </div>
-      </div>
 
       <div v-if="error" role="alert" class="aviso aviso-urgente">
         <Icono nombre="alerta" :tamano="20" class="mt-0.5 shrink-0 text-urgente-600" />
@@ -538,12 +681,64 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="sticky bottom-0 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button type="submit" :disabled="guardando" class="boton-primario w-full sm:w-auto">
+      <div class="mt-3">
+        <button type="submit" :disabled="guardando" class="boton-primario w-full">
           <Icono nombre="guardar" :tamano="19" />
-          {{ guardando ? 'Guardando...' : 'Registrar preconsulta' }}
+          {{ guardando ? 'Guardando...' : `Registrar · ${ESTILO_NIVEL[gravedadFinal].texto}` }}
         </button>
       </div>
+      </aside>
     </form>
   </section>
 </template>
+
+<style scoped>
+.triaje { overflow: hidden; background: #fff; border: 2px solid #E2E8F0; border-radius: 16px; }
+.triaje-cabeza { padding: 14px 18px 16px; color: #fff; background: #1E8E5E; transition: background .2s; }
+.nivel-moderado .triaje-cabeza { background: #C77A06; }
+.nivel-urgente .triaje-cabeza { background: #B42F2F; }
+.triaje-sello { padding: 2px 8px; border: 2px solid rgba(255,255,255,.55); border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.triaje-estado { font-size: 12px; font-weight: 700; opacity: .85; }
+.triaje-nivel { margin-top: 8px; font-size: 34px; font-weight: 800; line-height: 1; letter-spacing: -.01em; }
+.medidor { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 12px; }
+.medidor span { height: 7px; border-radius: 4px; background: rgba(255,255,255,.28); }
+.medidor span.lleno { background: #fff; }
+.hallazgos { display: grid; gap: 6px; padding: 14px 14px 4px; }
+.hallazgos li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; font-size: 14px; font-weight: 700; }
+.hallazgos .marca { display: grid; place-items: center; flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px; color: #fff; }
+.hallazgos li.urgente { background: #FDECEC; color: #8C1D1D; }
+.hallazgos li.urgente .marca { background: #C03535; }
+.hallazgos li.moderado { background: #FFF4DE; color: #7A4F05; }
+.hallazgos li.moderado .marca { background: #E8930C; }
+.sin-hallazgos { display: flex; align-items: center; gap: 8px; margin: 14px 14px 4px; padding: 10px 12px; border-radius: 10px; background: #EAF7F0; color: #145C3C; font-size: 14px; font-weight: 700; }
+.registrar-como { padding: 12px 14px 14px; }
+.niveles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
+.niveles button { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border: 2px solid #E2E8F0; border-radius: 10px; background: #fff; font-size: 14px; font-weight: 800; color: #475569; }
+.niveles button small { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; opacity: .75; }
+.niveles button.urgente:hover, .niveles button.urgente.on { border-color: #C03535; }
+.niveles button.moderado:hover, .niveles button.moderado.on { border-color: #E8930C; }
+.niveles button.leve:hover, .niveles button.leve.on { border-color: #1E8E5E; }
+.niveles button.urgente.on { background: #C03535; color: #fff; }
+.niveles button.moderado.on { background: #E8930C; color: #fff; }
+.niveles button.leve.on { background: #1E8E5E; color: #fff; }
+
+.rejilla-pre { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 1023px) { .rejilla-pre { grid-template-columns: 1fr; } }
+.prioridad { position: sticky; top: 88px; }
+.campo-signo { border-color: #CBD5E1; }
+.campo-signo:focus { border-color: #38BDF8; }
+.campo-signo.rojo { border: 2px solid #C03535; background: #FDECEC; }
+.campo-signo.ambar { border: 2px solid #E8930C; background: #FFF7E6; }
+.campo-signo.aviso { border-color: #F5D58A; }
+.nota-signo { margin-top: 4px; font-size: 13px; font-weight: 700; }
+.nota-signo.rojo { color: #A52A2A; }
+.nota-signo.ambar { color: #9A5A06; }
+.nota-signo.aviso { color: #7A4F05; font-weight: 600; }
+.escala { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; }
+.escala button { height: 42px; border: 2px solid #E2E8F0; border-radius: 9px; font-weight: 700; color: #334155; background: #fff; }
+.escala button.medio { border-color: #F5D58A; }
+.escala button.alto { border-color: #F3BDBD; }
+.escala button.on { background: #172A5A; border-color: #172A5A; color: #fff; }
+.escala button.on.medio { background: #B7710A; border-color: #B7710A; }
+.escala button.on.alto { background: #C03535; border-color: #C03535; }
+</style>

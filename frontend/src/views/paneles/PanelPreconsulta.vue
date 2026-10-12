@@ -1,4 +1,5 @@
 <script setup>
+import { cronometro } from '../../dominio/cronometro';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import servicio from '../../services/indicadores';
@@ -32,8 +33,13 @@ const buscar = ref('');
 const resultados = ref([]);
 const buscando = ref(false);
 
+// Tiempo de consulta: de la primera tecla hasta elegir al paciente.
+const reloj = cronometro('consulta', 'preconsulta');
+
 let temporizadorBusqueda;
 function alEscribir() {
+  if (buscar.value) reloj.iniciar();
+  else reloj.reiniciar();
   clearTimeout(temporizadorBusqueda);
   if (buscar.value.trim().length < 2) {
     resultados.value = [];
@@ -57,6 +63,7 @@ function alEscribir() {
  * aquí: tocar el botón por error ya no deja a nadie en la cola.
  */
 function atender(pacienteId) {
+  if (buscar.value) reloj.terminar(pacienteId);
   abriendo.value = pacienteId;
   router.push(`/preconsulta/nueva?paciente=${pacienteId}`);
 }

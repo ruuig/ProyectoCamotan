@@ -30,6 +30,8 @@ const error = ref('');
 const constanciaDigital = ref(false);
 const porFirmar = ref([]);
 const firmando = ref(null);
+// La hoja de una entrega ya hecha: la misma, sin nada que editar.
+const soloVer = ref(false);
 const periodo = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 7);
 let clave = null;
 
@@ -47,6 +49,7 @@ async function cargarCola() {
 async function abrir(a) {
   error.value = '';
   terminada.value = null;
+  soloVer.value = false;
   elegida.value = a.atencionId;
   cargando.value = true;
   try {
@@ -106,7 +109,7 @@ async function terminar() {
     const r = await servicio.dispensarAtencion(hoja.value.atencionId, {
       renglones: porEntregar.value.map((x) => ({ prescripcionId: x.prescripcionId, cantidad: aSolicitar(x) })),
     }, clave);
-    terminada.value = { paciente: hoja.value.paciente, renglones: r.renglones };
+    terminada.value = { atencionId: hoja.value.atencionId, paciente: hoja.value.paciente, renglones: r.renglones };
     hoja.value = null;
     elegida.value = null;
     await cargarCola();
@@ -116,6 +119,29 @@ async function terminar() {
     enviando.value = false;
   }
 }
+
+async function verEntrega() {
+  error.value = '';
+  cargando.value = true;
+  try {
+    hoja.value = await servicio.hojaDeEntrega(terminada.value.atencionId);
+    soloVer.value = true;
+  } catch (fallo) {
+    error.value = fallo.message;
+  } finally {
+    cargando.value = false;
+  }
+}
+
+function cerrarHoja() {
+  hoja.value = null;
+  elegida.value = null;
+  soloVer.value = false;
+}
+
+// Quién entregó y cuándo, de la última entrega registrada.
+const ultimaEntrega = computed(() => (hoja.value?.renglones ?? []).flatMap((r) => r.entregas ?? [])
+  .sort((a, b) => new Date(b.registradaEn) - new Date(a.registradaEn))[0] ?? null);
 
 function edad(e) {
   if (!e) return '';
@@ -183,10 +209,13 @@ onMounted(cargarCola);
 
       <!-- Hoja de entrega -->
       <div class="min-w-0">
-        <div v-if="terminada" class="b-panel terminada no-imprimir" aria-live="polite">
+        <div v-if="terminada && !soloVer" class="b-panel terminada no-imprimir" aria-live="polite">
           <header class="b-panel-cabeza">
-            <h2 class="b-panel-titulo flex items-center gap-2"><Icono nombre="correcto" :tamano="22" class="text-mejora" /> Entrega registrada</h2>
-            <span class="text-sm text-apagado">{{ terminada.paciente.nombreCompleto }}</span>
+            <div class="min-w-0">
+              <h2 class="b-panel-titulo flex items-center gap-2"><Icono nombre="correcto" :tamano="22" class="text-mejora" /> Entrega registrada</h2>
+              <p class="truncate text-sm text-apagado">{{ terminada.paciente.nombreCompleto }}</p>
+            </div>
+            <button type="button" class="b-btn secundario chico" @click="verEntrega"><Icono nombre="ojo" :tamano="16" /> Ver hoja</button>
           </header>
           <ul class="b-panel-cuerpo space-y-1.5">
             <li v-for="r in terminada.renglones" :key="r.prescripcionId">
@@ -201,11 +230,14 @@ onMounted(cargarCola);
 
         <article v-if="hoja" class="b-panel hoja">
           <header class="b-panel-cabeza">
-            <div>
+            <div class="flex flex-wrap items-center gap-3">
               <h2 class="b-panel-titulo">Hoja de entrega</h2>
-              <p class="no-imprimir text-sm text-apagado">Copie estos datos al formato y después termine la dispensación.</p>
+              <span v-if="soloVer" class="sello-entregada"><Icono nombre="correcto" :tamano="15" /> Entregada</span>
             </div>
-            <button type="button" class="b-btn secundario chico no-imprimir" @click="imprimir"><Icono nombre="imprimir" :tamano="16" /> Imprimir</button>
+            <div class="flex gap-2 no-imprimir">
+              <button type="button" class="b-btn secundario chico" @click="imprimir"><Icono nombre="imprimir" :tamano="16" /> Imprimir</button>
+              <button v-if="soloVer" type="button" class="b-btn primario chico" @click="cerrarHoja"><Icono nombre="cerrar" :tamano="16" /> Cerrar</button>
+            </div>
           </header>
 
           <dl class="datos">
@@ -215,6 +247,7 @@ onMounted(cargarCola);
             <div><dt>Expediente</dt><dd>{{ hoja.paciente.expedientePapel || hoja.paciente.expediente }}</dd></div>
             <div><dt>Edad y sexo</dt><dd>{{ edad(hoja.paciente.edad) }} · {{ hoja.paciente.sexo === 'F' ? 'Mujer' : 'Hombre' }}</dd></div>
             <div><dt>Médico</dt><dd>{{ hoja.medico?.nombre ?? '—' }}</dd></div>
+            <div v-if="soloVer && ultimaEntrega"><dt>Entregó</dt><dd>{{ ultimaEntrega.usuario }} · {{ fecha(ultimaEntrega.registradaEn) }} {{ hora(ultimaEntrega.registradaEn) }}</dd></div>
             <div class="ancho"><dt>Diagnóstico</dt><dd>{{ hoja.diagnosticos.map((d) => `${d.descripcion}${d.cie ? ` (${d.cie})` : ''}`).join(' · ') || '—' }}</dd></div>
           </dl>
 
@@ -224,24 +257,26 @@ onMounted(cargarCola);
                 <tr>
                   <th>Medicamento e indicaciones</th>
                   <th class="text-right">Recetado</th>
-                  <th class="text-right">Entregar</th>
+                  <th class="text-right">{{ soloVer ? 'Entregado' : 'Entregar' }}</th>
                   <th>Lote</th>
                   <th>Vence</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="r in hoja.renglones" :key="r.prescripcionId" :class="r.pendiente ? '' : 'hecho'">
+                <tr v-for="r in hoja.renglones" :key="r.prescripcionId" :class="r.pendiente || soloVer ? '' : 'hecho'">
                   <td>
                     <b>{{ r.medicamento }}</b>
                     <small v-if="r.indicaciones" class="nota">{{ r.indicaciones }}</small>
-                    <small v-if="!r.pendiente" class="nota">Ya entregado</small>
+                    <small v-if="!r.pendiente && !soloVer" class="nota">Ya entregado</small>
+                    <small v-else-if="soloVer && r.pendiente" class="nota alerta">Faltaron {{ r.pendiente }}</small>
                     <small v-else-if="r.noAlcanza" class="nota alerta">
                       En farmacia hay {{ r.enFarmacia }}: faltan {{ r.noAlcanza }}<template v-if="r.enBodega"> (en bodega hay {{ r.enBodega }})</template>
                     </small>
                   </td>
                   <td class="text-right">{{ r.recetado }}</td>
                   <td class="text-right">
-                    <template v-if="r.pendiente">
+                    <b v-if="soloVer">{{ r.yaEntregado }}</b>
+                    <template v-else-if="r.pendiente">
                       <input
                         v-model="cantidades[r.prescripcionId]"
                         inputmode="numeric"
@@ -253,13 +288,24 @@ onMounted(cargarCola);
                     </template>
                     <template v-else>{{ r.yaEntregado }}</template>
                   </td>
-                  <td>
-                    <span v-for="l in lotesPara(r)" :key="l.loteId" class="block tabular-nums">{{ l.numeroLote }}<template v-if="lotesPara(r).length > 1"> ({{ l.cantidad }})</template></span>
-                    <span v-if="r.pendiente && !lotesPara(r).length" class="text-apagado">—</span>
-                  </td>
-                  <td>
-                    <span v-for="l in lotesPara(r)" :key="l.loteId" class="block tabular-nums">{{ fecha(l.fechaVence) }}</span>
-                  </td>
+                  <template v-if="soloVer">
+                    <td>
+                      <span v-for="(l, k) in r.entregas" :key="k" class="block tabular-nums">{{ l.numeroLote }}<template v-if="r.entregas.length > 1"> ({{ l.cantidad }})</template></span>
+                      <span v-if="!r.entregas?.length" class="text-apagado">—</span>
+                    </td>
+                    <td>
+                      <span v-for="(l, k) in r.entregas" :key="k" class="block tabular-nums">{{ fecha(l.fechaVence) }}</span>
+                    </td>
+                  </template>
+                  <template v-else>
+                    <td>
+                      <span v-for="l in lotesPara(r)" :key="l.loteId" class="block tabular-nums">{{ l.numeroLote }}<template v-if="lotesPara(r).length > 1"> ({{ l.cantidad }})</template></span>
+                      <span v-if="r.pendiente && !lotesPara(r).length" class="text-apagado">—</span>
+                    </td>
+                    <td>
+                      <span v-for="l in lotesPara(r)" :key="l.loteId" class="block tabular-nums">{{ fecha(l.fechaVence) }}</span>
+                    </td>
+                  </template>
                 </tr>
               </tbody>
             </table>
@@ -272,7 +318,7 @@ onMounted(cargarCola);
             </ul>
           </div>
 
-          <footer class="pie no-imprimir">
+          <footer v-if="!soloVer" class="pie no-imprimir">
             <button type="button" class="b-btn secundario" @click="hoja = null; elegida = null">Cancelar</button>
             <button type="button" class="b-btn primario" :disabled="enviando || !algoQueEntregar" @click="terminar">
               <Icono nombre="dispensacion" :tamano="20" /> {{ enviando ? 'Registrando…' : 'Terminar dispensación' }}
@@ -300,6 +346,7 @@ onMounted(cargarCola);
 .persona small { display: block; font-size: 13px; color: #64748B; }
 .firmar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
 .terminada { margin-bottom: 16px; border-color: #BFE6D2; }
+.sello-entregada { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border: 2px solid #1E8E5E; border-radius: 8px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #145C3C; background: #EAF7F0; }
 .datos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 20px; padding: 16px 20px; }
 .datos .ancho { grid-column: span 3; }
 @media (max-width: 700px) { .datos { grid-template-columns: 1fr; } .datos .ancho { grid-column: span 1; } }

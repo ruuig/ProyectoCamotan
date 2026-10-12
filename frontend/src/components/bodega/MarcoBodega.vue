@@ -8,20 +8,22 @@ import { useAuthStore } from '../../stores/auth';
 const route = useRoute();
 
 const PESTANAS = [
-  { clave: 'existencias', texto: 'Existencias', a: '/inventario', rutas: ['inventario', 'insumo-detalle', 'lote-detalle', 'insumo-nuevo', 'recibir-lote'] },
-  { clave: 'vencimientos', texto: 'Vencimientos', a: '/inventario/semaforo', rutas: ['semaforo'] },
-  { clave: 'cierre', texto: 'Cierre del mes', a: '/inventario/reportes', rutas: ['reportes-servicios', 'inventario-cierre', 'bres'] },
+  // Primero lo que se hace (hoy, recibir, entregar, cerrar), después lo que se consulta.
+  { clave: 'hoy', texto: 'Hoy', a: '/inventario/hoy', rutas: ['bodega-hoy'] },
+  { clave: 'recibir', texto: 'Recibir', a: '/inventario/recibir', rutas: ['recibir'] },
   { clave: 'requisiciones', texto: 'Requisiciones', a: '/inventario/requisiciones', rutas: ['requisiciones'] },
+  { clave: 'cierre', texto: 'Cierre del mes', a: '/inventario/reportes', rutas: ['reportes-servicios', 'inventario-cierre', 'bres'] },
+  { clave: 'existencias', texto: 'Existencias', a: '/inventario', rutas: ['inventario', 'insumo-detalle', 'lote-detalle', 'insumo-nuevo'] },
   { clave: 'kardex', texto: 'Kardex', a: '/inventario/kardex', rutas: ['kardex'] },
+  { clave: 'vencimientos', texto: 'Vencimientos', a: '/inventario/semaforo', rutas: ['semaforo'] },
   { clave: 'trazabilidad', texto: 'Trazabilidad', a: '/inventario/trazabilidad', rutas: ['trazabilidad'] },
-  { clave: 'tramites', texto: 'Bajas y retiros', a: '/inventario/bajas', rutas: ['bajas', 'retiros', 'retiro-detalle'] },
 ];
 
 // Farmacia entra solo a sus requisiciones.
 const auth = useAuthStore();
 const visibles = computed(() => (auth.rol === 'farmacia' ? PESTANAS.filter((p) => p.clave === 'requisiciones') : PESTANAS));
 
-const activa = computed(() => PESTANAS.find((p) => p.rutas.includes(route.name))?.clave ?? 'existencias');
+const activa = computed(() => PESTANAS.find((p) => p.rutas.includes(route.name))?.clave ?? 'hoy');
 
 const porVencer = ref(0);
 onMounted(async () => {

@@ -5,6 +5,9 @@ import servicio from '../../services/pacientes';
 import Icono from '../../components/comunes/Icono.vue';
 import SelectorComunidad from '../../components/comunes/SelectorComunidad.vue';
 import CompletarFicha from './CompletarFicha.vue';
+import { cronometro } from '../../dominio/cronometro';
+import { analizarCui, MOTIVO_CUI } from '../../dominio/cui';
+import { useEstablecimientoStore } from '../../stores/establecimiento';
 
 /**
  * Registro rápido: lo mínimo para poder atender.
@@ -36,6 +39,12 @@ const cuiIncompleto = (texto) => {
   return n > 0 && n !== 13;
 };
 
+// Con los 13 dígitos el CUI dice si está bien escrito y dónde se inscribió.
+const cui = computed(() => analizarCui(form.cui));
+const cuiInvalido = computed(() => !cui.value.valido && cui.value.motivo !== 'incompleto');
+// La comunidad del catálogo es del municipio del centro.
+const establecimiento = useEstablecimientoStore();
+
 // Quien no conoce su fecha de nacimiento declara su edad.
 const noConoceFecha = ref(false);
 const edadDeclarada = reactive({ valor: '', unidad: 'anios' });
@@ -57,6 +66,8 @@ const cuiRegistrado = ref(null);
 const error = ref('');
 const detallesError = ref([]);
 const guardando = ref(false);
+// Tiempo de registro: de la primera tecla en nombre o CUI hasta que queda guardado.
+const reloj = cronometro('registro', 'registrar_paciente');
 // "Registrar y llenar la ficha completa": al registrar, la ficha entera se
 // despliega aquí mismo en lugar de ir al expediente.
 const conFicha = ref(false);
@@ -116,6 +127,10 @@ async function guardar(confirmarDuplicado = false, llenarFicha = conFicha.value)
     error.value = 'El CUI o DPI debe tener 13 dígitos.';
     return;
   }
+  if (cuiInvalido.value) {
+    error.value = `${MOTIVO_CUI[cui.value.motivo]}.`;
+    return;
+  }
   guardando.value = true;
 
   try {
@@ -140,6 +155,7 @@ async function guardar(confirmarDuplicado = false, llenarFicha = conFicha.value)
         : {}),
       confirmarDuplicado,
     });
+    reloj.terminar(datos.paciente.id);
     if (llenarFicha) {
       registrado.value = datos.paciente;
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -202,11 +218,11 @@ async function guardar(confirmarDuplicado = false, llenarFicha = conFicha.value)
         <div class="b-rejilla">
           <div class="c6">
             <label for="nombres" class="b-etiqueta">Nombres</label>
-            <input id="nombres" v-model="form.nombres" required autocomplete="off" class="b-campo" />
+            <input id="nombres" v-model="form.nombres" required autocomplete="off" class="b-campo" @input="reloj.iniciar()" />
           </div>
           <div class="c6">
             <label for="apellidos" class="b-etiqueta">Apellidos</label>
-            <input id="apellidos" v-model="form.apellidos" required autocomplete="off" class="b-campo" />
+            <input id="apellidos" v-model="form.apellidos" required autocomplete="off" class="b-campo" @input="reloj.iniciar()" />
           </div>
           <div class="c4">
             <span class="b-etiqueta">Sexo</span>
@@ -216,8 +232,10 @@ async function guardar(confirmarDuplicado = false, llenarFicha = conFicha.value)
           </div>
           <div class="c4">
             <label for="cui" class="b-etiqueta">CUI / DPI <span class="b-opcional">opcional</span></label>
-            <input id="cui" v-model="form.cui" inputmode="numeric" maxlength="15" placeholder="13 dígitos" autocomplete="off" class="b-campo tabular-nums" :aria-invalid="cuiIncompleto(form.cui)" />
+            <input id="cui" v-model="form.cui" inputmode="numeric" maxlength="15" placeholder="13 dígitos" autocomplete="off" class="b-campo tabular-nums" :aria-invalid="cuiIncompleto(form.cui)" @input="reloj.iniciar()" />
             <small v-if="cuiIncompleto(form.cui)" class="aviso-campo">Lleva {{ soloDigitos(form.cui).length }} de 13 dígitos</small>
+            <small v-else-if="cuiInvalido" class="aviso-campo">{{ MOTIVO_CUI[cui.motivo] }}</small>
+            <small v-else-if="cui.valido" class="deducido"><Icono nombre="correcto" :tamano="14" /> Inscrito en {{ [cui.municipio, cui.departamento].filter(Boolean).join(', ') }}</small>
           </div>
           <div class="c4">
             <label for="expedientePapel" class="b-etiqueta">Ficha de papel <span class="b-opcional">opcional</span></label>
@@ -260,6 +278,7 @@ async function guardar(confirmarDuplicado = false, llenarFicha = conFicha.value)
           <div class="c8">
             <label for="comunidad" class="b-etiqueta">Comunidad</label>
             <SelectorComunidad id="comunidad" v-model="form.lugarPobladoId" />
+            <small v-if="form.lugarPobladoId && establecimiento.ubicacion" class="deducido"><Icono nombre="correcto" :tamano="14" /> Reside en {{ establecimiento.ubicacion }}</small>
           </div>
           <div class="c4">
             <label for="telefono" class="b-etiqueta">Teléfono <span class="b-opcional">opcional</span></label>
@@ -320,6 +339,7 @@ async function guardar(confirmarDuplicado = false, llenarFicha = conFicha.value)
 </template>
 
 <style scoped>
+.deducido { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 13px; font-weight: 700; color: #1E8E5E; }
 .ancho { display: flex; }
 .aviso-campo { display: block; margin-top: 4px; font-size: 13px; color: #B45309; }
 .ancho button { flex: 1; }

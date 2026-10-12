@@ -5,6 +5,7 @@ export default {
   resumenDia: () => http.get('/atenciones/resumen-dia'),
   siguiente: () => http.get('/atenciones/siguiente'),
   obtener: (id) => http.get(`/atenciones/${id}`),
+  hoja: (id) => http.get(`/atenciones/${id}/hoja`),
   cambiarEstado: (id, estado, motivo) =>
     http.patch(`/atenciones/${id}/estado`, { estado, ...(motivo ? { motivo } : {}) }),
   cerrarConsulta: (id, datos) => http.patch(`/atenciones/${id}/consulta`, datos),

@@ -8,6 +8,7 @@ import bodega from '../../services/bodega';
 import { useAuthStore } from '../../stores/auth';
 import { cierre, nombrePeriodo } from '../../dominio/bodega';
 import Icono from '../../components/comunes/Icono.vue';
+import CodificarCie from '../../components/consulta/CodificarCie.vue';
 
 /**
  * Panel de dirección: cómo va el día, qué falta para cerrar el mes y qué
@@ -111,21 +112,9 @@ const nombreDia = (f) => DIAS[new Date(new Date(f).getTime() - 6 * 3600000).getU
 const esHoy = (f) => new Date(new Date(f).getTime() - 6 * 3600000).toISOString().slice(0, 10) === new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
 
 /* ---------- Codificación ---------- */
-const codigos = ref({});
-const codificando = ref(null);
-async function codificar(id) {
-  const codigo = (codigos.value[id] ?? '').trim().toUpperCase();
-  if (!codigo) return;
-  codificando.value = id;
-  try {
-    await indicadores.codificar(id, codigo);
-    delete codigos.value[id];
-    panel.value = await indicadores.panel('admin', 'semana');
-  } catch (fallo) {
-    error.value = fallo.message;
-  } finally {
-    codificando.value = null;
-  }
+// Se parte de lo que escribió el médico y se elige entre los códigos sugeridos.
+function quitarCodificada(id) {
+  panel.value.pendientesDeCodificar = panel.value.pendientesDeCodificar.filter((a) => a.id !== id);
 }
 
 // La cola cambia durante el día: se refresca cada minuto.
@@ -238,16 +227,7 @@ onBeforeUnmount(() => clearInterval(reloj));
           <span v-if="panel?.fichasIncompletas" class="text-sm font-semibold text-apagado">{{ panel.fichasIncompletas.toLocaleString('es-GT') }} fichas incompletas</span>
         </header>
         <ul class="codificar">
-          <li v-for="a in panel?.pendientesDeCodificar ?? []" :key="a.id">
-            <span class="min-w-0 flex-1">
-              <b class="block truncate">{{ a.diagnosticoTxt }}</b>
-              <RouterLink :to="`/pacientes/${a.paciente.id}`" class="block truncate text-sm text-apagado hover:underline">{{ a.paciente.nombres }} {{ a.paciente.apellidos }} · {{ a.paciente.expedientePapel || a.paciente.expediente }}</RouterLink>
-            </span>
-            <form class="flex gap-1.5" @submit.prevent="codificar(a.id)">
-              <div class="w-[92px]"><input v-model="codigos[a.id]" :aria-label="`Código CIE-10 de ${a.diagnosticoTxt}`" placeholder="R51" maxlength="10" class="b-campo !h-[38px] font-mono uppercase" /></div>
-              <button type="submit" class="b-btn secundario chico" :disabled="!codigos[a.id] || codificando === a.id">Guardar</button>
-            </form>
-          </li>
+          <CodificarCie v-for="a in panel?.pendientesDeCodificar ?? []" :key="a.id" :atencion="a" @codificada="quitarCodificada" />
           <li v-if="panel && !panel.pendientesDeCodificar?.length" class="b-vacio !py-6">Todo codificado.</li>
         </ul>
       </section>
@@ -303,7 +283,7 @@ li:first-child > .faltante { border-top: none; }
 .leyenda { display: flex; gap: 16px; padding: 4px 18px 14px; font-size: 12px; font-weight: 600; color: #64748B; }
 .leyenda i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 3px; }
 
-.codificar { max-height: 250px; overflow-y: auto; }
+.codificar { max-height: 420px; overflow-y: auto; }
 .codificar li { display: flex; align-items: center; gap: 12px; padding: 9px 18px; border-top: 1px solid #F1F5F9; }
 .codificar li:first-child { border-top: none; }
 </style>

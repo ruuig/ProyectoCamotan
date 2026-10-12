@@ -290,6 +290,7 @@ async function registrarIngreso(
     observacionRecepcion = null,
     motivo = null,
     requisicionId = null,
+    recepcionId = null,
   },
 ) {
   const conforme =
@@ -330,6 +331,7 @@ async function registrarIngreso(
       verifAspecto: verificacion.aspecto ?? null,
       observacionRecepcion,
       requisicionId,
+      recepcionId,
     },
   });
 

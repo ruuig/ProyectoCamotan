@@ -223,12 +223,26 @@ async function buscarCie10(req, res) {
     else frecuentes.set(clave, { codigo: u.cie, descripcion: u.descripcion, usos: u._count._all, frecuente: true });
   }
 
-  const delCatalogo = catalogo.map((c) => ({
-    codigo: c.codigo,
-    descripcion: c.descripcion,
-    sinonimos: c.sinonimos,
-    usos: [...frecuentes.values()].find((f) => f.codigo === c.codigo)?.usos ?? 0,
-  }));
+  // Si la frase completa no aparece ("fiebre alta", "dolor de cabeza
+  // intenso"), se busca por palabras y gana el que coincide en mas.
+  if (catalogo.length < 5) {
+    const VACIAS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'con', 'sin', 'por', 'para', 'muy', 'una', 'uno', 'que', 'alta', 'alto', 'leve', 'fuerte', 'intenso', 'intensa', 'agudo', 'aguda']);
+    const palabras = [...new Set(normalizarTexto(q).split(/\s+/).filter((w) => w.length >= 3 && !VACIAS.has(w)))];
+    if (palabras.length) {
+      const extra = await prisma.cie10.findMany({
+        where: { activo: true, codigo: { notIn: catalogo.map((c) => c.codigo) }, OR: palabras.flatMap((w) => [{ descripcion: { contains: w, mode: 'insensitive' } }, { sinonimos: { contains: w, mode: 'insensitive' } }]) },
+        take: 60,
+      });
+      const aciertos = (c) => palabras.filter((w) => normalizarTexto(`${c.descripcion} ${c.sinonimos ?? ''}`).includes(w)).length;
+      catalogo.push(...extra.sort((x, y) => aciertos(y) - aciertos(x)).slice(0, 15));
+    }
+  }
+
+  const delCatalogo = catalogo.map((c) => {
+    const usos = [...frecuentes.values()].find((f) => f.codigo === c.codigo)?.usos ?? 0;
+    // Un código del catálogo que el centro ya usó sigue siendo frecuente.
+    return { codigo: c.codigo, descripcion: c.descripcion, sinonimos: c.sinonimos, usos, ...(usos ? { frecuente: true } : {}) };
+  });
   const codigosCatalogo = new Set(delCatalogo.map((c) => c.codigo));
   const soloFrecuentes = [...frecuentes.values()].filter((f) => !f.codigo || !codigosCatalogo.has(f.codigo));
 

@@ -71,4 +71,6 @@ h2 { font-size: 22px; font-weight: 800; color: #14244A; }
 .efectos li { padding-left: 18px; position: relative; font-weight: 600; color: #334155; }
 .efectos li::before { content: ''; position: absolute; left: 4px; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: #172A5A; }
 footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+/* --- Relieve (estilo duo) --- */
+.dialogo { border-radius: 22px; }
 </style>

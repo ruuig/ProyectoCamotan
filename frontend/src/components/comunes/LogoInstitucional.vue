@@ -1,4 +1,6 @@
 <script setup>
+import { onMounted } from 'vue';
+import { useLogoStore } from '../../stores/logo';
 /**
  * Logo oficial del Ministerio de Salud Publica y Asistencia Social.
  * Los archivos viven en public/ y se sirven tal cual, sin recortes ni
@@ -11,6 +13,8 @@ defineProps({
   // Sobre fondo oscuro se usa la version de fondo blanco en una placa.
   sobreFondoOscuro: { type: Boolean, default: false },
 });
+const logo = useLogoStore();
+onMounted(() => logo.cargar());
 </script>
 
 <template>
@@ -19,7 +23,7 @@ defineProps({
     class="inline-flex items-center justify-center rounded-xl bg-white p-2.5"
   >
     <img
-      :src="orientacion === 'vertical' ? '/mspas-vertical.png' : '/mspas-horizontal.png'"
+      :src="orientacion === 'vertical' ? logo.vertical : logo.horizontal"
       alt="Ministerio de Salud Publica y Asistencia Social"
       :style="{ height: `${alto}px` }"
       class="w-auto object-contain"
@@ -28,7 +32,7 @@ defineProps({
 
   <img
     v-else
-    :src="orientacion === 'vertical' ? '/mspas-vertical.png' : '/mspas-horizontal.png'"
+    :src="orientacion === 'vertical' ? logo.vertical : logo.horizontal"
     alt="Ministerio de Salud Publica y Asistencia Social"
     :style="{ height: `${alto}px` }"
     class="w-auto object-contain"

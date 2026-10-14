@@ -364,4 +364,7 @@ onMounted(cargar);
 .casilla input { width: 18px; height: 18px; accent-color: #172A5A; }
 
 .vacia { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 24px; border: 2px dashed #CBD5E1; border-radius: 16px; color: #94A3B8; text-align: center; font-weight: 600; }
+/* --- Relieve (estilo duo) --- */
+.persona { border-color: #E2E8F0; border-bottom-width: 4px; border-radius: 14px; }
+.persona:active { transform: translateY(2px); border-bottom-width: 2px; }
 </style>

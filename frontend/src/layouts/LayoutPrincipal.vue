@@ -1,14 +1,22 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
 import { RouterView, RouterLink, useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useEstablecimientoStore } from '../stores/establecimiento';
+import { useLogoStore } from '../stores/logo';
 import BarraConexion from '../components/comunes/BarraConexion.vue';
 import LogoInstitucional from '../components/comunes/LogoInstitucional.vue';
 import Icono from '../components/comunes/Icono.vue';
 
+// El estilo con relieve (styles/duo.css) vive solo dentro de la aplicación:
+// el login y las hojas de impresión no pasan por este layout.
+onMounted(() => document.body.classList.add('duo'));
+onBeforeUnmount(() => document.body.classList.remove('duo'));
+
 const auth = useAuthStore();
 const establecimiento = useEstablecimientoStore();
+const logo = useLogoStore();
+logo.cargar();
 const router = useRouter();
 const route = useRoute();
 const menuAbierto = ref(false);
@@ -109,15 +117,11 @@ onMounted(() => establecimiento.cargar());
              bg-superficie panel:flex"
       aria-label="Módulos del sistema"
     >
-      <RouterLink :to="auth.rutaPanel" class="flex min-h-[72px] items-center gap-3 border-b border-linea px-5 py-3">
-        <LogoInstitucional orientacion="vertical" :alto="40" />
-        <span class="min-w-0">
-          <span class="block font-titulo text-sm font-medium leading-tight text-tinta">
-            {{ establecimiento.nombre || 'Centro de Salud' }}
-          </span>
-          <span class="mt-0.5 block truncate text-xs text-apagado">
-            {{ establecimiento.ubicacion }}
-          </span>
+      <RouterLink :to="auth.rutaPanel" class="marca-lateral">
+        <img :src="logo.horizontal" alt="Ministerio de Salud Pública y Asistencia Social" class="marca-logo" />
+        <span class="marca-centro">
+          <strong>{{ establecimiento.nombre || 'Centro de Salud' }}</strong>
+          <span v-if="establecimiento.ubicacion"><Icono nombre="ubicacion" :tamano="14" /> {{ establecimiento.ubicacion }}</span>
         </span>
       </RouterLink>
 
@@ -134,10 +138,9 @@ onMounted(() => establecimiento.cargar());
             v-for="enlace in grupo.enlaces"
             :key="enlace.ruta"
             :to="enlace.ruta"
-            class="mb-1 flex min-h-tocable items-center gap-3 rounded-control px-3 py-2.5
-                   text-tinta-2 transition-colors hover:bg-linea-suave hover:text-tinta"
-            :active-class="enlace.exacto ? '' : '!bg-marino !font-bold !text-superficie'"
-            exact-active-class="!bg-marino !font-bold !text-superficie"
+            class="menu-enlace mb-1 flex min-h-tocable items-center gap-3 px-3 py-2.5 transition-colors"
+            :active-class="enlace.exacto ? '' : 'menu-activo'"
+            exact-active-class="menu-activo"
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />
             <span class="truncate">{{ enlace.etiqueta }}</span>
@@ -158,15 +161,11 @@ onMounted(() => establecimiento.cargar());
              bg-superficie panel:hidden"
       aria-label="Módulos del sistema"
     >
-      <div class="flex min-h-[72px] items-center gap-3 border-b border-linea px-5 py-3">
-        <LogoInstitucional orientacion="vertical" :alto="40" />
-        <span class="min-w-0">
-          <span class="block font-titulo text-sm font-medium leading-tight text-tinta">
-            {{ establecimiento.nombre || 'Centro de Salud' }}
-          </span>
-          <span class="mt-0.5 block truncate text-xs text-apagado">
-            {{ establecimiento.ubicacion }}
-          </span>
+      <div class="marca-lateral">
+        <img :src="logo.horizontal" alt="Ministerio de Salud Pública y Asistencia Social" class="marca-logo" />
+        <span class="marca-centro">
+          <strong>{{ establecimiento.nombre || 'Centro de Salud' }}</strong>
+          <span v-if="establecimiento.ubicacion"><Icono nombre="ubicacion" :tamano="14" /> {{ establecimiento.ubicacion }}</span>
         </span>
       </div>
 
@@ -183,10 +182,9 @@ onMounted(() => establecimiento.cargar());
             v-for="enlace in grupo.enlaces"
             :key="enlace.ruta"
             :to="enlace.ruta"
-            class="mb-1 flex min-h-tocable items-center gap-3 rounded-control px-3 py-2.5
-                   text-tinta-2 transition-colors hover:bg-linea-suave hover:text-tinta"
-            :active-class="enlace.exacto ? '' : '!bg-marino !font-bold !text-superficie'"
-            exact-active-class="!bg-marino !font-bold !text-superficie"
+            class="menu-enlace mb-1 flex min-h-tocable items-center gap-3 px-3 py-2.5 transition-colors"
+            :active-class="enlace.exacto ? '' : 'menu-activo'"
+            exact-active-class="menu-activo"
             @click="menuAbierto = false"
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />
@@ -254,3 +252,14 @@ onMounted(() => establecimiento.cargar());
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Marca de la barra lateral: el logo del Ministerio completo y, debajo, el
+   centro con su ubicación. */
+.marca-lateral { display: block; padding: 18px 16px 14px; border-bottom: 2px solid #E2E8F0; }
+.marca-logo { display: block; width: 100%; max-width: 200px; height: auto; }
+.marca-centro { display: block; margin-top: 12px; padding-top: 10px; border-top: 2px dashed #E2E8F0; }
+.marca-centro strong { display: block; font-size: 15px; font-weight: 800; line-height: 1.2; color: #14244A; }
+.marca-centro span { display: flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 13px; font-weight: 600; color: #64748B; }
+.marca-centro svg { flex-shrink: 0; color: #4A9BD6; }
+</style>

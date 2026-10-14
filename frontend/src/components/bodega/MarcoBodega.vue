@@ -1,61 +1,38 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
-import bodega from '../../services/bodega';
 import { useAuthStore } from '../../stores/auth';
+import Icono from '../comunes/Icono.vue';
 
-/** Marco de la bodega: las pestañas tipo carpeta y la pantalla de cada una. */
+/**
+ * Marco de la bodega. El inicio muestra las tareas; cada tarea se abre a
+ * pantalla completa con un botón para volver al inicio.
+ */
 const route = useRoute();
-
-const PESTANAS = [
-  // Primero lo que se hace (hoy, recibir, entregar, cerrar), después lo que se consulta.
-  { clave: 'hoy', texto: 'Hoy', a: '/inventario/hoy', rutas: ['bodega-hoy'] },
-  { clave: 'recibir', texto: 'Recibir', a: '/inventario/recibir', rutas: ['recibir'] },
-  { clave: 'requisiciones', texto: 'Requisiciones', a: '/inventario/requisiciones', rutas: ['requisiciones'] },
-  { clave: 'cierre', texto: 'Cierre del mes', a: '/inventario/reportes', rutas: ['reportes-servicios', 'inventario-cierre', 'bres'] },
-  { clave: 'existencias', texto: 'Existencias', a: '/inventario', rutas: ['inventario', 'insumo-detalle', 'lote-detalle', 'insumo-nuevo'] },
-  { clave: 'kardex', texto: 'Kardex', a: '/inventario/kardex', rutas: ['kardex'] },
-  { clave: 'vencimientos', texto: 'Vencimientos', a: '/inventario/semaforo', rutas: ['semaforo'] },
-  { clave: 'trazabilidad', texto: 'Trazabilidad', a: '/inventario/trazabilidad', rutas: ['trazabilidad'] },
-];
-
-// Farmacia entra solo a sus requisiciones.
 const auth = useAuthStore();
-const visibles = computed(() => (auth.rol === 'farmacia' ? PESTANAS.filter((p) => p.clave === 'requisiciones') : PESTANAS));
-
-const activa = computed(() => PESTANAS.find((p) => p.rutas.includes(route.name))?.clave ?? 'hoy');
-
-const porVencer = ref(0);
-onMounted(async () => {
-  if (auth.rol === 'farmacia') return;
-  try {
-    const s = await bodega.semaforo({});
-    porVencer.value = s.resumen.rojo + s.resumen.vencido;
-  } catch {
-    // El contador es una ayuda: sin él la pestaña funciona igual.
-  }
-});
+// Farmacia solo entra a sus requisiciones: no tiene inicio de bodega.
+const conVolver = computed(() => route.name !== 'bodega-inicio' && auth.rol !== 'farmacia');
 </script>
 
 <template>
-  <div class="b-hoja">
-    <nav class="b-carpetas" aria-label="Bodega">
-      <RouterLink
-        v-for="p in visibles"
-        :key="p.clave"
-        :to="p.a"
-        class="b-carpeta"
-        :class="activa === p.clave ? 'activa' : ''"
-        :aria-current="activa === p.clave ? 'page' : undefined"
-      >
-        {{ p.texto }}
-        <span v-if="p.clave === 'vencimientos' && porVencer" class="b-contador rojo">{{ porVencer }}</span>
-      </RouterLink>
-    </nav>
-    <div class="b-cuerpo">
-      <RouterView />
+  <div>
+    <RouterLink v-if="conVolver" to="/inventario" class="volver-bodega no-imprimir">
+      <Icono nombre="volver" :tamano="20" :grosor="2.4" /> Bodega
+    </RouterLink>
+    <div class="b-hoja">
+      <div class="b-cuerpo">
+        <RouterView />
+      </div>
     </div>
   </div>
 </template>
 
-
+<style scoped>
+.volver-bodega {
+  display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; height: 48px; padding: 0 20px 0 14px;
+  border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 14px; background: #fff; font-size: 17px; font-weight: 800; color: #172A5A;
+  transition: transform .06s;
+}
+.volver-bodega:hover { border-color: #9FCDEC; }
+.volver-bodega:active { transform: translateY(2px); border-bottom-width: 2px; }
+</style>

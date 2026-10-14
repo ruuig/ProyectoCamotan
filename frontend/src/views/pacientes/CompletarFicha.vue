@@ -129,11 +129,16 @@ async function recargar(id) {
 // Salir con cambios sin guardar se pregunta: perder lo escrito de una ficha
 // de papel obliga a volver a buscarla en el estante.
 const pendientes = computed(() => Object.values(sinGuardar).some(Boolean));
+// La pregunta se hace con un diálogo propio; la navegación espera la respuesta.
+const preguntaSalir = ref(null);
 onBeforeRouteLeave(() => {
   if (!pendientes.value) return true;
-  // eslint-disable-next-line no-alert
-  return window.confirm('Hay secciones con cambios sin guardar. ¿Salir de todas formas?');
+  return new Promise((resolver) => { preguntaSalir.value = resolver; });
 });
+function responderSalir(salir) {
+  preguntaSalir.value?.(salir);
+  preguntaSalir.value = null;
+}
 
 
 const porcentaje = (a) => (a?.total ? Math.round((a.respondidas / a.total) * 100) : 0);
@@ -264,6 +269,16 @@ onMounted(cargar);
         </PlegableSeccion>
       </div>
     </div>
+    <div v-if="preguntaSalir" class="fondo-salir" role="dialog" aria-modal="true" aria-labelledby="titulo-salir">
+      <div class="ventana-salir">
+        <span class="ic-salir"><Icono nombre="alerta" :tamano="30" /></span>
+        <p id="titulo-salir" class="salir-titulo">Hay cambios sin guardar</p>
+        <div class="salir-botones">
+          <button type="button" class="b-btn primario" @click="responderSalir(false)">Seguir llenando</button>
+          <button type="button" class="b-btn peligro" @click="responderSalir(true)">Salir sin guardar</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <p v-else-if="error" role="alert" class="b-aviso error">{{ error }}</p>
@@ -271,6 +286,11 @@ onMounted(cargar);
 </template>
 
 <style scoped>
+.fondo-salir { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(15, 23, 42, .5); }
+.ventana-salir { display: grid; justify-items: center; gap: 14px; width: min(420px, 100%); padding: 26px 24px; border: 2px solid #E2E8F0; border-bottom-width: 6px; border-radius: 24px; background: #fff; text-align: center; }
+.ic-salir { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; background: #E8930C; color: #fff; box-shadow: inset 0 -4px 0 #A35D00; }
+.salir-titulo { font-size: 21px; font-weight: 900; color: #14244A; }
+.salir-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
 .encabezado { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; padding: 18px 20px; }
 .codigo { display: inline-flex; flex-direction: column; align-items: center; min-width: 110px; padding: 6px 14px; border: 2px solid #172A5A; border-radius: 12px; line-height: 1.1; }
 .codigo b { font-size: 28px; font-weight: 700; color: #172A5A; font-variant-numeric: tabular-nums; }
@@ -289,4 +309,6 @@ onMounted(cargar);
 .progreso span { display: block; height: 100%; background: #172A5A; }
 .progreso.lleno span { background: #22A06B; }
 .grupo { padding: 14px 4px 2px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #64748B; }
+/* --- Relieve (estilo duo) --- */
+.codigo { border-bottom-width: 4px; border-radius: 14px; }
 </style>

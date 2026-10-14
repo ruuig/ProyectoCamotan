@@ -89,7 +89,6 @@ onUnmounted(() => clearInterval(temporizador));
   <div class="mx-auto max-w-4xl space-y-5">
     <div>
       <h1 class="titulo-pagina">Cola de atención</h1>
-      <p class="text-slate-500">Llame siempre al primero.</p>
     </div>
 
     <p v-if="error" role="alert" class="aviso aviso-urgente">

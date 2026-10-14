@@ -160,12 +160,18 @@ function parsearCsvCie10(texto) {
 function ordenarResultados(opciones, consulta) {
   const q = normalizarTexto(consulta);
   const puntaje = (o) => {
+    // Lo que el centro nombra así (sinónimo local) va antes que todo.
+    if (o.sinonimos && o.sinonimos.split(',').some((t) => normalizarTexto(t).startsWith(q))) return -1;
     const textos = [o.codigo, o.descripcion, o.sinonimos].filter(Boolean).map(normalizarTexto);
     if (textos.some((t) => t.startsWith(q))) return 0;
     if (textos.some((t) => t.split(' ').some((p) => p.startsWith(q)))) return 1;
     return 2;
   };
-  return [...opciones].sort((a, b) => puntaje(a) - puntaje(b) || (b.usos ?? 0) - (a.usos ?? 0));
+  // Un código con asterisco (manifestación) no va solo como diagnóstico: después.
+  const marca = (o) => (o.marca === 'asterisco' ? 1 : 0);
+  // Empate: el más usado y, después, el más general (texto más corto).
+  return [...opciones].sort((a, b) => puntaje(a) - puntaje(b) || marca(a) - marca(b) || (b.usos ?? 0) - (a.usos ?? 0)
+    || (a.descripcion?.length ?? 0) - (b.descripcion?.length ?? 0));
 }
 
 module.exports = {

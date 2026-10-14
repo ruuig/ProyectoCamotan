@@ -302,4 +302,40 @@ async function devolverABodega(establecimientoId, { renglones, motivo }, usuario
   });
 }
 
-module.exports = { hoyGuatemala, limitesDelDia, existencias, resumenDelDia, cerrarDia, devolverABodega };
+/**
+ * Poner el lote a lo que entró sin número ("SIN-LOTE", en cuarentena): se
+ * mira la caja y se escribe el lote y el vencimiento. La cantidad pasa del
+ * registro sin lote al lote real con dos movimientos en el kardex, y desde ahí
+ * se puede entregar y rastrear hasta el paciente.
+ */
+async function ponerLote(establecimientoId, { loteId, numeroLote, fechaVence, cantidad }, usuarioId) {
+  const origen = await prisma.lote.findFirst({ where: { id: loteId, insumo: { establecimientoId } }, include: { insumo: { select: { nombreGenerico: true } } } });
+  if (!origen) throw fallo(404, 'lote_no_encontrado', 'El registro no existe');
+  if (origen.numeroLote !== 'SIN-LOTE') throw fallo(409, 'ya_tiene_lote', `Este registro ya tiene lote: ${origen.numeroLote}`);
+  if (cantidad > origen.cantidadFarmacia) throw fallo(409, 'cantidad_excede', `En farmacia hay ${origen.cantidadFarmacia} sin lote de este producto`);
+  const numero = numeroLote.trim().toUpperCase();
+  if (numero === 'SIN-LOTE') throw fallo(400, 'lote_invalido', 'Escriba el número de lote que dice la caja');
+  const vence = new Date(`${fechaVence}T12:00:00Z`);
+
+  return prisma.$transaction(async (tx) => {
+    let destino = await tx.lote.findFirst({ where: { insumoId: origen.insumoId, numeroLote: numero } });
+    if (destino && destino.fechaVence.toISOString().slice(0, 10) !== fechaVence) {
+      throw fallo(409, 'vencimiento_distinto', `El lote ${numero} ya existe con vencimiento ${destino.fechaVence.toISOString().slice(0, 10)}: revise la caja`);
+    }
+    if (!destino) {
+      destino = await tx.lote.create({
+        data: {
+          insumoId: origen.insumoId, numeroLote: numero, fechaVence: vence, cantidadInicial: cantidad, cantidadActual: 0,
+          cantidadFarmacia: 0, origen: origen.origen, recibidoEn: origen.recibidoEn, requisicionId: origen.requisicionId,
+          observacionRecepcion: 'Identificado en farmacia a partir de existencia sin lote',
+        },
+      });
+    }
+    const motivo = `Se identificó el lote ${numero} (vence ${fechaVence}) en existencia registrada sin lote`;
+    await registrarReajuste(tx, { loteId: origen.id, cantidad: -cantidad, causa: 'correccion_error_registro_negativa', usuarioId, motivo, ubicacion: 'farmacia' });
+    await registrarReajuste(tx, { loteId: destino.id, cantidad, causa: 'correccion_error_registro_positiva', usuarioId, motivo, ubicacion: 'farmacia' });
+    return { insumo: origen.insumo.nombreGenerico, loteId: destino.id, numeroLote: numero, cantidad };
+  });
+}
+
+module.exports = { hoyGuatemala, limitesDelDia, existencias, resumenDelDia, cerrarDia, devolverABodega, ponerLote };

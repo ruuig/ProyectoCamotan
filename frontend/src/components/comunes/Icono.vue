@@ -80,6 +80,7 @@ const ICONOS = {
     ['path', 'M12 4.5 2.8 20h18.4L12 4.5Z'],
     ['path', 'M12 10v4M12 17h.01'],
   ],
+  ubicacion: [['path', 'M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z'], ['circle', '12 10 2.5']],
   reloj: [['circle', '12 12 8.5'], ['path', 'M12 7.5V12l3 1.8']],
   correcto: [['circle', '12 12 8.5'], ['path', 'M8.3 12.2l2.6 2.6 4.8-5.2']],
   informacion: [['circle', '12 12 8.5'], ['path', 'M12 11v5M12 8h.01']],

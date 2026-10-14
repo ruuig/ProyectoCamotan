@@ -403,4 +403,7 @@ onUnmounted(() => clearInterval(temporizador));
 .nivel-urgente .nivel { background: #FDECEC; color: #A52A2A; }
 .nivel-moderado .nivel { background: #FFF4D6; color: #8A5A06; }
 .nivel-leve .nivel { background: #E2F5EA; color: #145C3C; }
+/* --- Relieve (estilo duo) --- */
+.posicion { border-radius: 10px; }
+.contador { border-radius: 10px; }
 </style>

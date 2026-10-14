@@ -192,4 +192,6 @@ const usado = computed(() => (datos.value ? 1 - datos.value.lote.cantidadActual 
 .punto { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; }
 .punto.entra { background: #22A06B; }
 .punto.sale { background: #fff; border: 2.5px solid #64748B; }
+/* --- Relieve (estilo duo) --- */
+.boleto-grande { border-bottom-width: 5px; border-radius: 20px; }
 </style>

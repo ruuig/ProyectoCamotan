@@ -37,4 +37,6 @@ const titulo = computed(() => {
 .selector-mes button:hover:not(:disabled) { background: #EEF2FF; }
 .selector-mes button:disabled { color: #CBD5E1; cursor: not-allowed; }
 .en-curso { padding: 3px 10px; border-radius: 999px; background: #FFF4D6; color: #7A4F05; font-size: 13px; font-weight: 700; }
+/* --- Relieve (estilo duo) --- */
+.selector-mes { border-color: #E2E8F0; border-bottom-width: 4px; border-radius: 14px; background: #fff; }
 </style>

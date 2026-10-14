@@ -284,4 +284,8 @@ const alertas = computed(() => [
 .pie-seccion { padding-top: 12px; border-top: 1px dashed #CBD5E1; font-size: 15px; }
 .pie { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 18px; padding-top: 12px; border-top: 2px solid #E2E8F0; font-size: 13px; color: #475569; }
 .pie b { color: #334155; }
+/* --- Relieve (estilo duo) --- */
+.hoja { border-radius: 22px; }
+.barra { border-radius: 22px 22px 0 0; }
+.signos { border-bottom-width: 4px; border-radius: 14px; }
 </style>

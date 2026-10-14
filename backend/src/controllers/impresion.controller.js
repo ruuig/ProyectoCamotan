@@ -18,6 +18,7 @@ const DOCUMENTOS = {
   kardex: 'Kardex de bodega',
   sigsa4: 'SIGSA-4, registro diario de post-consulta',
   sigsa3cs: 'SIGSA-3CS, registro diario de consulta',
+  receta_paciente: 'Receta e indicaciones para el paciente',
 };
 
 const DOCUMENTOS_BODEGA = new Set([

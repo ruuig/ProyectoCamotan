@@ -43,7 +43,6 @@ onMounted(cargar);
   <section v-if="datos" class="space-y-6">
     <div>
       <h1 class="titulo-pagina">Farmacia</h1>
-      <p class="text-slate-500">Lo que necesita acción, primero.</p>
     </div>
 
     <div class="grid gap-4 sm:grid-cols-3">

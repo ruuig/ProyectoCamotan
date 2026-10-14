@@ -186,7 +186,7 @@ onBeforeUnmount(() => clearInterval(reloj));
           <RouterLink to="/inventario" class="text-sm font-bold text-tinta hover:underline">Ver bodega</RouterLink>
         </header>
         <div class="mini-cifras">
-          <RouterLink to="/inventario" class="mini"><b class="rojo">{{ agotados }}</b><span>Agotados</span></RouterLink>
+          <RouterLink to="/inventario/productos" class="mini"><b class="rojo">{{ agotados }}</b><span>Agotados</span></RouterLink>
           <RouterLink to="/inventario/semaforo" class="mini"><b class="rojo">{{ semaforo ? semaforo.vencido : '·' }}</b><span>Vencidos</span></RouterLink>
           <RouterLink to="/inventario/semaforo" class="mini"><b class="ambar">{{ semaforo ? semaforo.rojo : '·' }}</b><span>Por vencer</span></RouterLink>
         </div>
@@ -286,4 +286,7 @@ li:first-child > .faltante { border-top: none; }
 .codificar { max-height: 420px; overflow-y: auto; }
 .codificar li { display: flex; align-items: center; gap: 12px; padding: 9px 18px; border-top: 1px solid #F1F5F9; }
 .codificar li:first-child { border-top: none; }
+/* --- Relieve (estilo duo) --- */
+.hoy { border-bottom-width: 4px; border-radius: 18px; }
+.marca { border-radius: 12px; }
 </style>

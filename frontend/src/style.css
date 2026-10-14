@@ -38,6 +38,12 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Campos numéricos sin flechas de subir y bajar, en todo el sistema: no
+     sirven al digitar y un clic o la rueda del ratón cambia el número sin querer. */
+  input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
   /* Foco siempre visible: se navega mucho con teclado al digitar rápido. */
   :focus-visible {
     @apply outline-none ring-2 ring-mejora ring-offset-2;

@@ -524,8 +524,26 @@ async function entregar(req, res, next) {
   const enBodega = enUbicacion(lotes, 'bodega');
   const movimientos = [];
   const faltan = [];
+  // Los lotes que se eligieron a mano; si no, salen por PEPE (el que vence primero).
+  const elegidos = new Map(req.body.renglones.filter((g) => g.insumoId && g.lotes?.length).map((g) => [g.insumoId, g.lotes]));
+  const hoy = new Date();
   for (const f of filas.filter((x) => x.insumoId)) {
-    const { propuesta, faltante } = lotesPepe(enBodega.filter((l) => l.insumoId === f.insumoId), f.cantidadSolicitada);
+    const propios = enBodega.filter((l) => l.insumoId === f.insumoId);
+    const aMano = elegidos.get(f.insumoId);
+    if (aMano) {
+      const suma = aMano.reduce((s, l) => s + l.cantidad, 0);
+      if (suma !== f.cantidadSolicitada) return next({ status: 400, codigo: 'lotes_no_cuadran', mensaje: `${f.descripcion}: los lotes suman ${suma} y se entregan ${f.cantidadSolicitada}` });
+      for (const l of aMano) {
+        const lote = propios.find((p) => p.id === l.loteId);
+        if (!lote) return next({ status: 404, codigo: 'lote_no_encontrado', mensaje: `${f.descripcion}: el lote no es de este insumo` });
+        if (lote.estado !== 'disponible') return next({ status: 409, codigo: 'lote_no_disponible', mensaje: `El lote ${lote.numeroLote} no está disponible para entregar` });
+        if (new Date(lote.fechaVence) < hoy) return next({ status: 409, codigo: 'lote_vencido', mensaje: `El lote ${lote.numeroLote} está vencido` });
+        if (lote.cantidadActual < l.cantidad) faltan.push(`${f.descripcion}, lote ${lote.numeroLote}: hay ${lote.cantidadActual}`);
+        movimientos.push({ loteId: l.loteId, cantidad: l.cantidad });
+      }
+      continue;
+    }
+    const { propuesta, faltante } = lotesPepe(propios, f.cantidadSolicitada);
     if (faltante > 0) faltan.push(`${f.descripcion}: hay ${f.cantidadSolicitada - faltante}`);
     movimientos.push(...propuesta.map((p) => ({ loteId: p.loteId, cantidad: p.cantidad })));
   }

@@ -105,4 +105,7 @@ onMounted(cargar);
 .opcion { display: block; width: 100%; min-height: 40px; padding: 8px 12px; border-radius: 8px; text-align: left; color: #14244A; }
 .opcion:hover { background: #F1F5F9; }
 .opcion.on { background: #EEF2FA; color: #172A5A; }
+/* --- Relieve (estilo duo) --- */
+.lista-comunidades { border-bottom-width: 4px; border-radius: 16px; }
+.opcion { border-radius: 10px; font-weight: 700; }
 </style>

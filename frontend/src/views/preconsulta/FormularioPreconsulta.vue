@@ -139,10 +139,31 @@ const evaluando = ref(false);
 const sinRed = ref(false);
 let temporizadorTriaje;
 
+// Lo que el servidor acepta como posible (atenciones.schema). Fuera de esto
+// es un error de digitación: se avisa en el campo y no se evalúa.
+const POSIBLE = {
+  temperatura: [25, 45, '°C'],
+  presionSis: [40, 300, 'mmHg'],
+  presionDia: [20, 200, 'mmHg'],
+  frecCardiaca: [20, 300, 'lpm'],
+  frecRespiratoria: [5, 120, 'rpm'],
+  satOxigeno: [0, 100, '%'],
+  glucosa: [10, 900, 'mg/dL'],
+};
+function imposible(campo) {
+  const rango = POSIBLE[campo];
+  const v = medicion[campo];
+  if (!rango || v === '' || v === null || v === undefined) return null;
+  const n = Number(v);
+  if (Number.isFinite(n) && n >= rango[0] && n <= rango[1]) return null;
+  return `Revise el número: va de ${rango[0]} a ${rango[1]} ${rango[2]}`;
+}
+const camposImposibles = computed(() => Object.keys(POSIBLE).filter((c) => imposible(c)));
+
 async function evaluarTriaje() {
   const cuerpo = { ...(esNueva.value ? { pacienteId: Number(route.query.paciente) } : { atencionId: Number(route.params.id) }), signosPeligro: seleccionados.value };
   for (const k of ['temperatura', 'presionSis', 'presionDia', 'frecCardiaca', 'frecRespiratoria', 'satOxigeno', 'dolor', 'glucosa']) {
-    if (medicion[k] !== '' && medicion[k] !== null) cuerpo[k] = Number(medicion[k]);
+    if (medicion[k] !== '' && medicion[k] !== null && !imposible(k)) cuerpo[k] = Number(medicion[k]);
   }
   if (conciencia.value) cuerpo.conciencia = conciencia.value;
   evaluando.value = true;
@@ -173,6 +194,7 @@ const motivoDe = (campo) => {
 };
 const hallazgoDe = (campo) => triaje.value?.hallazgos?.find((h) => h.campo === campo) ?? null;
 function tonoCampo(campo) {
+  if (imposible(campo)) return 'rojo';
   const m = motivoDe(campo);
   if (m) return m.nivel === 'urgente' ? 'rojo' : 'ambar';
   return hallazgoDe(campo) ? 'aviso' : '';
@@ -199,6 +221,10 @@ function soloConValor() {
 async function guardar() {
   error.value = '';
   detallesError.value = [];
+  if (camposImposibles.value.length) {
+    error.value = 'Hay un signo vital con un número que no es posible. Revíselo antes de registrar.';
+    return;
+  }
   guardando.value = true;
 
   try {
@@ -426,10 +452,6 @@ onMounted(async () => {
           <button type="button" class="b-btn secundario" @click="cancelando = false">No cancelar</button>
           <button type="button" class="b-btn primario" :disabled="motivoCancelacion.trim().length < 5" @click="cancelarAtencion">Cancelar atención</button>
         </div>
-        <p class="text-slate-500">
-          Deje en blanco lo que no se midió.
-          <template v-if="esNueva"> La atención se abre al guardar: si sale sin guardar, el paciente no entra a la cola.</template>
-        </p>
       </div>
 
       <!-- Motivo: lo primero que se pregunta al paciente -->
@@ -486,9 +508,6 @@ onMounted(async () => {
           </p>
         </div>
 
-        <p class="mt-2 text-sm text-apagado">
-          Se guarda siempre en kilogramos.
-        </p>
       </div>
 
       <div
@@ -520,7 +539,8 @@ onMounted(async () => {
                      text-slate-900 outline-none transition focus:ring-2 focus:ring-mspas-200"
               :class="tonoCampo(campo.clave)"
             />
-            <p v-if="motivoDe(campo.clave)" class="nota-signo" :class="tonoCampo(campo.clave)">{{ motivoDe(campo.clave).etiqueta }}</p>
+            <p v-if="imposible(campo.clave)" class="nota-signo rojo">{{ imposible(campo.clave) }}</p>
+            <p v-else-if="motivoDe(campo.clave)" class="nota-signo" :class="tonoCampo(campo.clave)">{{ motivoDe(campo.clave).etiqueta }}</p>
             <p v-else-if="hallazgoDe(campo.clave)" class="nota-signo aviso">{{ hallazgoDe(campo.clave).mensaje }}</p>
           </div>
         </div>
@@ -575,7 +595,8 @@ onMounted(async () => {
                 class="campo-signo w-full rounded-lg border px-3 py-2.5 text-lg tabular-nums text-slate-900 outline-none transition focus:ring-2 focus:ring-mspas-200"
                 :class="tonoCampo('glucosa')"
               />
-              <p v-if="motivoDe('glucosa')" class="nota-signo" :class="tonoCampo('glucosa')">{{ motivoDe('glucosa').etiqueta }}</p>
+              <p v-if="imposible('glucosa')" class="nota-signo rojo">{{ imposible('glucosa') }}</p>
+              <p v-else-if="motivoDe('glucosa')" class="nota-signo" :class="tonoCampo('glucosa')">{{ motivoDe('glucosa').etiqueta }}</p>
             </div>
           </div>
         </div>
@@ -741,4 +762,16 @@ onMounted(async () => {
 .escala button.on { background: #172A5A; border-color: #172A5A; color: #fff; }
 .escala button.on.medio { background: #B7710A; border-color: #B7710A; }
 .escala button.on.alto { background: #C03535; border-color: #C03535; }
+/* --- Relieve (estilo duo) --- */
+.triaje { border-bottom-width: 4px; border-radius: 20px; }
+.niveles button { border-bottom-width: 4px; border-radius: 12px; }
+.niveles button:active { transform: translateY(2px); border-bottom-width: 2px; }
+.niveles button.urgente.on { border-bottom-color: #8F1D1F; }
+.niveles button.moderado.on { border-bottom-color: #A35D00; }
+.niveles button.leve.on { border-bottom-color: #0D5634; }
+.escala button { border-bottom-width: 4px; border-radius: 12px; }
+.escala button:active { transform: translateY(2px); border-bottom-width: 2px; }
+.escala button.on { border-bottom-color: #0B163A; }
+.escala button.on.medio { border-bottom-color: #7A4F05; }
+.escala button.on.alto { border-bottom-color: #8F1D1F; }
 </style>

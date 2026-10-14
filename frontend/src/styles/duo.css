@@ -1,0 +1,151 @@
+/*
+  Estilo con relieve, de letra redondeada y gruesa (al modo de Duolingo), con
+  la paleta institucional. Botones que se hunden al tocarlos, bordes de 2 px
+  con el inferior más grueso y esquinas amplias.
+
+  Solo aplica dentro de la aplicación: LayoutPrincipal pone la clase "duo" en
+  el body. El login y las hojas de /imprimir no la tienen, y en papel nunca
+  aplica (@media screen): los formatos oficiales quedan como están.
+*/
+@import '@fontsource-variable/nunito/wght.css';
+
+@media screen {
+  body.duo {
+    --duo-marino: #172A5A;
+    --duo-marino-2: #1F3A7A;
+    --duo-marino-hondo: #0B163A;
+    --duo-celeste: #4A9BD6;
+    --duo-celeste-2: #2F83C4;
+    --duo-celeste-bg: #EAF3FB;
+    --duo-borde: #E2E8F0;
+    --duo-borde-2: #CBD5E1;
+    --duo-hondo: #B8C3D3;
+    --duo-relieve: 4px;
+    font-family: 'Nunito Variable', 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  }
+
+  /* --- Letra ----------------------------------------------------------------- */
+  body.duo h1, body.duo h2, body.duo h3, body.duo h4,
+  body.duo .font-sans,
+  body.duo .font-titulo,
+  body.duo button,
+  body.duo input,
+  body.duo select,
+  body.duo textarea { font-family: 'Nunito Variable', 'Nunito', 'Segoe UI', system-ui, sans-serif; }
+  body.duo h1 { font-weight: 900; letter-spacing: -.015em; }
+  body.duo h2, body.duo h3 { font-weight: 800; }
+  body.duo .b-titulo, body.duo .titulo-pagina { font-weight: 900; letter-spacing: -.015em; }
+  body.duo .panel-titulo, body.duo .b-panel-titulo { font-weight: 800; }
+  body.duo .etiqueta-campo, body.duo .b-etiqueta, body.duo .b-antetitulo, body.duo .b-subtitulo { font-weight: 800; }
+  body.duo .font-medium { font-weight: 600; }
+  body.duo .font-semibold { font-weight: 700; }
+  body.duo .font-bold { font-weight: 800; }
+
+  /* --- Botones con relieve --------------------------------------------------- */
+  body.duo .b-btn,
+  body.duo .boton-primario,
+  body.duo .boton-secundario {
+    border: 2px solid var(--duo-borde-2);
+    border-bottom: var(--duo-relieve) solid var(--duo-hondo);
+    border-radius: 14px;
+    background: #fff;
+    color: var(--duo-marino);
+    font-weight: 800;
+    letter-spacing: .02em;
+    box-shadow: none;
+    transition: background .12s, border-color .12s, transform .06s, border-bottom-width .06s;
+  }
+  body.duo .b-btn:hover:not(:disabled),
+  body.duo .boton-secundario:hover:not(:disabled) { background: #F4F7FB; }
+  body.duo .b-btn:active:not(:disabled),
+  body.duo .boton-primario:active:not(:disabled),
+  body.duo .boton-secundario:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 2px; box-shadow: none; }
+
+  body.duo .b-btn.primario,
+  body.duo .boton-primario {
+    background: var(--duo-marino); color: #fff;
+    border-color: var(--duo-marino); border-bottom-color: var(--duo-marino-hondo);
+  }
+  body.duo .b-btn.primario:hover:not(:disabled),
+  body.duo .boton-primario:hover:not(:disabled) { background: var(--duo-marino-2); border-color: var(--duo-marino-2); border-bottom-color: var(--duo-marino-hondo); }
+
+  body.duo .b-btn.secundario,
+  body.duo .boton-secundario { color: var(--duo-marino); border-color: var(--duo-borde-2); border-bottom-color: var(--duo-hondo); }
+
+  body.duo .b-btn.exito { background: #1A8F57; color: #fff; border-color: #1A8F57; border-bottom-color: #0D5634; }
+  body.duo .b-btn.exito:hover:not(:disabled) { background: #179A5C; }
+  body.duo .b-btn.peligro { color: #A52A2A; border-color: #F3BDBD; border-bottom-color: #E59A9A; }
+  body.duo .b-btn.peligro:hover:not(:disabled) { background: #FDECEC; }
+
+  body.duo .b-btn.chico { border-radius: 12px; border-bottom-width: 3px; }
+  body.duo .b-btn.chico:active:not(:disabled) { border-bottom-width: 2px; transform: translateY(1px); }
+
+  body.duo .b-btn:disabled,
+  body.duo .boton-primario:disabled,
+  body.duo .boton-secundario:disabled {
+    opacity: 1; background: #E9EDF3; color: #9AA4B5; border-color: #E1E6EE; border-bottom-color: #D3DAE5; cursor: not-allowed;
+  }
+
+  /* --- Campos ---------------------------------------------------------------- */
+  body.duo .b-campo,
+  body.duo .campo {
+    border: 2px solid var(--duo-borde); border-radius: 14px; background-color: #F8FAFC; font-weight: 600; color: #14244A;
+  }
+  body.duo .b-campo:hover,
+  body.duo .campo:hover { border-color: var(--duo-borde-2); }
+  body.duo .b-campo:focus,
+  body.duo .campo:focus { background-color: #fff; border-color: var(--duo-celeste); box-shadow: 0 0 0 4px rgba(74, 155, 214, .15); }
+  body.duo .b-campo.invalido, body.duo .b-campo[aria-invalid='true'], body.duo .campo[aria-invalid='true'] { border-color: #D64545; }
+  body.duo ::placeholder { font-weight: 500; }
+
+  /* --- Superficies con borde grueso ------------------------------------------ */
+  body.duo .b-panel,
+  body.duo .panel,
+  body.duo .tarjeta,
+  body.duo .b-tabla-marco {
+    border: 2px solid var(--duo-borde); border-bottom-width: var(--duo-relieve); border-radius: 18px; box-shadow: none;
+  }
+  body.duo .b-hoja { border: 2px solid var(--duo-borde-2); border-bottom-width: 5px; border-radius: 22px; }
+  body.duo .b-panel-cabeza, body.duo .panel-encabezado { border-bottom: 2px solid var(--duo-borde); }
+
+  /* --- Pestañas, segmentados y fichas ---------------------------------------- */
+  body.duo .b-carpeta { font-weight: 800; border-radius: 14px 14px 0 0; }
+  body.duo .b-carpeta.activa { color: var(--duo-marino); box-shadow: inset 0 4px 0 var(--duo-celeste); }
+
+  body.duo .b-segmentado {
+    background: #fff; border: 2px solid var(--duo-borde); border-bottom-width: var(--duo-relieve); border-radius: 16px; padding: 4px;
+  }
+  body.duo .b-segmentado button,
+  body.duo .b-segmentado a { font-weight: 800; border-radius: 11px; }
+  body.duo .b-segmentado .on { background: var(--duo-celeste-bg); color: var(--duo-marino); box-shadow: inset 0 0 0 2px var(--duo-celeste); }
+
+  body.duo .b-chip,
+  body.duo .b-ficha-cat {
+    border: 2px solid var(--duo-borde); border-bottom-width: var(--duo-relieve); border-radius: 14px; font-weight: 800;
+    transition: border-color .12s, background .12s, transform .06s;
+  }
+  body.duo .b-chip:active, body.duo .b-ficha-cat:active { transform: translateY(2px); border-bottom-width: 2px; }
+  body.duo .b-chip.on { background: var(--duo-celeste-bg); color: var(--duo-marino); border-color: var(--duo-celeste); border-bottom-color: var(--duo-celeste-2); }
+
+  body.duo .b-contador { border-radius: 9px; font-weight: 800; }
+  body.duo .b-estado { border-radius: 8px; font-weight: 800; }
+
+  /* --- Piezas compartidas de bodega ------------------------------------------ */
+  body.duo .b-fila { border-bottom-width: var(--duo-relieve); border-radius: 18px; }
+  body.duo .b-fila:active { transform: translateY(2px); border-bottom-width: 2px; }
+  body.duo .b-franja, body.duo .b-pasos { border-bottom-width: var(--duo-relieve); border-radius: 18px; }
+  /* Nunito es más ancha que Plex: la franja de cifras se compacta para no partirse. */
+  body.duo .b-cifra { padding: 12px 16px; gap: 8px; }
+  body.duo .b-cifra .n { font-size: 28px; font-weight: 900; }
+  body.duo .b-cifra .e { font-size: 12px; letter-spacing: .04em; }
+
+  /* --- Avisos ---------------------------------------------------------------- */
+  body.duo .aviso,
+  body.duo .b-aviso { border-width: 2px; border-radius: 14px; font-weight: 700; }
+
+  /* --- Menú lateral ---------------------------------------------------------- */
+  body.duo .menu-enlace { border: 2px solid transparent; border-radius: 14px; font-weight: 800; color: #475569; }
+  body.duo .menu-enlace:hover { background: #F4F7FB; color: var(--duo-marino); }
+  body.duo .menu-enlace.menu-activo { background: var(--duo-celeste-bg); border-color: #9FCDEC; color: var(--duo-marino); }
+  body.duo .menu-enlace.menu-activo svg { color: var(--duo-celeste-2); }
+}

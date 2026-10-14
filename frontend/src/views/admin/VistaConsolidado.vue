@@ -191,7 +191,7 @@ const documentosBodega = computed(() => {
 });
 
 const OTROS = [
-  { texto: 'Tarjeta de control', donde: 'Existencias de cada insumo', a: '/inventario' },
+  { texto: 'Tarjeta de control', donde: 'Existencias de cada insumo', a: '/inventario/productos' },
   { texto: 'Requisiciones', donde: 'Requisiciones', a: '/inventario/requisiciones' },
   { texto: 'Oficios de baja', donde: 'Bajas y retiros', a: '/inventario/bajas' },
   { texto: 'Ficha, resumen y referencia', donde: 'Expediente de cada paciente', a: '/pacientes' },
@@ -436,4 +436,6 @@ ul + .grupo { border-top: 2px solid #EEF2F6; }
   .otros { grid-template-columns: 1fr; }
   .otro { border-right: none; border-top: 2px solid #EEF2F6; }
 }
+/* --- Relieve (estilo duo) --- */
+.selector-mes { border-color: #E2E8F0; border-bottom-width: 4px; border-radius: 14px; }
 </style>

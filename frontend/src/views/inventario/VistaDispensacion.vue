@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { RouterLink } from 'vue-router';
 import servicio from '../../services/inventario';
 import { nuevaClaveIdempotencia } from '../../services/almacenLocal';
@@ -9,19 +9,18 @@ import FirmaEntrega from '../../components/farmacia/FirmaEntrega.vue';
 /**
  * Farmacia (post-consulta): entrega a cada paciente lo que recetó el médico.
  *
- * Se elige al paciente y el sistema arma la hoja de entrega con todo lo que
- * se copia al formato en papel: datos del paciente, médico, diagnóstico y,
- * por medicamento, la cantidad, el lote que vence primero y su vencimiento,
- * tomados de la existencia de la farmacia. Copiado el formato, se termina la
- * dispensación y queda registrada lote por lote para la trazabilidad.
- *
- * La firma o huella digital de quien recibe queda lista para cuando el
- * centro tenga el equipo: se enciende en la configuración (constanciaDigital).
- * Mientras tanto se firma el formato en papel.
+ * A la izquierda, quién espera y lo ya atendido (con buscador de recetas).
+ * A la derecha, la hoja de entrega: un medicamento por tarjeta, con el lote
+ * que vence primero. Al entregar queda registrado a quién se le dio qué y de
+ * qué lote, y se imprime la receta para que el paciente sepa cómo tomarlo.
  */
 const cola = ref([]);
+const atendidas = ref([]);
+const lista = ref('esperan');
+const buscar = ref('');
 const elegida = ref(null);
 const hoja = ref(null);
+const soloVer = ref(false);
 const cantidades = reactive({});
 const terminada = ref(null);
 const cargando = ref(false);
@@ -30,8 +29,6 @@ const error = ref('');
 const constanciaDigital = ref(false);
 const porFirmar = ref([]);
 const firmando = ref(null);
-// La hoja de una entrega ya hecha: la misma, sin nada que editar.
-const soloVer = ref(false);
 const periodo = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 7);
 let clave = null;
 
@@ -46,14 +43,28 @@ async function cargarCola() {
   }
 }
 
-async function abrir(a) {
+async function cargarAtendidas() {
+  try {
+    atendidas.value = (await servicio.entregas(buscar.value.trim() ? { buscar: buscar.value.trim() } : {})).entregas;
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
+
+let espera;
+watch(buscar, () => {
+  clearTimeout(espera);
+  espera = setTimeout(() => { lista.value = 'atendidas'; cargarAtendidas(); }, 300);
+});
+
+async function abrir(atencionId, verSolo = false) {
   error.value = '';
   terminada.value = null;
-  soloVer.value = false;
-  elegida.value = a.atencionId;
+  elegida.value = atencionId;
+  soloVer.value = verSolo;
   cargando.value = true;
   try {
-    hoja.value = await servicio.hojaDeEntrega(a.atencionId);
+    hoja.value = await servicio.hojaDeEntrega(atencionId);
     for (const k of Object.keys(cantidades)) delete cantidades[k];
     for (const r of hoja.value.renglones) cantidades[r.prescripcionId] = String(r.aEntregar);
     // Una clave por entrega: si se reintenta, no se registra dos veces.
@@ -82,21 +93,25 @@ function lotesPara(r) {
 }
 
 const porEntregar = computed(() => (hoja.value?.renglones ?? []).filter((r) => r.pendiente > 0));
-const algoQueEntregar = computed(() => porEntregar.value.some((r) => entero(cantidades[r.prescripcionId]) > 0));
+// Se puede terminar si algo sale, o si hay que dejar constancia de lo que no había.
+const algoQueEntregar = computed(() => porEntregar.value.some((r) => entero(cantidades[r.prescripcionId]) > 0 || r.aEntregar === 0));
+
+/** No se entrega más de lo que hay: el campo no pasa de lo disponible. */
+function limitar(r) {
+  const n = entero(cantidades[r.prescripcionId]);
+  if (n > r.aEntregar) cantidades[r.prescripcionId] = String(r.aEntregar);
+}
 
 /**
- * Lo que se pide al registrar. Si farmacia no alcanza y no se cambio la
+ * Lo que se pide al registrar. Si farmacia no alcanza y no se cambió la
  * cantidad, se pide lo recetado: se entrega lo que hay y lo que falta queda
- * como demanda no atendida, en vez de dejar al paciente pendiente para siempre.
+ * como "no había", en vez de dejar al paciente pendiente para siempre.
  */
 function aSolicitar(r) {
   const escrito = entero(cantidades[r.prescripcionId]);
   return r.noAlcanza > 0 && escrito === r.aEntregar ? r.pendiente : escrito;
 }
-
-function excede(r) {
-  return entero(cantidades[r.prescripcionId]) > r.pendiente;
-}
+const excede = (r) => entero(cantidades[r.prescripcionId]) > r.aEntregar;
 
 async function terminar() {
   error.value = '';
@@ -109,10 +124,11 @@ async function terminar() {
     const r = await servicio.dispensarAtencion(hoja.value.atencionId, {
       renglones: porEntregar.value.map((x) => ({ prescripcionId: x.prescripcionId, cantidad: aSolicitar(x) })),
     }, clave);
-    terminada.value = { atencionId: hoja.value.atencionId, paciente: hoja.value.paciente, renglones: r.renglones };
+    const faltaron = r.renglones.some((x) => x.noEntregado > 0);
+    terminada.value = { atencionId: hoja.value.atencionId, paciente: hoja.value.paciente, renglones: r.renglones, faltaron };
     hoja.value = null;
     elegida.value = null;
-    await cargarCola();
+    await Promise.all([cargarCola(), cargarAtendidas()]);
   } catch (fallo) {
     error.value = fallo.message;
   } finally {
@@ -120,17 +136,9 @@ async function terminar() {
   }
 }
 
-async function verEntrega() {
-  error.value = '';
-  cargando.value = true;
-  try {
-    hoja.value = await servicio.hojaDeEntrega(terminada.value.atencionId);
-    soloVer.value = true;
-  } catch (fallo) {
-    error.value = fallo.message;
-  } finally {
-    cargando.value = false;
-  }
+function siguiente() {
+  terminada.value = null;
+  if (cola.value.length) abrir(cola.value[0].atencionId);
 }
 
 function cerrarHoja() {
@@ -139,9 +147,7 @@ function cerrarHoja() {
   soloVer.value = false;
 }
 
-// Quién entregó y cuándo, de la última entrega registrada.
-const ultimaEntrega = computed(() => (hoja.value?.renglones ?? []).flatMap((r) => r.entregas ?? [])
-  .sort((a, b) => new Date(b.registradaEn) - new Date(a.registradaEn))[0] ?? null);
+const imprimirReceta = (atencionId) => window.open(`/imprimir/receta/${atencionId}`, '_blank');
 
 function edad(e) {
   if (!e) return '';
@@ -149,180 +155,223 @@ function edad(e) {
   if (e.meses > 0) return `${e.meses} ${e.meses === 1 ? 'mes' : 'meses'}`;
   return `${e.dias} ${e.dias === 1 ? 'día' : 'días'}`;
 }
-
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
-const hora = (v) => (v ? new Date(v).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '');
+const venceCorto = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { month: '2-digit', year: '2-digit', timeZone: 'UTC' }) : '');
+const hora = (v) => (v ? new Date(v).toLocaleTimeString('es-GT', { hour: 'numeric', minute: '2-digit' }).replace(/\s?a\.\s?m\./, ' am').replace(/\s?p\.\s?m\./, ' pm') : '');
+const inicial = (n) => (n ?? '?').trim().charAt(0).toUpperCase();
 
-const imprimir = () => window.print();
+const ESTADO = {
+  entregada: { texto: 'Entregada', clase: 'verde', icono: 'correcto' },
+  incompleta: { texto: 'Incompleta', clase: 'ambar', icono: 'alerta' },
+  no_habia: { texto: 'No había', clase: 'rojo', icono: 'alerta' },
+  no_recogida: { texto: 'No la recogió', clase: 'gris', icono: 'ausente' },
+  por_entregar: { texto: 'Por entregar', clase: 'azul', icono: 'reloj' },
+};
 
 async function constanciaGuardada() {
   firmando.value = null;
   await cargarCola();
 }
 
-onMounted(cargarCola);
+onMounted(() => { cargarCola(); cargarAtendidas(); });
 </script>
 
 <template>
-  <section>
+  <section class="dispensa">
     <header class="b-cabecera no-imprimir">
-      <div class="flex items-baseline gap-4">
-        <h1 class="b-titulo">Dispensación</h1>
-        <span class="b-antetitulo">Farmacia</span>
+      <div>
+        <p class="b-antetitulo">Farmacia</p>
+        <h1 class="b-titulo">Entregar medicamentos</h1>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <RouterLink to="/dispensacion/control" class="b-btn secundario"><Icono nombre="inventario" :tamano="20" /> Control de farmacia</RouterLink>
+      <div class="b-acciones">
+        <RouterLink to="/dispensacion/control" class="b-btn secundario"><Icono nombre="inventario" :tamano="20" /> Estante de farmacia</RouterLink>
         <RouterLink :to="`/imprimir/sigsa4/${periodo}`" target="_blank" class="b-btn secundario"><Icono nombre="imprimir" :tamano="20" /> SIGSA-4 del mes</RouterLink>
       </div>
     </header>
 
-    <p v-if="error" role="alert" class="b-aviso error mt-4 no-imprimir">{{ error }}</p>
+    <p v-if="error" role="alert" class="b-aviso error mt-4 no-imprimir"><Icono nombre="alerta" :tamano="20" /> {{ error }}</p>
 
     <div class="columnas mt-5">
-      <!-- Quiénes esperan -->
-      <aside class="min-w-0 no-imprimir">
-        <h2 class="grupo">Esperan su entrega <span>{{ cola.length }}</span></h2>
-        <div v-if="!cola.length" class="b-panel b-vacio">Nadie espera medicamentos.</div>
-        <ul v-else class="b-panel cola">
-          <li v-for="a in cola" :key="a.atencionId">
-            <button type="button" class="persona" :class="elegida === a.atencionId ? 'activa' : ''" @click="abrir(a)">
-              <span class="min-w-0 flex-1">
-                <b class="block truncate">{{ a.paciente.nombreCompleto }}</b>
-                <small>Exp. {{ a.paciente.expedientePapel || a.paciente.expediente }}<template v-if="a.medico"> · {{ a.medico }}</template> · {{ hora(a.registradaEn) }}</small>
-                <small class="truncate">{{ a.medicamentos.join(', ') }}</small>
-              </span>
-              <span class="b-contador gris">{{ a.medicamentos.length }}</span>
-            </button>
-          </li>
-        </ul>
+      <!-- ============ Izquierda: quién espera y lo ya atendido ============ -->
+      <aside class="lado no-imprimir">
+        <div class="pestanas" role="tablist">
+          <button type="button" role="tab" :aria-selected="lista === 'esperan'" :class="{ on: lista === 'esperan' }" @click="lista = 'esperan'">
+            Esperan <span class="cuenta">{{ cola.length }}</span>
+          </button>
+          <button type="button" role="tab" :aria-selected="lista === 'atendidas'" :class="{ on: lista === 'atendidas' }" @click="lista = 'atendidas'; cargarAtendidas()">
+            {{ buscar.trim() ? 'Recetas' : 'Atendidas hoy' }} <span class="cuenta">{{ atendidas.length }}</span>
+          </button>
+        </div>
 
-        <template v-if="constanciaDigital">
+        <label class="buscar">
+          <Icono nombre="buscar" :tamano="18" />
+          <input v-model="buscar" placeholder="Buscar receta por paciente" aria-label="Buscar receta por paciente" />
+        </label>
+
+        <!-- Esperan su entrega -->
+        <template v-if="lista === 'esperan'">
+          <div v-if="!cola.length" class="vacio">
+            <Icono nombre="correcto" :tamano="34" />
+            <b>Nadie espera</b>
+          </div>
+          <ul v-else class="personas">
+            <li v-for="a in cola" :key="a.atencionId">
+              <button type="button" class="persona" :class="{ activa: elegida === a.atencionId && !soloVer }" @click="abrir(a.atencionId)">
+                <span class="avatar">{{ inicial(a.paciente.apellidos) }}</span>
+                <span class="min-w-0 flex-1">
+                  <b class="nombre">{{ a.paciente.nombreCompleto }}</b>
+                  <small>{{ a.paciente.expedientePapel || a.paciente.expediente }} · {{ hora(a.registradaEn) }}</small>
+                </span>
+                <span class="meds" :title="a.medicamentos.join(', ')"><Icono nombre="dispensacion" :tamano="15" /> {{ a.medicamentos.length }}</span>
+              </button>
+            </li>
+          </ul>
+        </template>
+
+        <!-- Atendidas: con su estado y lo que se les dio -->
+        <template v-else>
+          <div v-if="!atendidas.length" class="vacio">
+            <Icono nombre="dispensacion" :tamano="34" />
+            <b>{{ buscar.trim() ? 'Sin recetas de ese paciente' : 'Todavía nada hoy' }}</b>
+          </div>
+          <ul v-else class="personas">
+            <li v-for="a in atendidas" :key="a.atencionId">
+              <button type="button" class="persona" :class="{ activa: elegida === a.atencionId && soloVer }" @click="abrir(a.atencionId, a.estado !== 'por_entregar')">
+                <span class="avatar" :class="ESTADO[a.estado].clase"><Icono :nombre="ESTADO[a.estado].icono" :tamano="18" /></span>
+                <span class="min-w-0 flex-1">
+                  <b class="nombre">{{ a.paciente.nombreCompleto }}</b>
+                  <small>{{ fecha(a.entregadaEn ?? a.registradaEn) }}<template v-if="a.entregadaEn"> · {{ hora(a.entregadaEn) }}</template></small>
+                </span>
+                <span class="estado" :class="ESTADO[a.estado].clase">{{ ESTADO[a.estado].texto }}</span>
+              </button>
+            </li>
+          </ul>
+        </template>
+
+        <template v-if="constanciaDigital && porFirmar.length">
           <h2 class="grupo mt-6">Por firmar <span>{{ porFirmar.length }}</span></h2>
-          <ul v-if="porFirmar.length" class="b-panel cola">
+          <ul class="personas">
             <li v-for="a in porFirmar" :key="a.atencionId" class="firmar">
-              <span class="min-w-0 flex-1"><b class="block truncate">{{ a.paciente.apellidos }}, {{ a.paciente.nombres }}</b></span>
+              <span class="min-w-0 flex-1"><b class="nombre">{{ a.paciente.apellidos }}, {{ a.paciente.nombres }}</b></span>
               <button type="button" class="b-btn primario chico" @click="firmando = a"><Icono nombre="lapiz" :tamano="16" /> Recibí conforme</button>
             </li>
           </ul>
         </template>
       </aside>
 
-      <!-- Hoja de entrega -->
+      <!-- ============ Derecha: la hoja ============ -->
       <div class="min-w-0">
-        <div v-if="terminada && !soloVer" class="b-panel terminada no-imprimir" aria-live="polite">
-          <header class="b-panel-cabeza">
+        <!-- Recién entregado -->
+        <div v-if="terminada" class="listo no-imprimir" :class="{ ambar: terminada.faltaron }" aria-live="polite">
+          <div class="listo-cabeza">
+            <span class="sello"><Icono :nombre="terminada.faltaron ? 'alerta' : 'correcto'" :tamano="34" /></span>
             <div class="min-w-0">
-              <h2 class="b-panel-titulo flex items-center gap-2"><Icono nombre="correcto" :tamano="22" class="text-mejora" /> Entrega registrada</h2>
-              <p class="truncate text-sm text-apagado">{{ terminada.paciente.nombreCompleto }}</p>
+              <p class="listo-titulo">{{ terminada.faltaron ? 'Entregado, pero faltó algo' : '¡Entregado!' }}</p>
+              <p class="listo-quien">{{ terminada.paciente.nombreCompleto }}</p>
             </div>
-            <button type="button" class="b-btn secundario chico" @click="verEntrega"><Icono nombre="ojo" :tamano="16" /> Ver hoja</button>
-          </header>
-          <ul class="b-panel-cuerpo space-y-1.5">
-            <li v-for="r in terminada.renglones" :key="r.prescripcionId">
-              <b>{{ r.medicamento }}</b>: {{ r.entregado }} entregado<template v-if="r.lotes.length"> (lote {{ r.lotes.map((l) => `${l.numeroLote} x${l.cantidad}`).join(', ') }})</template>
-              <span v-if="r.noEntregado" class="text-advertencia"> · {{ r.noEntregado }} no entregado por falta de existencia</span>
+          </div>
+          <ul class="listo-lista">
+            <li v-for="r in terminada.renglones" :key="r.prescripcionId" :class="{ falta: r.noEntregado }">
+              <span class="min-w-0 flex-1"><b>{{ r.medicamento }}</b></span>
+              <span v-if="r.entregado" class="dato">{{ r.entregado }} · lote {{ r.lotes.map((l) => l.numeroLote).join(', ') }}</span>
+              <span v-if="r.noEntregado" class="dato rojo">No había {{ r.noEntregado }}</span>
             </li>
           </ul>
+          <div class="listo-botones">
+            <button type="button" class="b-btn primario grande" @click="imprimirReceta(terminada.atencionId)"><Icono nombre="imprimir" :tamano="22" /> Imprimir receta</button>
+            <button type="button" class="b-btn secundario grande" :disabled="!cola.length" @click="siguiente">
+              <Icono nombre="irA" :tamano="22" /> {{ cola.length ? `Siguiente: ${cola[0].paciente.nombres.split(' ')[0]}` : 'Nadie más espera' }}
+            </button>
+          </div>
         </div>
 
-        <div v-if="cargando" class="b-panel b-vacio">Preparando la hoja…</div>
-        <div v-else-if="!hoja && !terminada" class="b-panel b-vacio">Elija a quién entregar.</div>
+        <div v-else-if="cargando" class="espera"><b>Abriendo la receta…</b></div>
+        <div v-else-if="!hoja" class="espera">
+          <span class="espera-ic"><Icono nombre="dispensacion" :tamano="40" /></span>
+          <b>Elija a quién entregar</b>
+          <button v-if="cola.length" type="button" class="b-btn primario grande" @click="abrir(cola[0].atencionId)">
+            <Icono nombre="irA" :tamano="22" /> Empezar con {{ cola[0].paciente.nombres.split(' ')[0] }}
+          </button>
+        </div>
 
-        <article v-if="hoja" class="b-panel hoja">
-          <header class="b-panel-cabeza">
-            <div class="flex flex-wrap items-center gap-3">
-              <h2 class="b-panel-titulo">Hoja de entrega</h2>
-              <span v-if="soloVer" class="sello-entregada"><Icono nombre="correcto" :tamano="15" /> Entregada</span>
+        <!-- La hoja de entrega -->
+        <article v-if="hoja" class="hoja">
+          <header class="hoja-cabeza">
+            <span class="avatar grande">{{ inicial(hoja.paciente.nombreCompleto) }}</span>
+            <div class="min-w-0 flex-1">
+              <p class="paciente">{{ hoja.paciente.nombreCompleto }}</p>
+              <p class="datos">
+                {{ edad(hoja.paciente.edad) }} · {{ hoja.paciente.sexo === 'F' ? 'Mujer' : 'Hombre' }} · Exp. {{ hoja.paciente.expedientePapel || hoja.paciente.expediente }}
+                <template v-if="hoja.paciente.cui"> · CUI {{ hoja.paciente.cui }}</template>
+              </p>
+              <p class="datos">{{ fecha(hoja.fecha) }} · {{ hoja.medico?.nombre ?? 'Sin médico' }}<template v-if="hoja.diagnosticos.length"> · {{ hoja.diagnosticos.map((d) => d.descripcion).join(', ') }}</template></p>
             </div>
-            <div class="flex gap-2 no-imprimir">
-              <button type="button" class="b-btn secundario chico" @click="imprimir"><Icono nombre="imprimir" :tamano="16" /> Imprimir</button>
-              <button v-if="soloVer" type="button" class="b-btn primario chico" @click="cerrarHoja"><Icono nombre="cerrar" :tamano="16" /> Cerrar</button>
-            </div>
+            <span v-if="soloVer" class="sello-ver"><Icono nombre="correcto" :tamano="16" /> Atendida</span>
           </header>
 
-          <dl class="datos">
-            <div class="ancho"><dt>Paciente</dt><dd>{{ hoja.paciente.nombreCompleto }}</dd></div>
-            <div><dt>Fecha de consulta</dt><dd>{{ fecha(hoja.fecha) }}</dd></div>
-            <div><dt>CUI</dt><dd class="tabular-nums">{{ hoja.paciente.cui || '—' }}</dd></div>
-            <div><dt>Expediente</dt><dd>{{ hoja.paciente.expedientePapel || hoja.paciente.expediente }}</dd></div>
-            <div><dt>Edad y sexo</dt><dd>{{ edad(hoja.paciente.edad) }} · {{ hoja.paciente.sexo === 'F' ? 'Mujer' : 'Hombre' }}</dd></div>
-            <div><dt>Médico</dt><dd>{{ hoja.medico?.nombre ?? '—' }}</dd></div>
-            <div v-if="soloVer && ultimaEntrega"><dt>Entregó</dt><dd>{{ ultimaEntrega.usuario }} · {{ fecha(ultimaEntrega.registradaEn) }} {{ hora(ultimaEntrega.registradaEn) }}</dd></div>
-            <div class="ancho"><dt>Diagnóstico</dt><dd>{{ hoja.diagnosticos.map((d) => `${d.descripcion}${d.cie ? ` (${d.cie})` : ''}`).join(' · ') || '—' }}</dd></div>
-          </dl>
-
-          <div class="b-tabla-marco mx-5 mb-4">
-            <table class="b-tabla">
-              <thead>
-                <tr>
-                  <th>Medicamento e indicaciones</th>
-                  <th class="text-right">Recetado</th>
-                  <th class="text-right">{{ soloVer ? 'Entregado' : 'Entregar' }}</th>
-                  <th>Lote</th>
-                  <th>Vence</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="r in hoja.renglones" :key="r.prescripcionId" :class="r.pendiente || soloVer ? '' : 'hecho'">
-                  <td>
-                    <b>{{ r.medicamento }}</b>
-                    <small v-if="r.indicaciones" class="nota">{{ r.indicaciones }}</small>
-                    <small v-if="!r.pendiente && !soloVer" class="nota">Ya entregado</small>
-                    <small v-else-if="soloVer && r.pendiente" class="nota alerta">Faltaron {{ r.pendiente }}</small>
-                    <small v-else-if="r.noAlcanza" class="nota alerta">
-                      En farmacia hay {{ r.enFarmacia }}: faltan {{ r.noAlcanza }}<template v-if="r.enBodega"> (en bodega hay {{ r.enBodega }})</template>
-                    </small>
-                  </td>
-                  <td class="text-right">{{ r.recetado }}</td>
-                  <td class="text-right">
-                    <b v-if="soloVer">{{ r.yaEntregado }}</b>
-                    <template v-else-if="r.pendiente">
-                      <input
-                        v-model="cantidades[r.prescripcionId]"
-                        inputmode="numeric"
-                        :aria-label="`Cantidad de ${r.medicamento}`"
-                        class="b-campo num cantidad no-imprimir"
-                        :aria-invalid="excede(r)"
-                      />
-                      <span class="solo-imprimir">{{ entero(cantidades[r.prescripcionId]) }}</span>
-                    </template>
-                    <template v-else>{{ r.yaEntregado }}</template>
-                  </td>
-                  <template v-if="soloVer">
-                    <td>
-                      <span v-for="(l, k) in r.entregas" :key="k" class="block tabular-nums">{{ l.numeroLote }}<template v-if="r.entregas.length > 1"> ({{ l.cantidad }})</template></span>
-                      <span v-if="!r.entregas?.length" class="text-apagado">—</span>
-                    </td>
-                    <td>
-                      <span v-for="(l, k) in r.entregas" :key="k" class="block tabular-nums">{{ fecha(l.fechaVence) }}</span>
-                    </td>
+          <ul class="meds-lista">
+            <li v-for="r in hoja.renglones" :key="r.prescripcionId" class="med" :class="{ hecho: !r.pendiente && !soloVer, falta: !soloVer && r.pendiente && r.noAlcanza }">
+              <div class="med-info">
+                <p class="med-nombre">{{ r.medicamento }}</p>
+                <p v-if="r.indicaciones" class="med-indic"><Icono nombre="reloj" :tamano="15" /> {{ r.indicaciones }}</p>
+                <!-- Lo que sale (o salió) y de qué lote -->
+                <div class="med-lotes">
+                  <template v-if="soloVer || !r.pendiente">
+                    <span v-for="(l, k) in r.entregas" :key="k" class="lote-chip"><b>{{ l.numeroLote }}</b> vence {{ venceCorto(l.fechaVence) }}<template v-if="r.entregas.length > 1"> · {{ l.cantidad }}</template></span>
+                    <span v-if="r.noHabia" class="lote-chip rojo">No había {{ r.noHabia }}</span>
                   </template>
                   <template v-else>
-                    <td>
-                      <span v-for="l in lotesPara(r)" :key="l.loteId" class="block tabular-nums">{{ l.numeroLote }}<template v-if="lotesPara(r).length > 1"> ({{ l.cantidad }})</template></span>
-                      <span v-if="r.pendiente && !lotesPara(r).length" class="text-apagado">—</span>
-                    </td>
-                    <td>
-                      <span v-for="l in lotesPara(r)" :key="l.loteId" class="block tabular-nums">{{ fecha(l.fechaVence) }}</span>
-                    </td>
+                    <span v-for="l in lotesPara(r)" :key="l.loteId" class="lote-chip"><b>{{ l.numeroLote }}</b> vence {{ venceCorto(l.fechaVence) }}<template v-if="lotesPara(r).length > 1"> · {{ l.cantidad }}</template></span>
+                    <span v-if="r.noAlcanza" class="lote-chip rojo">
+                      No había {{ r.noAlcanza }}<template v-if="r.enBodega"> · en bodega hay {{ r.enBodega }}</template>
+                    </span>
                   </template>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                </div>
+              </div>
+              <div class="med-cant">
+                <span class="etq">Recetado</span>
+                <b class="recetado">{{ r.recetado }}</b>
+              </div>
+              <div class="med-cant">
+                <span class="etq">{{ soloVer || !r.pendiente ? 'Entregado' : 'Entregar' }}</span>
+                <template v-if="!soloVer && r.pendiente">
+                  <!-- Sin existencia no hay nada que escribir: queda como "no había". -->
+                  <span v-if="r.aEntregar === 0" class="no-hay">No hay</span>
+                  <template v-else>
+                    <input
+                      v-model="cantidades[r.prescripcionId]"
+                      inputmode="numeric"
+                      class="cant-campo"
+                      :class="{ mal: excede(r) }"
+                      :aria-label="`Cantidad de ${r.medicamento}`"
+                      @input="limitar(r)"
+                    />
+                    <small v-if="r.noAlcanza" class="hay">hay {{ r.aEntregar }}</small>
+                  </template>
+                </template>
+                <b v-else class="entregado" :class="{ rojo: r.entregado < r.recetado }">{{ r.entregado }}</b>
+              </div>
+            </li>
+          </ul>
 
-          <div v-if="hoja.recetasExternas.length" class="mx-5 mb-4 rounded-control border border-dashed border-linea p-3">
-            <p class="text-sm font-bold text-tinta">Para conseguir fuera del centro</p>
-            <ul class="mt-1 text-sm">
-              <li v-for="(x, i) in hoja.recetasExternas" :key="i">{{ x.medicamento }}<template v-if="x.cantidad"> · {{ x.cantidad }}</template><template v-if="x.indicaciones"> · {{ x.indicaciones }}</template></li>
+          <div v-if="hoja.recetasExternas.length" class="fuera">
+            <p class="fuera-titulo"><Icono nombre="informacion" :tamano="18" /> Para comprar fuera del centro</p>
+            <ul>
+              <li v-for="(x, i) in hoja.recetasExternas" :key="i"><b>{{ x.medicamento }}</b><template v-if="x.cantidad"> · {{ x.cantidad }}</template><template v-if="x.indicaciones"> · {{ x.indicaciones }}</template></li>
             </ul>
           </div>
 
-          <footer v-if="!soloVer" class="pie no-imprimir">
-            <button type="button" class="b-btn secundario" @click="hoja = null; elegida = null">Cancelar</button>
-            <button type="button" class="b-btn primario" :disabled="enviando || !algoQueEntregar" @click="terminar">
-              <Icono nombre="dispensacion" :tamano="20" /> {{ enviando ? 'Registrando…' : 'Terminar dispensación' }}
-            </button>
+          <footer class="hoja-pie no-imprimir">
+            <template v-if="soloVer">
+              <button type="button" class="b-btn secundario grande" @click="cerrarHoja"><Icono nombre="cerrar" :tamano="22" /> Cerrar</button>
+              <button type="button" class="b-btn primario grande" @click="imprimirReceta(hoja.atencionId)"><Icono nombre="imprimir" :tamano="22" /> Imprimir receta</button>
+            </template>
+            <template v-else>
+              <button type="button" class="b-btn secundario grande" @click="cerrarHoja">Cancelar</button>
+              <button type="button" class="b-btn exito grande" :disabled="enviando || !algoQueEntregar" @click="terminar">
+                <Icono nombre="correcto" :tamano="24" /> {{ enviando ? 'Registrando…' : 'Entregar' }}
+              </button>
+            </template>
           </footer>
         </article>
       </div>
@@ -333,34 +382,100 @@ onMounted(cargarCola);
 </template>
 
 <style scoped>
-.columnas { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+.columnas { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (max-width: 1099px) { .columnas { grid-template-columns: 1fr; } }
-.grupo { margin-bottom: 8px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #64748B; }
-.grupo span { margin-left: 4px; color: #14244A; }
-.cola { overflow: hidden; }
-.cola li + li { border-top: 1px solid #EEF2F6; }
-.persona { display: flex; width: 100%; align-items: center; gap: 10px; padding: 12px 16px; text-align: left; }
-.persona:hover { background: #F8FAFC; }
-.persona.activa { background: #EEF3FB; box-shadow: inset 4px 0 0 #172A5A; }
-.persona b { color: #14244A; }
-.persona small { display: block; font-size: 13px; color: #64748B; }
-.firmar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
-.terminada { margin-bottom: 16px; border-color: #BFE6D2; }
-.sello-entregada { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border: 2px solid #1E8E5E; border-radius: 8px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #145C3C; background: #EAF7F0; }
-.datos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 20px; padding: 16px 20px; }
-.datos .ancho { grid-column: span 3; }
-@media (max-width: 700px) { .datos { grid-template-columns: 1fr; } .datos .ancho { grid-column: span 1; } }
-.datos dt { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
-.datos dd { font-size: 16px; font-weight: 600; color: #14244A; }
-.cantidad { width: 80px; height: 36px; margin-left: auto; }
-.nota { display: block; font-size: 12px; color: #64748B; }
-.nota.alerta { color: #8A5A06; }
-.hecho td { color: #94A3B8; }
-.pie { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 2px solid #EEF2F6; }
-.solo-imprimir { display: none; }
-@media print {
-  .no-imprimir { display: none !important; }
-  .solo-imprimir { display: inline; }
-  .columnas { display: block; }
-}
+.lado { position: sticky; top: 88px; display: grid; gap: 10px; }
+
+/* Pestañas grandes con relieve */
+.pestanas { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 5px; background: #fff; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 18px; }
+.pestanas button { display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 13px; font-weight: 800; font-size: 15px; color: #475569; }
+.pestanas button.on { background: #EAF3FB; color: #172A5A; box-shadow: inset 0 0 0 2px #4A9BD6; }
+.cuenta { min-width: 26px; padding: 1px 8px; border-radius: 9px; background: #E2E8F0; color: #14244A; font-size: 13px; }
+.on .cuenta { background: #172A5A; color: #fff; }
+
+.buscar { position: relative; display: block; }
+.buscar svg { position: absolute; left: 14px; top: 50%; margin-top: -9px; color: #64748B; }
+.buscar input { width: 100%; height: 48px; padding: 0 14px 0 42px; border: 2px solid #E2E8F0; border-radius: 14px; background: #F8FAFC; font-weight: 600; font-size: 15px; color: #14244A; }
+.buscar input:focus { outline: none; background: #fff; border-color: #4A9BD6; box-shadow: 0 0 0 4px rgba(74, 155, 214, .15); }
+
+.personas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: calc(100vh - 330px); overflow-x: hidden; overflow-y: auto; padding: 2px 2px 6px; }
+.personas > li { min-width: 0; }
+.persona { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 16px; background: #fff; text-align: left; transition: transform .06s, border-color .12s; }
+.persona:hover { border-color: #9FCDEC; }
+.persona:active { transform: translateY(2px); border-bottom-width: 2px; }
+.persona.activa { border-color: #4A9BD6; border-bottom-color: #2F83C4; background: #EAF3FB; }
+.persona .nombre { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 800; color: #14244A; }
+.persona small { display: block; font-size: 13px; font-weight: 600; color: #64748B; }
+.avatar { display: grid; place-items: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 13px; background: #172A5A; color: #fff; font-weight: 900; font-size: 17px; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .25); }
+.avatar.grande { width: 58px; height: 58px; border-radius: 17px; font-size: 24px; }
+.avatar.verde { background: #1A8F57; } .avatar.ambar { background: #E8930C; } .avatar.rojo { background: #C03535; } .avatar.gris { background: #94A3B8; } .avatar.azul { background: #2F83C4; }
+.meds { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; padding: 4px 9px; border-radius: 10px; background: #F1F5F9; font-weight: 800; font-size: 14px; color: #334155; }
+.estado { flex-shrink: 0; padding: 3px 9px; border-radius: 9px; font-size: 12px; font-weight: 800; }
+.estado.verde { background: #E2F5EA; color: #145C3C; } .estado.ambar { background: #FFF4D6; color: #8A5A06; } .estado.rojo { background: #FDECEC; color: #A52A2A; } .estado.gris { background: #EEF2F6; color: #475569; } .estado.azul { background: #EAF3FB; color: #1F5F99; }
+.vacio { display: grid; justify-items: center; gap: 8px; padding: 34px 16px; border: 2px dashed #CBD5E1; border-radius: 18px; color: #94A3B8; }
+.vacio b { color: #64748B; }
+.grupo { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748B; }
+.firmar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 2px solid #E2E8F0; border-radius: 14px; background: #fff; }
+
+/* Botones grandes */
+.b-btn.grande { height: 58px; padding: 0 26px; border-radius: 16px; font-size: 17px; }
+
+/* Espera */
+.espera { display: grid; justify-items: center; gap: 14px; padding: 60px 20px; background: #fff; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 22px; color: #64748B; }
+.espera b { font-size: 18px; color: #334155; }
+.espera-ic { display: grid; place-items: center; width: 84px; height: 84px; border-radius: 26px; background: #EAF3FB; color: #2F83C4; box-shadow: inset 0 -5px 0 #CFE3F5; }
+
+/* Recién entregado */
+.listo { padding: 22px; background: #fff; border: 2px solid #8FD3AD; border-bottom: 6px solid #47B47D; border-radius: 22px; }
+.listo.ambar { border-color: #F5D58A; border-bottom-color: #E8930C; }
+.listo-cabeza { display: flex; align-items: center; gap: 16px; }
+.sello { display: grid; place-items: center; flex-shrink: 0; width: 70px; height: 70px; border-radius: 22px; background: #1A8F57; color: #fff; box-shadow: inset 0 -5px 0 #0D5634; }
+.ambar .sello { background: #E8930C; box-shadow: inset 0 -5px 0 #A35D00; }
+.listo-titulo { font-size: 26px; font-weight: 900; color: #145C3C; }
+.ambar .listo-titulo { color: #8A5A06; }
+.listo-quien { font-size: 16px; font-weight: 700; color: #334155; }
+.listo-lista { display: grid; gap: 6px; margin: 18px 0; }
+.listo-lista li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border-radius: 12px; background: #F4FBF7; font-size: 15px; color: #1E293B; }
+.listo-lista li.falta { background: #FFF7E6; }
+.dato { font-weight: 700; color: #145C3C; font-size: 14px; }
+.dato.rojo { color: #A52A2A; }
+.listo-botones { display: flex; flex-wrap: wrap; gap: 10px; }
+.listo-botones .b-btn { flex: 1 1 240px; }
+
+/* Hoja */
+.hoja { background: #fff; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 22px; overflow: hidden; }
+.hoja-cabeza { display: flex; align-items: center; gap: 16px; padding: 18px 22px; background: #F7F9FD; border-bottom: 2px solid #E2E8F0; }
+.paciente { font-size: 22px; font-weight: 900; color: #14244A; line-height: 1.15; }
+.datos { margin-top: 3px; font-size: 14px; font-weight: 600; color: #64748B; }
+.sello-ver { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; padding: 5px 12px; border: 2px solid #1A8F57; border-bottom-width: 3px; border-radius: 11px; font-size: 13px; font-weight: 800; color: #145C3C; background: #EAF7F0; }
+
+.meds-lista { display: grid; gap: 10px; padding: 18px 22px; }
+.med { display: grid; grid-template-columns: minmax(0, 1fr) 90px 120px; align-items: center; gap: 14px; padding: 14px 16px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-left: 6px solid #4A9BD6; border-radius: 16px; }
+.med.hecho { border-left-color: #1A8F57; background: #FAFDFB; }
+.med.falta { border-left-color: #E8930C; }
+@media (max-width: 700px) { .med { grid-template-columns: 1fr 1fr; } .med-info { grid-column: 1 / -1; } }
+.med-nombre { font-size: 17px; font-weight: 800; color: #14244A; }
+.med-indic { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: 15px; font-weight: 600; color: #334155; }
+.med-indic svg { flex-shrink: 0; margin-top: 3px; color: #2F83C4; }
+.med-lotes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.lote-chip { padding: 3px 10px; border-radius: 9px; background: #EAF7F0; color: #145C3C; font-size: 13px; font-weight: 700; }
+.lote-chip b { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.lote-chip.rojo { background: #FDECEC; color: #A52A2A; }
+.med-cant { display: grid; justify-items: center; gap: 3px; }
+.etq { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748B; }
+.recetado { font-size: 24px; font-weight: 900; color: #64748B; font-variant-numeric: tabular-nums; }
+.entregado { font-size: 28px; font-weight: 900; color: #1A8F57; font-variant-numeric: tabular-nums; }
+.entregado.rojo { color: #C03535; }
+.cant-campo { width: 110px; height: 56px; border: 2px solid #CBD5E1; border-bottom-width: 4px; border-radius: 14px; text-align: center; font-size: 26px; font-weight: 900; color: #14244A; background: #F8FAFC; }
+.cant-campo:focus { outline: none; border-color: #4A9BD6; background: #fff; box-shadow: 0 0 0 4px rgba(74, 155, 214, .15); }
+.cant-campo.mal { border-color: #D64545; background: #FDECEC; }
+.no-hay { display: grid; place-items: center; width: 110px; height: 56px; border: 2px solid #F3BDBD; border-bottom-width: 4px; border-radius: 14px; background: #FDECEC; color: #A52A2A; font-size: 17px; font-weight: 900; }
+.hay { font-size: 12px; font-weight: 800; color: #8A5A06; }
+
+.fuera { margin: 0 22px 18px; padding: 12px 16px; border: 2px dashed #CBD5E1; border-radius: 16px; background: #F8FAFC; }
+.fuera-titulo { display: flex; align-items: center; gap: 6px; font-weight: 800; color: #334155; }
+.fuera ul { margin-top: 6px; display: grid; gap: 4px; font-size: 15px; color: #1E293B; }
+
+.hoja-pie { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding: 16px 22px; border-top: 2px solid #E2E8F0; background: #F7F9FD; }
+.hoja-pie .b-btn.exito { min-width: 220px; }
 </style>

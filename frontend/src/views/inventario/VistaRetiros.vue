@@ -287,4 +287,7 @@ onMounted(cargar);
 .ficha-lote { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 2px solid #CBD5E1; border-radius: 9px; font-size: 13px; font-weight: 600; color: #14244A; background: #fff; }
 .ficha-lote:hover { border-color: #64748B; }
 .ficha-lote.on { border-color: #C03535; background: #FDECEC; color: #8C1D1D; }
+/* --- Relieve (estilo duo) --- */
+.selector-lotes { border-bottom-width: 4px; border-radius: 16px; }
+.ficha-lote { border-bottom-width: 3px; border-radius: 11px; }
 </style>

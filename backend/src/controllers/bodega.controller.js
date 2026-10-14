@@ -77,7 +77,14 @@ async function propuestaLotes(req, res, next) {
   });
   if (!insumo) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Insumo no encontrado' });
   // Se traslada desde la bodega: lo que esta en farmacia no cuenta.
-  res.json(lotesPepe(enUbicacion(insumo.lotes, 'bodega'), cantidad));
+  const enBodega = enUbicacion(insumo.lotes, 'bodega');
+  const ahora = new Date();
+  // Para elegir otro lote: los que se pueden entregar, el próximo a vencer primero.
+  const disponibles = enBodega
+    .filter((l) => l.estado === 'disponible' && l.cantidadActual > 0 && new Date(l.fechaVence) >= ahora)
+    .sort((a, b) => new Date(a.fechaVence) - new Date(b.fechaVence))
+    .map((l) => ({ loteId: l.id, numeroLote: l.numeroLote, fechaVence: l.fechaVence, cantidad: l.cantidadActual }));
+  res.json({ ...lotesPepe(enBodega, cantidad, ahora), disponibles });
 }
 
 /** Propuesta de distribucion de un insumo entre los servicios. */
@@ -402,7 +409,8 @@ async function buscarLotes(req, res) {
       ],
     },
     include: { insumo: { select: { id: true, nombreGenerico: true, categoria: true } }, _count: { select: { movimientos: true } } },
-    orderBy: [{ cantidadActual: 'desc' }, { fechaVence: 'asc' }],
+    // El próximo a vencer primero: es el que se entrega antes.
+    orderBy: [{ fechaVence: 'asc' }, { cantidadActual: 'desc' }],
     take: 30,
   });
   res.json({

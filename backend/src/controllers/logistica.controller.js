@@ -179,6 +179,26 @@ async function trazaLote(req, res, next) {
   res.json(datos);
 }
 
+/**
+ * Pacientes que recibieron algo de farmacia, para buscar su trazabilidad.
+ * Solo los que tienen entregas: bodega no necesita ver el resto del padrón.
+ */
+async function buscarPacientesConEntregas(req, res) {
+  const palabras = (req.query.buscar ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!palabras.length) return res.json({ pacientes: [] });
+  const pacientes = await prisma.paciente.findMany({
+    where: {
+      establecimientoId: req.usuario.establecimientoId,
+      AND: palabras.map((w) => ({ OR: [{ nombres: { contains: w, mode: 'insensitive' } }, { apellidos: { contains: w, mode: 'insensitive' } }, { expediente: { contains: w } }, { expedientePapel: { contains: w, mode: 'insensitive' } }, { cui: { contains: w } }] })),
+      atenciones: { some: { prescripciones: { some: { dispensaciones: { some: { anulada: false } } } } } },
+    },
+    select: { id: true, nombres: true, apellidos: true, expediente: true, expedientePapel: true, comunidad: true },
+    orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
+    take: 15,
+  });
+  res.json({ pacientes: pacientes.map((p) => ({ ...p, nombreCompleto: `${p.apellidos}, ${p.nombres}` })) });
+}
+
 async function trazaPaciente(req, res, next) {
   const datos = await trazabilidad.desdePaciente(req.params.id, req.usuario.establecimientoId);
 
@@ -473,6 +493,7 @@ async function obtenerOficio(req, res, next) {
 }
 
 module.exports = {
+  buscarPacientesConEntregas,
   catalogos,
   obtenerConfiguracion,
   guardarConfiguracion,

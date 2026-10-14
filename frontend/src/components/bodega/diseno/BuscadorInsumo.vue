@@ -79,4 +79,7 @@ function tecla(e) {
 .opcion.on { background: #EEF2FF; }
 .cat-mini { display: grid; place-items: center; flex-shrink: 0; width: 26px; height: 26px; border-radius: 7px; background: var(--cat); color: #fff; }
 .cat-mini svg { width: 16px; height: 16px; }
+/* --- Relieve (estilo duo) --- */
+.lista { border-bottom-width: 4px; border-radius: 16px; }
+.opcion { border-radius: 10px; }
 </style>

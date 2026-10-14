@@ -403,4 +403,9 @@ onMounted(() => {
 .entregas li { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid #EEF2F6; }
 .entregas li:first-child { border-top: none; }
 .entregas small { display: block; font-size: 12px; color: #64748B; }
+/* --- Relieve (estilo duo) --- */
+.ver-hoja { border-bottom-width: 4px; border-radius: 12px; }
+.ver-hoja:active { transform: translateY(2px); border-bottom-width: 2px; }
+.datos { border-bottom-width: 4px; border-radius: 18px; }
+.codigo { border-bottom-width: 4px; border-radius: 14px; }
 </style>

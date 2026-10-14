@@ -61,4 +61,6 @@ const porcentaje = computed(() => (props.avance?.total ? Math.round((props.avanc
 .flecha { flex-shrink: 0; color: #64748B; transition: transform .15s; }
 .abierta .flecha { transform: rotate(90deg); }
 .cuerpo { padding: 18px 20px 20px; border-top: 2px solid #EEF2F6; }
+/* --- Relieve (estilo duo) --- */
+.plegable { border-bottom-width: 4px; border-radius: 18px; }
 </style>

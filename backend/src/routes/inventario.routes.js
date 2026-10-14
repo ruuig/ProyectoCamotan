@@ -88,6 +88,12 @@ router.get(
 // Preconsulta tambien lo necesita: es quien contacta a la gente cuando un
 // lote queda bajo retiro sanitario.
 router.get(
+  '/trazabilidad/pacientes',
+  autorizar('admin', 'farmacia', 'bodega'),
+  validar(z.object({ buscar: z.string().trim().max(80).optional() }), 'query'),
+  asincrono(logistica.buscarPacientesConEntregas),
+);
+router.get(
   '/pacientes/:id/insumos',
   autorizar('admin', 'farmacia', 'bodega', 'medico', 'preconsulta'),
   validar(esquemas.parametroId, 'params'),
@@ -101,6 +107,13 @@ router.get('/dispensaciones/pendientes', dispensa, asincrono(dispensaciones.pend
 // Entrega por paciente: la hoja con lo que se copia al formato en papel y el
 // registro de toda la entrega de una vez.
 router.get('/dispensaciones/por-atender', dispensa, asincrono(dispensaciones.porAtender));
+// Lo ya atendido: del día o de un paciente. A quién se le dio qué, y de qué lote.
+router.get(
+  '/dispensaciones/entregas',
+  dispensa,
+  validar(z.object({ fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), buscar: z.string().trim().max(80).optional() }), 'query'),
+  asincrono(dispensaciones.entregas),
+);
 router.get(
   '/dispensaciones/atenciones/:id',
   dispensa,

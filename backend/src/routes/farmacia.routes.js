@@ -49,4 +49,17 @@ router.post(
   asincrono(farmacia.devolver),
 );
 
+router.post(
+  '/poner-lote',
+  deFarmacia,
+  idempotencia,
+  validar(z.object({
+    loteId: z.coerce.number().int().positive(),
+    numeroLote: z.string().trim().min(2, 'Escriba el número de lote').max(40),
+    fechaVence: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha de vencimiento: día, mes y año'),
+    cantidad: z.coerce.number().int().positive('La cantidad debe ser mayor que cero'),
+  })),
+  asincrono(farmacia.ponerLote),
+);
+
 module.exports = router;

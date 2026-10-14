@@ -87,4 +87,9 @@ onMounted(buscar);
 .asignar { flex-shrink: 0; height: 28px; padding: 0 10px; border: 2px solid #172A5A; border-radius: 7px; font-size: 12px; font-weight: 800; color: #172A5A; background: #fff; }
 .asignar:hover:not(:disabled) { background: #172A5A; color: #fff; }
 .nada { margin-top: 8px; font-size: 13px; font-weight: 700; color: #94A3B8; }
+/* --- Relieve (estilo duo) --- */
+.buscar input { border-radius: 12px; }
+.opciones { border-bottom-width: 4px; border-radius: 14px; }
+.asignar { border-bottom-width: 3px; border-radius: 9px; border-bottom-color: #0B163A; }
+.asignar:active:not(:disabled) { transform: translateY(1px); border-bottom-width: 2px; }
 </style>

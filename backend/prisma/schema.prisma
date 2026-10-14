@@ -1030,12 +1030,30 @@ model DiagnosticoAtencion {
 }
 
 model Cie10 {
-  codigo      String  @id
-  descripcion String
-  sinonimos   String?
-  activo      Boolean @default(true)
+  codigo             String  @id
+  descripcion        String
+  sinonimos          String?
+  activo             Boolean @default(true)
+  // Texto tal como viene en la lista OPS (mayúsculas, sin tildes).
+  descripcionOficial String? @map("descripcion_oficial")
+  categoria          String?
+  capitulo           String?
+  nivel              Int?    @db.SmallInt
+  marca              String? // daga | asterisco
+  tieneSubcodigos    Boolean @default(false) @map("tiene_subcodigos")
 
+  @@index([categoria])
+  @@index([capitulo])
   @@map("cie10")
+}
+
+model Cie10Capitulo {
+  numero      String @id
+  rango       String
+  descripcion String
+  orden       Int    @db.SmallInt
+
+  @@map("cie10_capitulo")
 }
 
 // --- Bodega: ubicaciones, traslados y reportes de servicios -------------------

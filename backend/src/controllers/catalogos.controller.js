@@ -195,11 +195,22 @@ async function importarLugares(req, res, next) {
 async function buscarCie10(req, res) {
   const q = req.query.q.trim();
   const contiene = { contains: q, mode: 'insensitive' };
+  // El texto oficial viene sin tildes: ahí se encuentra "infeccion" aunque se
+  // escriba sin tilde. Una categoría con subcódigos no es código final.
+  const sinTilde = { contains: normalizarTexto(q), mode: 'insensitive' };
+  const final = { activo: true, tieneSubcodigos: false };
 
-  const [catalogo, usados, totalCatalogo] = await Promise.all([
+  // Primero lo que el centro nombra así (sinónimos) y lo que empieza igual;
+  // con 14 mil códigos, "fiebre" coincide con cientos.
+  const [prioritarios, generales, usados, totalCatalogo] = await Promise.all([
     prisma.cie10.findMany({
-      where: { activo: true, OR: [{ codigo: { startsWith: q.toUpperCase() } }, { descripcion: contiene }, { sinonimos: contiene }] },
+      where: { ...final, OR: [{ codigo: { startsWith: q.toUpperCase() } }, { sinonimos: contiene }, { sinonimos: sinTilde }, { descripcionOficial: { startsWith: normalizarTexto(q), mode: 'insensitive' } }] },
+      orderBy: { codigo: 'asc' },
       take: 30,
+    }),
+    prisma.cie10.findMany({
+      where: { ...final, OR: [{ descripcion: contiene }, { descripcionOficial: sinTilde }] },
+      take: 60,
     }),
     prisma.diagnosticoAtencion.groupBy({
       by: ['cie', 'descripcion'],
@@ -213,6 +224,8 @@ async function buscarCie10(req, res) {
     }),
     prisma.cie10.count(),
   ]);
+  const vistos = new Set(prioritarios.map((c) => c.codigo));
+  const catalogo = [...prioritarios, ...generales.filter((c) => !vistos.has(c.codigo))];
 
   // Lo usado en el centro se agrupa por codigo (o por texto, si no tiene).
   const frecuentes = new Map();
@@ -230,7 +243,7 @@ async function buscarCie10(req, res) {
     const palabras = [...new Set(normalizarTexto(q).split(/\s+/).filter((w) => w.length >= 3 && !VACIAS.has(w)))];
     if (palabras.length) {
       const extra = await prisma.cie10.findMany({
-        where: { activo: true, codigo: { notIn: catalogo.map((c) => c.codigo) }, OR: palabras.flatMap((w) => [{ descripcion: { contains: w, mode: 'insensitive' } }, { sinonimos: { contains: w, mode: 'insensitive' } }]) },
+        where: { ...final, codigo: { notIn: catalogo.map((c) => c.codigo) }, OR: palabras.flatMap((w) => [{ descripcionOficial: { contains: w, mode: 'insensitive' } }, { sinonimos: { contains: w, mode: 'insensitive' } }]) },
         take: 60,
       });
       const aciertos = (c) => palabras.filter((w) => normalizarTexto(`${c.descripcion} ${c.sinonimos ?? ''}`).includes(w)).length;
@@ -241,7 +254,7 @@ async function buscarCie10(req, res) {
   const delCatalogo = catalogo.map((c) => {
     const usos = [...frecuentes.values()].find((f) => f.codigo === c.codigo)?.usos ?? 0;
     // Un código del catálogo que el centro ya usó sigue siendo frecuente.
-    return { codigo: c.codigo, descripcion: c.descripcion, sinonimos: c.sinonimos, usos, ...(usos ? { frecuente: true } : {}) };
+    return { codigo: c.codigo, descripcion: c.descripcion, sinonimos: c.sinonimos, marca: c.marca, usos, ...(usos ? { frecuente: true } : {}) };
   });
   const codigosCatalogo = new Set(delCatalogo.map((c) => c.codigo));
   const soloFrecuentes = [...frecuentes.values()].filter((f) => !f.codigo || !codigosCatalogo.has(f.codigo));

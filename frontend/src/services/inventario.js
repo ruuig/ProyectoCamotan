@@ -37,6 +37,7 @@ export default {
   // Sin ubicacion, la tarjeta del centro; con 'bodega' o 'farmacia', la de esa ubicacion.
   tarjetaControl: (insumoId, ubicacion) => http.get(`/insumos/${insumoId}/tarjeta-control${ubicacion ? `?ubicacion=${ubicacion}` : ''}`),
   insumosDePaciente: (pacienteId) => http.get(`/pacientes/${pacienteId}/insumos`),
+  buscarPacientesConEntregas: (buscar) => http.get(`/trazabilidad/pacientes?buscar=${encodeURIComponent(buscar)}`),
 
   // --- Dispensación --------------------------------------------------------
   pendientes: () => http.get('/dispensaciones/pendientes'),
@@ -44,6 +45,8 @@ export default {
   // el registro de toda la entrega de una vez.
   porAtender: () => http.get('/dispensaciones/por-atender'),
   hojaDeEntrega: (atencionId) => http.get(`/dispensaciones/atenciones/${atencionId}`),
+  entregas: ({ fecha, buscar } = {}) => http.get(`/dispensaciones/entregas?${new URLSearchParams({ ...(fecha ? { fecha } : {}), ...(buscar ? { buscar } : {}) })}`),
+  ponerLote: (datos, clave) => http.post('/farmacia/poner-lote', datos, clave ? { 'Idempotency-Key': clave } : undefined),
   dispensarAtencion: (atencionId, datos, clave) => http.post(`/dispensaciones/atenciones/${atencionId}`, datos, clave ? { 'Idempotency-Key': clave } : undefined),
   dispensar: (datos) => http.post('/dispensaciones', datos),
   porFirmar: () => http.get('/dispensaciones/por-firmar'),

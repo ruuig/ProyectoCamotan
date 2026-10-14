@@ -4,6 +4,7 @@ import http from '../../services/http';
 import { usarAutorizacion } from '../../dominio/autorizacion';
 import { useAuthStore } from '../../stores/auth';
 import DialogoAutorizacion from '../comunes/DialogoAutorizacion.vue';
+import { useLogoStore } from '../../stores/logo';
 import Icono from '../comunes/Icono.vue';
 
 /**
@@ -71,7 +72,38 @@ async function confirmarTotp() {
   }
 }
 
-onMounted(cargar);
+// --- Logo institucional ------------------------------------------------------
+const logo = useLogoStore();
+const subiendo = ref('');
+async function cambiarLogo(variante, evento) {
+  const archivo = evento.target.files?.[0];
+  evento.target.value = '';
+  if (!archivo) return;
+  error.value = '';
+  aviso.value = '';
+  subiendo.value = variante;
+  try {
+    await http.subirArchivo(`/logo/${variante}`, archivo);
+    await logo.cargar(true);
+    aviso.value = 'Logo cambiado. Ya aparece en todo el sistema y en las hojas impresas.';
+  } catch (fallo) {
+    error.value = fallo.message;
+  } finally {
+    subiendo.value = '';
+  }
+}
+async function logoOficial(variante) {
+  error.value = '';
+  try {
+    await http.request('DELETE', `/logo/${variante}`);
+    await logo.cargar(true);
+    aviso.value = 'Se volvió al logo oficial del MSPAS.';
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
+
+onMounted(() => { cargar(); logo.cargar(); });
 </script>
 
 <template>
@@ -114,7 +146,7 @@ onMounted(cargar);
 
         <!-- Encabezado tal como sale -->
         <div class="encabezado" aria-label="Vista del encabezado impreso">
-          <img src="/mspas-vertical.png" alt="" class="h-[54px] w-auto" />
+          <img :src="logo.vertical" alt="" class="h-[54px] w-auto" />
           <div>
             <p class="text-[12px] font-bold">Ministerio de Salud Pública y Asistencia Social</p>
             <p class="text-[14px] font-bold">Título del documento</p>
@@ -125,6 +157,26 @@ onMounted(cargar);
         <p v-if="est.codigo?.startsWith('PENDIENTE')" class="b-aviso atencion mt-4"><Icono nombre="alerta" :tamano="20" /> Falta el código institucional del MSPAS.</p>
       </div>
     </form>
+
+    <section class="b-panel logos">
+      <header class="b-panel-cabeza">
+        <h2 class="b-panel-titulo flex items-center gap-2"><Icono nombre="escudo" :tamano="20" /> Logo del Ministerio</h2>
+      </header>
+      <div class="b-panel-cuerpo logos-cuerpo">
+        <div v-for="v in [{ clave: 'horizontal', titulo: 'Horizontal', donde: 'Menú e inicio de sesión' }, { clave: 'vertical', titulo: 'Vertical', donde: 'Hojas impresas' }]" :key="v.clave" class="logo-caja">
+          <div class="logo-marco" :class="v.clave"><img :src="logo[v.clave]" :alt="`Logo ${v.titulo}`" /></div>
+          <p class="logo-titulo">{{ v.titulo }} <span>{{ v.donde }}</span></p>
+          <p class="logo-estado" :class="{ propio: logo.personalizado[v.clave] }">{{ logo.personalizado[v.clave] ? 'Logo cambiado' : 'Oficial del MSPAS' }}</p>
+          <div class="flex flex-wrap gap-2">
+            <label class="b-btn primario chico">
+              <Icono nombre="recibir" :tamano="16" /> {{ subiendo === v.clave ? 'Subiendo…' : 'Cambiar' }}
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="sr-only" :disabled="Boolean(subiendo)" @change="cambiarLogo(v.clave, $event)" />
+            </label>
+            <button v-if="logo.personalizado[v.clave]" type="button" class="b-btn secundario chico" @click="logoOficial(v.clave)"><Icono nombre="actualizar" :tamano="16" /> Volver al oficial</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <section class="b-panel self-start">
       <header class="b-panel-cabeza">
@@ -170,6 +222,16 @@ onMounted(cargar);
 </template>
 
 <style scoped>
+.logos { grid-column: 1 / -1; }
+.logos-cuerpo { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.logo-caja { display: grid; gap: 8px; align-content: start; padding: 14px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 16px; }
+.logo-marco { display: grid; place-items: center; height: 120px; padding: 12px; border-radius: 12px; background: repeating-conic-gradient(#F1F5F9 0% 25%, #fff 0% 50%) 50% / 18px 18px; }
+.logo-marco img { max-height: 96px; max-width: 100%; object-fit: contain; }
+.logo-titulo { font-weight: 800; color: #14244A; }
+.logo-titulo span { margin-left: 6px; font-size: 13px; font-weight: 600; color: #64748B; }
+.logo-estado { font-size: 13px; font-weight: 700; color: #145C3C; }
+.logo-estado.propio { color: #8A5A06; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .centro { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
 @media (max-width: 1100px) { .centro { grid-template-columns: 1fr; } }
 .encabezado { display: flex; align-items: flex-start; gap: 14px; margin-top: 18px; padding: 14px 16px; border: 1px solid #DDE3EC; border-bottom: 2px solid #111827; border-radius: 6px 6px 0 0; background: #fff; font-family: Arial, Helvetica, sans-serif; color: #111827; }

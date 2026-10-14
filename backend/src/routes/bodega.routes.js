@@ -138,6 +138,8 @@ router.post(
       descripcion: z.string().trim().max(300).optional().nullable(),
       unidadMedida: z.string().trim().max(60).optional().nullable(),
       cantidad: z.coerce.number().int().positive('La cantidad debe ser mayor que cero'),
+      // Lote elegido a mano; sin él, sale el que vence primero.
+      lotes: z.array(z.object({ loteId: id, cantidad: z.coerce.number().int().positive() })).max(20).optional(),
     })).min(1, 'Agregue lo que se entrega').max(60),
   })),
   asincrono(requisiciones.entregar),

@@ -268,3 +268,39 @@ describe('control diario', () => {
     expect(v.body.descuadrados.filter((d) => d.insumo.startsWith(MARCA))).toEqual([]);
   });
 });
+
+describe('trazabilidad en farmacia', () => {
+  it('lo que entró sin lote recibe su lote real, se puede entregar y se rastrea hasta el paciente', async () => {
+    const insumo = await nuevoInsumo();
+    const l = await recibir(insumo.id, 40);
+    await aFarmacia(l.id, 40);
+    // Como la existencia importada sin número: en cuarentena, no se entrega.
+    await prisma.lote.update({ where: { id: l.id }, data: { numeroLote: 'SIN-LOTE', estado: 'cuarentena', motivoEstado: 'Ingresó sin número de lote', estadoEn: new Date() } });
+
+    const numero = `R${Math.random().toString(36).slice(2, 7)}`.toUpperCase();
+    const puesto = await farmacia(request(app).post('/api/v1/farmacia/poner-lote')).send({ loteId: l.id, numeroLote: numero, fechaVence: enDias(300), cantidad: 30 });
+    expect(puesto.status).toBe(201);
+    const nuevo = await prisma.lote.findFirst({ where: { insumoId: insumo.id, numeroLote: numero } });
+    expect(nuevo).toMatchObject({ cantidadActual: 30, cantidadFarmacia: 30, estado: 'disponible' });
+    expect(await lote(l.id)).toMatchObject({ cantidadActual: 10, cantidadFarmacia: 10 });
+    // A un registro que ya tiene lote no se le cambia.
+    expect((await farmacia(request(app).post('/api/v1/farmacia/poner-lote')).send({ loteId: nuevo.id, numeroLote: 'OTRO', fechaVence: enDias(300), cantidad: 1 })).status).toBe(409);
+
+    // Ya se entrega, del lote identificado, y queda a nombre del paciente.
+    const { atencionId, paciente } = await consultaConRecetas([[insumo.id, 12]]);
+    const r = await farmacia(request(app).post(`/api/v1/dispensaciones/atenciones/${atencionId}`)).send({});
+    expect(r.status).toBe(201);
+    expect(r.body.renglones[0]).toMatchObject({ entregado: 12, lotes: [{ numeroLote: numero }] });
+
+    const entregas = await farmacia(request(app).get(`/api/v1/dispensaciones/entregas?buscar=${encodeURIComponent(paciente.apellidos)}`));
+    expect(entregas.body.entregas.find((e) => e.atencionId === atencionId)).toMatchObject({ estado: 'entregada', renglones: [{ entregado: 12, lotes: [{ numeroLote: numero, cantidad: 12 }] }] });
+
+    const buscados = await bodega(request(app).get(`/api/v1/trazabilidad/pacientes?buscar=${encodeURIComponent(paciente.apellidos)}`));
+    expect(buscados.body.pacientes.map((p) => p.id)).toContain(paciente.id);
+    const traza = await bodega(request(app).get(`/api/v1/pacientes/${paciente.id}/insumos`));
+    expect(traza.body.entregas[0]).toMatchObject({ cantidad: 12, lote: { numeroLote: numero } });
+
+    const v = await bodega(request(app).get('/api/v1/inventario/verificar-saldos'));
+    expect(v.body.descuadrados.filter((d) => d.insumo.startsWith(MARCA))).toEqual([]);
+  });
+});

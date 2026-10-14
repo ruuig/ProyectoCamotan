@@ -180,4 +180,7 @@ onMounted(async () => {
 .kardex { max-height: max(360px, calc(100vh - 380px)); }
 .grupo { text-align: center; border-bottom: 1px solid #E2E8F0; }
 .anterior td { background: #F8FAFC; font-weight: 700; color: #475569; }
+/* --- Relieve (estilo duo) --- */
+.elegido { border-bottom-width: 4px; border-bottom-color: #0B163A; border-radius: 14px; }
+.resumen div { border-bottom-width: 4px; border-radius: 14px; }
 </style>

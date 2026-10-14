@@ -431,4 +431,20 @@ onMounted(cargar);
 .factores b { font-variant-numeric: tabular-nums; color: #14244A; }
 .espera { display: grid; justify-items: center; gap: 6px; padding: 48px 16px; color: #94A3B8; }
 .espera b { color: #64748B; }
+/* --- Relieve (estilo duo) --- */
+.cifras span { border-radius: 12px; font-weight: 700; }
+.signo.sel { border: 2px solid #E2E8F0; border-bottom-width: 4px; border-left: 4px solid #172A5A; box-shadow: none; }
+.regla { border-bottom-width: 4px; border-radius: 16px; }
+.nivel-dos { border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 12px; background: #fff; }
+.nivel-dos button { border-radius: 8px; }
+.nivel-dos button.u.on { box-shadow: inset 0 -3px 0 #8F1D1F; }
+.nivel-dos button.m.on { box-shadow: inset 0 -3px 0 #A35D00; }
+.op { border-bottom-width: 4px; border-radius: 10px; }
+.op:active { transform: translateY(2px); border-bottom-width: 2px; }
+.edad summary { border-radius: 10px; }
+.caja { border-bottom-width: 4px; border-radius: 18px; }
+.ficha { border-bottom-width: 4px; border-radius: 14px; }
+.ficha:active { transform: translateY(2px); border-bottom-width: 2px; }
+.resultado { border-bottom-width: 4px; border-radius: 20px; }
+.puntaje { border-radius: 14px; box-shadow: inset 0 -4px 0 #0B163A; }
 </style>

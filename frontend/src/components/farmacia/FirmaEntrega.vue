@@ -189,4 +189,7 @@ onMounted(() => nextTick(prepararLienzo));
 .linea { position: absolute; left: 24px; right: 24px; bottom: 44px; border-bottom: 1.5px solid #CBD5E1; pointer-events: none; }
 .borrar { position: absolute; top: 8px; right: 8px; }
 .pie { display: flex; justify-content: flex-end; gap: 8px; padding: 0 18px 18px; }
+/* --- Relieve (estilo duo) --- */
+.ventana { border-radius: 22px; }
+.entregas { border-bottom-width: 4px; border-radius: 14px; }
 </style>

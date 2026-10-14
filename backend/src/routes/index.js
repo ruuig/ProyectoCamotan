@@ -18,6 +18,8 @@ router.get('/salud', (req, res) => {
 });
 
 router.use('/auth', authRutas);
+// El logo se lee sin sesión (sale en el inicio de sesión); va antes de las rutas de la raíz.
+router.use('/logo', require('./logo.routes'));
 router.use('/admin', adminRutas);
 router.use('/pacientes', pacientesRutas);
 router.use('/atenciones', atencionesRutas);

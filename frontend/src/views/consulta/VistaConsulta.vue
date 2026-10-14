@@ -1008,7 +1008,7 @@ onMounted(() => {
           </header>
           <div class="space-y-3 p-4">
             <p v-if="antecedentesRegistrados.length === 0" class="text-apagado">
-              Preconsulta todavía no ha pasado los antecedentes de la ficha de papel.
+              Sin antecedentes registrados
             </p>
             <div v-for="s in antecedentesRegistrados" :key="s.clave">
               <p class="text-sm font-bold text-tinta">{{ s.titulo }}</p>
@@ -1100,4 +1100,7 @@ onMounted(() => {
 li:first-child > .opcion-receta { border-top: none; }
 .opcion-receta:hover, .opcion-receta:focus-visible { background: #F2F4F7; outline: none; }
 .opcion-receta.fuera { justify-content: flex-start; color: #172A5A; font-weight: 700; }
+/* --- Relieve (estilo duo) --- */
+.franja-triaje { border-bottom-width: 4px; border-radius: 18px; }
+.anterior .ver { border-bottom-width: 3px; border-radius: 10px; }
 </style>

@@ -89,16 +89,27 @@ async function registrar() {
   }
 }
 
-async function llego(f) {
-  const cantidad = entero(window.prompt(`¿Cuántas llegaron de ${f.insumo}, lote ${f.numeroLote}? (faltan ${f.porReponer})`, String(f.porReponer)));
-  if (!cantidad) return;
+// Lo que faltaba de una recepción y ya llegó: todo, o una parte.
+const reponiendo = ref(null);
+const parte = ref('');
+function llego(f) {
+  reponiendo.value = f;
+  parte.value = '';
+}
+async function registrarLlegada(cantidad) {
+  if (!cantidad || cantidad > reponiendo.value.porReponer) return;
+  const f = reponiendo.value;
   error.value = '';
+  enviando.value = true;
   try {
     await bodega.reponer(f.loteId, cantidad);
     aviso.value = `Registrado: llegaron ${cantidad} de ${f.insumo}.`;
+    reponiendo.value = null;
     await cargar();
   } catch (fallo) {
     error.value = fallo.message;
+  } finally {
+    enviando.value = false;
   }
 }
 
@@ -160,7 +171,7 @@ onMounted(cargar);
             <tr v-for="(r, i) in renglones" :key="i">
               <td class="font-semibold text-tinta">{{ r.nombre }} <small class="block font-normal text-apagado">{{ r.unidad }}</small></td>
               <td><input v-model="r.numeroLote" required maxlength="60" class="celda texto" :aria-label="`Lote de ${r.nombre}`" /></td>
-              <td><input v-model="r.vence" type="month" required class="celda mes" :aria-label="`Vence ${r.nombre}`" /></td>
+              <td><input v-model="r.vence" type="date" required class="celda fecha-vence" :aria-label="`Vence ${r.nombre}`" /></td>
               <td class="n"><input v-model="r.cantidadDocumento" inputmode="numeric" required class="celda" :aria-label="`Cantidad del documento de ${r.nombre}`" /></td>
               <td class="n">
                 <input v-model="r.cantidadRecibida" inputmode="numeric" :placeholder="r.cantidadDocumento || 'igual'" class="celda" :aria-label="`Cantidad que llegó de ${r.nombre}`" />
@@ -220,10 +231,41 @@ onMounted(cargar);
         </tbody>
       </table>
     </div>
+
+    <!-- Llegó lo que faltaba -->
+    <div v-if="reponiendo" class="fondo-llego" role="dialog" aria-modal="true" aria-labelledby="titulo-llego" @click.self="reponiendo = null">
+      <div class="ventana-llego">
+        <p id="titulo-llego" class="llego-titulo">Llegó lo que faltaba</p>
+        <p class="llego-producto">{{ reponiendo.insumo }}</p>
+        <p class="llego-lote">Lote <b>{{ reponiendo.numeroLote }}</b><template v-if="reponiendo.documento"> · documento {{ reponiendo.documento }}</template></p>
+        <div class="llego-falta"><span>Faltaban</span><b>{{ reponiendo.porReponer }}</b></div>
+        <button type="button" class="b-btn exito llego-todo" :disabled="enviando" @click="registrarLlegada(reponiendo.porReponer)">
+          <Icono nombre="correcto" :tamano="22" /> Llegó todo
+        </button>
+        <form class="llego-parte" @submit.prevent="registrarLlegada(entero(parte))">
+          <input v-model="parte" inputmode="numeric" placeholder="Solo una parte" aria-label="Cuántos llegaron" class="b-campo num" :class="{ invalido: entero(parte) > reponiendo.porReponer }" />
+          <button type="submit" class="b-btn secundario" :disabled="enviando || !entero(parte) || entero(parte) > reponiendo.porReponer">Registrar</button>
+        </form>
+        <button type="button" class="llego-cancelar" @click="reponiendo = null">Cancelar</button>
+      </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
+.fondo-llego { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(15, 23, 42, .5); }
+.ventana-llego { display: grid; gap: 10px; width: min(420px, 100%); padding: 24px; border: 2px solid #E2E8F0; border-bottom-width: 6px; border-radius: 24px; background: #fff; }
+.llego-titulo { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748B; }
+.llego-producto { font-size: 20px; font-weight: 900; line-height: 1.2; color: #14244A; }
+.llego-lote { font-size: 14px; font-weight: 600; color: #64748B; }
+.llego-lote b { font-family: 'IBM Plex Mono', monospace; color: #14244A; }
+.llego-falta { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px; border-radius: 14px; background: #FFF4D6; color: #8A5A06; font-weight: 800; }
+.llego-falta b { font-size: 32px; font-weight: 900; }
+.llego-todo { height: 56px; font-size: 18px; border-radius: 16px; }
+.llego-parte { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.llego-cancelar { justify-self: center; padding: 6px 12px; font-weight: 800; color: #64748B; }
+.llego-cancelar:hover { color: #14244A; }
+.celda.fecha-vence { width: 160px; text-align: left; }
 .documento { display: grid; grid-template-columns: minmax(330px, 1.3fr) minmax(200px, 1.2fr) minmax(140px, .8fr) minmax(150px, .8fr); gap: 12px; align-items: end; }
 @media (max-width: 1099px) { .documento { grid-template-columns: 1fr 1fr; } }
 .agregar { display: grid; gap: 6px; padding: 12px; border: 2px dashed #CBD5E1; border-radius: 14px; background: #F8FAFC; }
@@ -234,4 +276,6 @@ onMounted(cargar);
 .quitar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: #64748B; }
 .quitar:hover { background: #FDECEC; color: #C03535; }
 .falta { display: block; color: #B42318; font-weight: 700; font-size: 13px; }
+/* --- Relieve (estilo duo) --- */
+.celda { border-radius: 10px; }
 </style>

@@ -48,4 +48,9 @@ function elegir(valor) {
 .sino button.no { background: #E2E8F0; color: #14244A; }
 .sino button:disabled { opacity: .5; }
 .compacto button { min-width: 46px; height: 30px; font-size: 13px; }
+/* --- Relieve (estilo duo) --- */
+.sino { border-color: #E2E8F0; border-bottom-width: 4px; border-radius: 14px; }
+.sino button { border-radius: 10px; font-weight: 800; }
+.sino button.si { box-shadow: inset 0 -3px 0 #0B163A; }
+.sino button.no { box-shadow: inset 0 -3px 0 #C5CEDB; }
 </style>

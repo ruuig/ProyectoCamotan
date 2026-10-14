@@ -30,6 +30,7 @@ const registrar = z.object({
     // Farmacia: registro diario de post-consulta.
     'sigsa4',
     'sigsa3cs',
+    'receta_paciente',
   ]),
   // Periodo, numero de traslado o lote: lo que identifica el documento.
   referencia: z.string().trim().max(60).optional().nullable(),

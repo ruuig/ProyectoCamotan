@@ -277,4 +277,7 @@ th.col-captura { background: #E8EEFA !important; color: #172A5A !important; }
 .cat-mini { display: grid; place-items: center; flex-shrink: 0; width: 26px; height: 26px; border-radius: 7px; background: var(--cat); color: #fff; }
 .cat-mini svg { width: 16px; height: 16px; }
 .barra-guardar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 12px 0; background: #fff; border-top: 2px solid #E2E8F0; }
+/* --- Relieve (estilo duo) --- */
+.avance { border-bottom-width: 4px; border-radius: 18px; }
+.celda { border-radius: 10px; }
 </style>

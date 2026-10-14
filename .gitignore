@@ -62,3 +62,11 @@ desktop.ini
 # Respaldos de la base de datos que hace el sistema
 backend/respaldos/
 *.sql.parcial
+
+# Logo institucional que sube dirección (se guarda en el servidor)
+backend/datos/logos/
+
+# graphify: el grafo y su configuración para Claude se quedan solo en la computadora
+graphify-out/
+.claude/
+CLAUDE.md

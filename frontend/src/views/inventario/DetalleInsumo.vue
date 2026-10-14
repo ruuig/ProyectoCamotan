@@ -124,7 +124,7 @@ onMounted(async () => {
 
 <template>
   <section v-if="datos && fila" :style="estiloCategoria(datos.insumo.categoria)">
-    <RouterLink to="/inventario" class="b-volver"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> Existencias</RouterLink>
+    <RouterLink to="/inventario/productos" class="b-volver"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> Existencias</RouterLink>
 
     <header class="b-cabecera items-start">
       <div class="min-w-0">

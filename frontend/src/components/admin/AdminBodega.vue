@@ -217,4 +217,7 @@ onMounted(cargar);
 .regla .verde { background: #5BB98A; }
 .regla { display: flex; height: 14px; margin-bottom: 16px; border-radius: 7px; overflow: hidden; gap: 2px; }
 @media (max-width: 640px) { .opciones { grid-template-columns: 1fr; } }
+/* --- Relieve (estilo duo) --- */
+.unidad { border-bottom-width: 4px; border-radius: 14px; }
+.opcion { border-bottom-width: 4px; border-radius: 14px; }
 </style>

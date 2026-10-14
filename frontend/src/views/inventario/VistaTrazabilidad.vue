@@ -61,8 +61,55 @@ function elegir(l) {
   router.replace({ query: { lote: l.id } });
 }
 
-watch(() => route.query.lote, (id) => { if (id) abrir(id); else datos.value = null; });
-onMounted(() => { if (route.query.lote) abrir(route.query.lote); });
+watch(() => route.query.lote, (id) => { if (id) { modo.value = 'lote'; abrir(id); } else datos.value = null; });
+onMounted(() => {
+  if (route.query.lote) abrir(route.query.lote);
+  else if (route.query.paciente) { modo.value = 'paciente'; abrirPaciente(route.query.paciente); }
+});
+
+// --- Por paciente: qué lotes recibió una persona --------------------------------
+const modo = ref(route.query.paciente ? 'paciente' : 'lote');
+const textoPaciente = ref('');
+const pacientes = ref([]);
+const delPaciente = ref(null);
+let esperaPaciente = null;
+watch(textoPaciente, (t) => {
+  clearTimeout(esperaPaciente);
+  if (t.trim().length < 2) { pacientes.value = []; return; }
+  esperaPaciente = setTimeout(async () => {
+    try {
+      pacientes.value = (await servicio.buscarPacientesConEntregas(t.trim())).pacientes;
+    } catch (fallo) {
+      error.value = fallo.message;
+    }
+  }, 250);
+});
+async function abrirPaciente(id) {
+  error.value = '';
+  textoPaciente.value = '';
+  pacientes.value = [];
+  try {
+    delPaciente.value = await servicio.insumosDePaciente(id);
+    router.replace({ query: { paciente: id } });
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
+function verLote(loteId) {
+  modo.value = 'lote';
+  router.replace({ query: { lote: loteId } });
+}
+// Entregas del paciente agrupadas por consulta.
+const porConsulta = computed(() => {
+  const mapa = new Map();
+  for (const e of delPaciente.value?.entregas ?? []) {
+    const clave = e.atencionId ?? `m${e.movimientoId}`;
+    const g = mapa.get(clave) ?? { fecha: e.consultaEn ?? e.fecha, medico: e.medico, diagnostico: e.diagnostico, cie: e.cie, entregas: [] };
+    g.entregas.push(e);
+    mapa.set(clave, g);
+  }
+  return [...mapa.values()];
+});
 
 const sinLote = computed(() => datos.value?.lote.numeroLote === 'SIN-LOTE');
 
@@ -108,8 +155,32 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
 <template>
   <section>
     <header class="b-cabecera">
-      <h1 class="b-titulo">Trazabilidad por lote</h1>
-      <div class="relative w-full sm:w-[420px]">
+      <div class="flex flex-wrap items-center gap-4">
+        <h1 class="b-titulo">Trazabilidad</h1>
+        <div class="b-segmentado" role="radiogroup" aria-label="Buscar por">
+          <button type="button" role="radio" :aria-checked="modo === 'lote'" :class="{ on: modo === 'lote' }" @click="modo = 'lote'">Por lote</button>
+          <button type="button" role="radio" :aria-checked="modo === 'paciente'" :class="{ on: modo === 'paciente' }" @click="modo = 'paciente'">Por paciente</button>
+        </div>
+      </div>
+      <div v-if="modo === 'paciente'" class="relative w-full sm:w-[420px]">
+        <label class="b-buscar block">
+          <Icono nombre="buscar" :tamano="20" />
+          <input v-model="textoPaciente" type="search" class="b-campo" placeholder="Nombre, expediente o CUI" aria-label="Buscar paciente" autocomplete="off" />
+        </label>
+        <ul v-if="pacientes.length" class="resultados" role="listbox">
+          <li v-for="p in pacientes" :key="p.id">
+            <button type="button" class="resultado" @click="abrirPaciente(p.id)">
+              <span class="cat-mini paciente-mini"><Icono nombre="pacientes" :tamano="16" /></span>
+              <span class="min-w-0 flex-1">
+                <span class="block font-semibold text-tinta">{{ p.nombreCompleto }}</span>
+                <span class="block truncate text-[13px] text-apagado">Exp. {{ p.expedientePapel || p.expediente }}<template v-if="p.comunidad"> · {{ p.comunidad }}</template></span>
+              </span>
+            </button>
+          </li>
+        </ul>
+        <p v-else-if="textoPaciente.trim().length >= 2" class="resultados vacia">Nadie con ese nombre ha recibido medicamentos.</p>
+      </div>
+      <div v-else class="relative w-full sm:w-[420px]">
         <label class="b-buscar block">
           <Icono nombre="buscar" :tamano="20" />
           <input v-model="texto" type="search" class="b-campo" placeholder="Número de lote o insumo" aria-label="Buscar lote" autocomplete="off" />
@@ -122,7 +193,10 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
                 <span class="block font-mono font-semibold text-tinta">{{ l.numeroLote === 'SIN-LOTE' ? 'Sin lote' : l.numeroLote }}</span>
                 <span class="block truncate text-[13px] text-apagado">{{ l.insumo.nombreGenerico }}</span>
               </span>
-              <span class="text-right text-[13px] font-semibold tabular-nums text-apagado">{{ miles(l.cantidadActual) }} de {{ miles(l.cantidadInicial) }}</span>
+              <span class="text-right text-[13px] font-semibold tabular-nums text-apagado">
+                <span class="block">{{ miles(l.cantidadActual) }} de {{ miles(l.cantidadInicial) }}</span>
+                <span v-if="l.fechaVence && l.numeroLote !== 'SIN-LOTE'" class="block text-[12px]">vence {{ fecha(l.fechaVence) }}</span>
+              </span>
             </button>
           </li>
         </ul>
@@ -132,6 +206,51 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
 
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
 
+    <!-- ===== Por paciente ===== -->
+    <template v-if="modo === 'paciente'">
+      <div v-if="!delPaciente" class="b-panel inicio mt-5">
+        <Icono nombre="pacientes" :tamano="48" :grosor="1.4" class="text-[#94A3B8]" />
+        <p class="text-lg font-bold text-tinta">Busque a la persona para ver qué lotes recibió</p>
+      </div>
+      <template v-else>
+        <div class="ficha-paciente mt-5">
+          <span class="ic-paciente"><Icono nombre="pacientes" :tamano="26" /></span>
+          <div class="min-w-0 flex-1">
+            <p class="text-[22px] font-black leading-tight text-tinta">{{ delPaciente.paciente.nombreCompleto }}</p>
+            <p class="text-sm font-semibold text-apagado">Exp. {{ delPaciente.paciente.expediente }}<template v-if="delPaciente.paciente.comunidad"> · {{ delPaciente.paciente.comunidad }}</template></p>
+          </div>
+          <div class="cifra-paciente"><b>{{ delPaciente.entregas.length }}</b><span>entregas</span></div>
+          <div class="cifra-paciente"><b>{{ new Set(delPaciente.entregas.map((e) => e.lote.id)).size }}</b><span>lotes</span></div>
+          <div v-if="delPaciente.conRetiroActivo" class="cifra-paciente rojo"><b>{{ delPaciente.conRetiroActivo }}</b><span>en retiro</span></div>
+        </div>
+
+        <p v-if="!delPaciente.entregas.length" class="b-vacio">No ha recibido medicamentos.</p>
+        <section v-for="(g, i) in porConsulta" :key="i" class="b-panel consulta-traza mt-3">
+          <header class="b-panel-cabeza">
+            <div>
+              <h2 class="b-panel-titulo">{{ fecha(g.fecha) }}<template v-if="g.diagnostico"> · {{ g.diagnostico }}</template></h2>
+              <p class="text-sm text-apagado"><template v-if="g.cie">{{ g.cie }} · </template>{{ g.medico ?? 'Sin médico' }}</p>
+            </div>
+          </header>
+          <ul>
+            <li v-for="e in g.entregas" :key="e.movimientoId" class="entrega-traza" :class="{ anulada: e.anulada }">
+              <div class="min-w-0 flex-1">
+                <b class="block text-tinta">{{ e.insumo.nombreGenerico }}</b>
+                <small class="block text-apagado">{{ fechaHora(e.fecha) }} · entregó {{ e.entregadoPor }}<template v-if="e.indicaciones"> · {{ e.indicaciones }}</template></small>
+                <small v-if="e.retiro" class="block font-bold text-[#A52A2A]">Lote bajo retiro sanitario · {{ e.retiro.referencia }}</small>
+              </div>
+              <span class="cant-traza">{{ miles(e.cantidad) }}</span>
+              <button type="button" class="lote-traza" :class="e.lote.semaforo" @click="verLote(e.lote.id)">
+                <span class="font-mono font-bold">{{ e.lote.numeroLote }}</span>
+                <small>vence {{ fecha(e.lote.fechaVence) }}</small>
+              </button>
+            </li>
+          </ul>
+        </section>
+      </template>
+    </template>
+
+    <template v-else>
     <div v-if="!datos" class="b-panel inicio mt-5">
       <Icono nombre="trazabilidad" :tamano="48" :grosor="1.4" class="text-[#94A3B8]" />
       <p class="text-lg font-bold text-tinta">Busque un lote por su número o por el nombre del insumo</p>
@@ -291,10 +410,30 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
         </ol>
       </section>
     </template>
+    </template>
   </section>
 </template>
 
 <style scoped>
+.paciente-mini { background: #172A5A; }
+.ficha-paciente { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px 20px; background: #fff; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 18px; }
+.ic-paciente { display: grid; place-items: center; flex-shrink: 0; width: 54px; height: 54px; border-radius: 16px; background: #172A5A; color: #fff; box-shadow: inset 0 -4px 0 #0B163A; }
+.cifra-paciente { display: grid; justify-items: center; min-width: 86px; padding: 6px 12px; border-radius: 14px; background: #EAF3FB; color: #1F5F99; }
+.cifra-paciente b { font-size: 24px; font-weight: 900; line-height: 1.1; color: #172A5A; }
+.cifra-paciente span { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.cifra-paciente.rojo { background: #FDECEC; color: #A52A2A; }
+.cifra-paciente.rojo b { color: #A52A2A; }
+.entrega-traza { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-top: 1px solid #EEF2F6; }
+.entrega-traza:first-child { border-top: none; }
+.entrega-traza.anulada { opacity: .5; text-decoration: line-through; }
+.cant-traza { font-size: 20px; font-weight: 900; color: #14244A; font-variant-numeric: tabular-nums; }
+.lote-traza { display: grid; justify-items: start; flex-shrink: 0; min-width: 130px; padding: 6px 12px; border: 2px solid #CBD5E1; border-bottom-width: 4px; border-left: 5px solid #1E8E5E; border-radius: 12px; background: #fff; text-align: left; color: #14244A; }
+.lote-traza:hover { border-color: #172A5A; border-left-color: inherit; }
+.lote-traza:active { transform: translateY(2px); border-bottom-width: 2px; }
+.lote-traza small { font-size: 12px; color: #64748B; }
+.lote-traza.amarillo { border-left-color: #D9A400; }
+.lote-traza.rojo { border-left-color: #E8930C; }
+.lote-traza.vencido { border-left-color: #C03535; }
 .resultados { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); max-height: 380px; overflow-y: auto; padding: 4px; background: #fff; border: 2px solid #172A5A; border-radius: 12px; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, .35); }
 .resultados.vacia { padding: 14px; text-align: center; font-weight: 600; color: #64748B; }
 .resultado { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 4px 10px; border-radius: 8px; text-align: left; }
@@ -344,4 +483,10 @@ button.destino:hover { border-color: #94A3B8; }
 .punto { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; }
 .punto.entra { background: #22A06B; }
 .punto.sale { background: #fff; border: 2.5px solid #64748B; }
+/* --- Relieve (estilo duo) --- */
+.resultados { border-bottom-width: 4px; border-radius: 16px; }
+.lote { border-bottom-width: 5px; border-radius: 20px; }
+.nodo.origen { border-bottom-width: 5px; border-bottom-color: #0B163A; border-radius: 18px; }
+.destino { border-bottom-width: 4px; border-radius: 16px; }
+button.destino:active { transform: translateY(2px); border-bottom-width: 2px; }
 </style>

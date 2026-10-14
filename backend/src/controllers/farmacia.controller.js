@@ -35,4 +35,16 @@ async function devolver(req, res) {
   res.status(201).json({ devueltos: hechos });
 }
 
-module.exports = { existencias, dia, cerrarDia, devolver };
+/** Poner el lote real a lo que está en farmacia sin lote. */
+async function ponerLote(req, res) {
+  const hecho = await farmacia.ponerLote(req.usuario.establecimientoId, req.body, req.usuario.id);
+  await req.bitacora({
+    accion: 'actualizar',
+    entidad: 'lote',
+    entidadId: hecho.loteId,
+    detalle: `${hecho.insumo}: ${hecho.cantidad} unidades sin lote identificadas como lote ${hecho.numeroLote}`,
+  });
+  res.status(201).json(hecho);
+}
+
+module.exports = { existencias, dia, cerrarDia, devolver, ponerLote };

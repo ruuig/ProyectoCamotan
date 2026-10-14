@@ -329,4 +329,7 @@ const filasServicio = computed(() => {
 .meses-tabla.bajo { color: #B7710A; }
 .meses-tabla.agotado { color: #C03535; }
 .meses-tabla.sin_consumo { color: #94A3B8; }
+/* --- Relieve (estilo duo) --- */
+.detalle { border-bottom-width: 4px; border-radius: 20px; }
+.servicio { border-radius: 12px; }
 </style>

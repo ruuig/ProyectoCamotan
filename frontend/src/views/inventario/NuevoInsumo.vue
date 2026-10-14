@@ -62,7 +62,7 @@ async function guardar() {
 
 <template>
   <section>
-    <RouterLink to="/inventario" class="b-volver"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> Existencias</RouterLink>
+    <RouterLink to="/inventario/productos" class="b-volver"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> Existencias</RouterLink>
     <header class="b-cabecera">
       <h1 class="b-titulo">Nuevo insumo</h1>
     </header>

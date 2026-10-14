@@ -82,10 +82,32 @@ async function elegirInsumo(i) {
 }
 
 function sumarRenglon(insumo, n) {
-  const ya = renglones.value.find((r) => r.insumoId === insumo.id);
-  if (ya) ya.cantidad += n;
-  else renglones.value.push({ insumoId: insumo.id, descripcion: insumo.nombreGenerico, unidadMedida: insumo.unidadEntrega, cantidad: n, enBodega: insumo.saldoTotal });
+  let r = renglones.value.find((x) => x.insumoId === insumo.id);
+  if (r) r.cantidad += n;
+  else {
+    renglones.value.push({ insumoId: insumo.id, descripcion: insumo.nombreGenerico, unidadMedida: insumo.unidadEntrega, cantidad: n, enBodega: insumo.saldoTotal, propuesta: [], disponibles: [], loteElegido: '' });
+    r = renglones.value.at(-1);
+  }
+  cargarLotes(r);
 }
+
+/**
+ * De qué lote sale cada renglón. Para la trazabilidad, no para el formulario
+ * impreso: por defecto el que vence primero; se puede elegir otro.
+ */
+async function cargarLotes(r) {
+  const n = entero(r.cantidad);
+  if (!r.insumoId || !n) return;
+  try {
+    const p = await bodega.propuestaLotes(r.insumoId, n);
+    r.propuesta = p.propuesta;
+    r.disponibles = p.disponibles ?? [];
+  } catch {
+    r.propuesta = [];
+  }
+}
+const loteDe = (r) => r.disponibles.find((l) => l.loteId === Number(r.loteElegido));
+const venceCorto = (v) => new Date(v).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' });
 
 function agregarInsumo() {
   const n = entero(cantidad.value);
@@ -102,7 +124,7 @@ function agregarLibre() {
   Object.assign(libre, { descripcion: '', unidadMedida: 'Unidad', cantidad: '' });
 }
 
-const noAlcanza = computed(() => renglones.value.filter((r) => r.enBodega != null && r.enBodega < entero(r.cantidad)));
+const noAlcanza = computed(() => renglones.value.filter((r) => (r.enBodega != null && r.enBodega < entero(r.cantidad)) || (loteDe(r) && loteDe(r).cantidad < entero(r.cantidad))));
 
 async function entregar() {
   error.value = '';
@@ -113,8 +135,9 @@ async function entregar() {
       ...nueva,
       ubicacionId: Number(nueva.ubicacionId),
       numero: nueva.numero.trim() || null,
-      renglones: renglones.value.map(({ insumoId, descripcion, unidadMedida, cantidad: c }) => ({
+      renglones: renglones.value.map(({ insumoId, descripcion, unidadMedida, cantidad: c, loteElegido }) => ({
         insumoId, descripcion: insumoId ? null : descripcion, unidadMedida: insumoId ? null : unidadMedida, cantidad: entero(c),
+        ...(insumoId && loteElegido ? { lotes: [{ loteId: Number(loteElegido), cantidad: entero(c) }] } : {}),
       })),
     }, `entrega-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
     ultima.value = r.requisicion;
@@ -182,7 +205,7 @@ onMounted(cargar);
 <template>
   <section>
     <header class="b-cabecera">
-      <h1 class="b-titulo">Requisiciones</h1>
+      <div><p class="b-antetitulo">Requisición</p><h1 class="b-titulo">Entregar</h1></div>
       <div class="b-segmentado" role="radiogroup" aria-label="Vista">
         <button v-for="m in [['nueva', 'Entregar'], ['registradas', `Entregadas (${lista.length})`]]" :key="m[0]" type="button" role="radio" :aria-checked="vista === m[0]" :class="vista === m[0] ? 'on' : ''" @click="vista = m[0]">{{ m[1] }}</button>
       </div>
@@ -259,13 +282,30 @@ onMounted(cargar);
 
         <div class="b-tabla-marco">
           <table class="b-tabla">
-            <thead><tr><th class="n">No.</th><th>Descripción del artículo</th><th>Unidad</th><th class="n">Cantidad</th><th class="n">En bodega</th><th /></tr></thead>
+            <thead><tr><th class="n">No.</th><th>Descripción del artículo <span class="no-imprime">· lote (no se imprime)</span></th><th>Unidad</th><th class="n">Cantidad</th><th class="n">En bodega</th><th /></tr></thead>
             <tbody>
               <tr v-for="(r, i) in renglones" :key="i">
                 <td class="n">{{ i + 1 }}</td>
-                <td class="font-semibold text-tinta">{{ r.descripcion }}</td>
+                <td>
+                  <span class="font-semibold text-tinta">{{ r.descripcion }}</span>
+                  <div class="lote-celda">
+                  <template v-if="r.insumoId">
+                    <div v-if="!r.loteElegido" class="lotes-salen">
+                      <span v-for="l in r.propuesta" :key="l.loteId" class="lote-chip" :title="`Vence ${venceCorto(l.fechaVence)}`">
+                        <b>{{ l.numeroLote }}</b> vence {{ venceCorto(l.fechaVence) }}<template v-if="r.propuesta.length > 1"> · {{ miles(l.cantidad) }}</template>
+                      </span>
+                      <span v-if="!r.propuesta.length" class="text-apagado">—</span>
+                    </div>
+                    <select v-model="r.loteElegido" class="lote-sel" :class="{ falta: loteDe(r) && loteDe(r).cantidad < entero(r.cantidad) }" :aria-label="`Lote de ${r.descripcion}`">
+                      <option value="">El que vence primero</option>
+                      <option v-for="l in r.disponibles" :key="l.loteId" :value="l.loteId">{{ l.numeroLote }} · vence {{ venceCorto(l.fechaVence) }} · hay {{ miles(l.cantidad) }}</option>
+                    </select>
+                  </template>
+                  <span v-else class="text-apagado">—</span>
+                  </div>
+                </td>
                 <td>{{ r.unidadMedida }}</td>
-                <td class="n"><input v-model.number="r.cantidad" inputmode="numeric" class="celda" :aria-label="`Cantidad de ${r.descripcion}`" /></td>
+                <td class="n"><input v-model.number="r.cantidad" inputmode="numeric" class="celda" :aria-label="`Cantidad de ${r.descripcion}`" @change="cargarLotes(r)" /></td>
                 <td class="n" :class="r.enBodega != null && r.enBodega < entero(r.cantidad) ? 'falta' : ''">{{ r.enBodega == null ? '—' : miles(r.enBodega) }}</td>
                 <td class="n"><button type="button" class="quitar" aria-label="Quitar" @click="renglones.splice(i, 1)"><Icono nombre="cerrar" :tamano="16" /></button></td>
               </tr>
@@ -366,6 +406,15 @@ onMounted(cargar);
 </template>
 
 <style scoped>
+.no-imprime { margin-left: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; color: #94A3B8; }
+.lote-celda { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.lote-celda .lotes-salen { margin-bottom: 0; }
+.lote-celda .lote-sel { width: auto; max-width: 260px; }
+.lotes-salen { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.lote-chip { padding: 2px 8px; border-radius: 7px; background: #EAF7F0; color: #145C3C; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.lote-chip b { font-family: 'IBM Plex Mono', monospace; font-weight: 700; }
+.lote-sel { width: 100%; height: 32px; padding: 0 6px; border: 2px solid #E2E8F0; border-radius: 9px; font-size: 12px; font-weight: 600; color: #334155; background: #fff; }
+.lote-sel.falta { border-color: #D64545; }
 .rejilla { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
 .rejilla-lista { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
 @media (max-width: 1099px) { .rejilla, .rejilla-lista { grid-template-columns: 1fr; } }
@@ -382,4 +431,7 @@ onMounted(cargar);
 .renglones li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #EEF2F6; }
 .renglones b { display: block; font-size: 14px; color: #14244A; }
 .renglones small { display: block; font-size: 12px; color: #64748B; }
+/* --- Relieve (estilo duo) --- */
+.elegido { border-bottom-width: 4px; border-bottom-color: #0B163A; border-radius: 14px; }
+.celda { border-radius: 10px; }
 </style>

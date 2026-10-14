@@ -150,7 +150,8 @@ const INCLUIR_ATENCION = {
 /** Pacientes que esperan en farmacia: atenciones con algo por entregar. */
 async function porAtender(req, res) {
   const atenciones = await prisma.atencion.findMany({
-    where: { establecimientoId: req.usuario.establecimientoId, prescripciones: { some: {} } },
+    // Una receta de hace más de 7 días ya no se espera: queda como no recogida.
+    where: { establecimientoId: req.usuario.establecimientoId, prescripciones: { some: {} }, registradaEn: { gte: new Date(Date.now() - 7 * 86400000) } },
     orderBy: { registradaEn: 'desc' },
     take: 150,
     include: {
@@ -222,6 +223,9 @@ async function hojaDeEntrega(req, res, next) {
       aEntregar: plan?.aEntregar ?? 0,
       noAlcanza: plan?.noAtendido ?? 0,
       lotes: plan?.reparto ?? [],
+      // Lo que de verdad se llevó, sin contar lo que quedó como "no había".
+      entregado: r.dispensaciones.filter((d) => !d.anulada).reduce((t, d) => t + d.cantidad, 0),
+      noHabia: r.demandaNoAtendida.reduce((t, d) => t + d.cantidad, 0),
       entregas: r.dispensaciones.filter((d) => !d.anulada).flatMap((d) => d.movimientos.map((m) => ({
         numeroLote: m.lote.numeroLote,
         fechaVence: m.lote.fechaVence,
@@ -519,7 +523,95 @@ async function sigsa4(req, res) {
   });
 }
 
+
+/**
+ * Recetas ya atendidas en farmacia: las de un día, o las de un paciente que se
+ * busca. Cada una con su estado (entregada, incompleta, no recogida) y lo que
+ * salió de cada lote. Es el registro de a quién se le dio qué.
+ */
+async function entregas(req, res) {
+  const establecimientoId = req.usuario.establecimientoId;
+  const buscar = (req.query.buscar ?? '').trim();
+  const fecha = req.query.fecha ?? new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
+  const desde = new Date(Date.parse(`${fecha}T00:00:00Z`) + 6 * 3600000);
+  const hasta = new Date(desde.getTime() + 86400000);
+  const limiteNoRecogida = new Date(Date.now() - 7 * 86400000);
+
+  const palabras = buscar.split(/\s+/).filter(Boolean);
+  const where = {
+    establecimientoId,
+    prescripciones: { some: {} },
+    ...(palabras.length
+      ? { paciente: { AND: palabras.map((w) => ({ OR: [{ nombres: { contains: w, mode: 'insensitive' } }, { apellidos: { contains: w, mode: 'insensitive' } }, { expediente: { contains: w } }, { expedientePapel: { contains: w, mode: 'insensitive' } }] })) } }
+      : {
+        OR: [
+          { prescripciones: { some: { dispensaciones: { some: { registradaEn: { gte: desde, lt: hasta } } } } } },
+          { prescripciones: { some: { demandaNoAtendida: { some: { registradaEn: { gte: desde, lt: hasta } } } } } },
+          // Las que se vencieron sin que el paciente pasara: se ven el día que vencieron.
+          { registradaEn: { gte: new Date(desde.getTime() - 7 * 86400000), lt: new Date(hasta.getTime() - 7 * 86400000) } },
+        ],
+      }),
+  };
+  const atenciones = await prisma.atencion.findMany({
+    where,
+    orderBy: { registradaEn: 'desc' },
+    take: 100,
+    include: {
+      paciente: { select: { id: true, nombres: true, apellidos: true, expediente: true, expedientePapel: true } },
+      medico: { select: { nombre: true } },
+      prescripciones: {
+        include: {
+          insumo: { select: { nombreGenerico: true } },
+          demandaNoAtendida: { select: { cantidad: true, registradaEn: true } },
+          dispensaciones: { include: { usuario: { select: { nombre: true } }, movimientos: { include: { lote: { select: { numeroLote: true, fechaVence: true } } } } } },
+        },
+      },
+    },
+  });
+
+  const lista = atenciones.map((a) => {
+    const renglones = a.prescripciones.map((p) => {
+      const validas = p.dispensaciones.filter((d) => !d.anulada);
+      const entregado = validas.reduce((t, d) => t + d.cantidad, 0);
+      const noHabia = p.demandaNoAtendida.reduce((t, d) => t + d.cantidad, 0);
+      return {
+        medicamento: p.insumo.nombreGenerico,
+        recetado: p.cantidad,
+        entregado,
+        noHabia,
+        pendiente: pendienteDe(p),
+        lotes: validas.flatMap((d) => d.movimientos.map((m) => ({ numeroLote: m.lote.numeroLote, fechaVence: m.lote.fechaVence, cantidad: Math.abs(m.cantidad) }))),
+      };
+    });
+    const fechas = a.prescripciones.flatMap((p) => [...p.dispensaciones.map((d) => d.registradaEn), ...p.demandaNoAtendida.map((d) => d.registradaEn)]);
+    const ultima = fechas.sort((x, y) => new Date(y) - new Date(x))[0] ?? null;
+    const quien = a.prescripciones.flatMap((p) => p.dispensaciones).sort((x, y) => new Date(y.registradaEn) - new Date(x.registradaEn))[0]?.usuario?.nombre ?? null;
+    const algoPendiente = renglones.some((r) => r.pendiente > 0);
+    const nadaEntregado = renglones.every((r) => r.entregado === 0);
+    let estado = 'entregada';
+    if (algoPendiente) estado = a.registradaEn < limiteNoRecogida ? 'no_recogida' : 'por_entregar';
+    else if (nadaEntregado) estado = 'no_habia';
+    else if (renglones.some((r) => r.noHabia > 0)) estado = 'incompleta';
+    const delDia = fechas.some((f) => f >= desde && f < hasta);
+    return {
+      delDia,
+      atencionId: a.id,
+      registradaEn: a.registradaEn,
+      entregadaEn: ultima,
+      entregadaPor: quien,
+      estado,
+      medico: a.medico?.nombre ?? null,
+      paciente: { ...a.paciente, nombreCompleto: `${a.paciente.apellidos}, ${a.paciente.nombres}` },
+      renglones,
+    };
+  });
+  // Del día: lo que se atendió ese día y lo que ese día quedó como no recogido.
+  const delDia = lista.filter((x) => x.delDia || x.estado === 'no_recogida');
+  res.json({ fecha, entregas: (palabras.length ? lista : delDia).map(({ delDia: _, ...x }) => x) });
+}
+
 module.exports = {
+  entregas,
   crear, pendientes, anular, pendienteDe, porFirmar, registrarConstancia, imagenConstancia, sigsa4,
   porAtender, hojaDeEntrega, dispensarAtencion,
 };

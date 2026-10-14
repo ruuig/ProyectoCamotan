@@ -37,16 +37,17 @@ const VistaSigsa = () => import('../views/sigsa/VistaSigsa.vue');
 const HojaSigsa4 = () => import('../views/impresion/HojaSigsa4.vue');
 const HojaSemaforo = () => import('../views/impresion/HojaSemaforo.vue');
 const ComprobanteTraslado = () => import('../views/impresion/ComprobanteTraslado.vue');
+const RecetaPaciente = () => import('../views/impresion/RecetaPaciente.vue');
 const HojaRequisicion = () => import('../views/impresion/HojaRequisicion.vue');
 const HojaKardex = () => import('../views/impresion/HojaKardex.vue');
 const VistaRequisiciones = () => import('../views/inventario/VistaRequisiciones.vue');
 const VistaKardex = () => import('../views/inventario/VistaKardex.vue');
-const VistaHoy = () => import('../views/inventario/VistaHoy.vue');
 const VistaRecibir = () => import('../views/inventario/VistaRecibir.vue');
 
 import FormularioPreconsulta from '../views/preconsulta/FormularioPreconsulta.vue';
 import VistaCola from '../views/cola/VistaCola.vue';
 import VistaConsulta from '../views/consulta/VistaConsulta.vue';
+const VistaBodegaInicio = () => import('../views/inventario/VistaBodegaInicio.vue');
 import VistaInventario from '../views/inventario/VistaInventario.vue';
 import NuevoInsumo from '../views/inventario/NuevoInsumo.vue';
 import DetalleInsumo from '../views/inventario/DetalleInsumo.vue';
@@ -124,7 +125,8 @@ const router = createRouter({
           path: '',
           component: MarcoBodega,
           children: [
-            { path: '', name: 'inventario', component: VistaInventario, meta: { roles: BODEGA } },
+            { path: '', name: 'bodega-inicio', component: VistaBodegaInicio, meta: { roles: BODEGA } },
+            { path: 'productos', name: 'inventario', component: VistaInventario, meta: { roles: BODEGA } },
             { path: 'nuevo', name: 'insumo-nuevo', component: NuevoInsumo, meta: { roles: BODEGA } },
             // Las rutas fijas van antes que ':id', o este se las traga.
             { path: 'cierre', name: 'inventario-cierre', component: InventarioCierre, meta: { roles: BODEGA } },
@@ -134,7 +136,8 @@ const router = createRouter({
             // Farmacia pide a bodega con requisición, como los demás servicios.
             { path: 'requisiciones', name: 'requisiciones', component: VistaRequisiciones, meta: { roles: [...BODEGA, 'farmacia'] } },
             { path: 'kardex', name: 'kardex', component: VistaKardex, meta: { roles: BODEGA } },
-            { path: 'hoy', name: 'bodega-hoy', component: VistaHoy, meta: { roles: BODEGA } },
+            // El inicio reemplaza a "Hoy": el enlace viejo lleva a él.
+            { path: 'hoy', redirect: '/inventario' },
             { path: 'recibir', name: 'recibir', component: VistaRecibir, meta: { roles: BODEGA } },
             { path: 'trazabilidad', name: 'trazabilidad', component: VistaTrazabilidad, meta: { roles: BODEGA } },
             { path: 'reportes', name: 'reportes-servicios', component: VistaReportes, meta: { roles: BODEGA } },
@@ -245,6 +248,7 @@ const router = createRouter({
         { path: 'sigsa4/:periodo', name: 'imprimir-sigsa4', component: HojaSigsa4, meta: { roles: FARMACIA } },
         { path: 'semaforo', name: 'imprimir-semaforo', component: HojaSemaforo, meta: { roles: BODEGA } },
         { path: 'traslado/:id', name: 'imprimir-traslado', component: ComprobanteTraslado, meta: { roles: BODEGA } },
+        { path: 'receta/:id', name: 'imprimir-receta', component: RecetaPaciente, meta: { roles: FARMACIA } },
         { path: 'requisicion/:id', name: 'imprimir-requisicion', component: HojaRequisicion, meta: { roles: [...BODEGA, 'farmacia'] } },
         { path: 'kardex', name: 'imprimir-kardex', component: HojaKardex, meta: { roles: BODEGA } },
       ],

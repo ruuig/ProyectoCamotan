@@ -99,18 +99,15 @@ npm test
 
 ## Usuarios de prueba
 
-Solo para desarrollo. Cambiar antes de cualquier despliegue real.
+El seed crea `admin`, `preconsulta`, `medico`, `farmacia`, `bodega` y
+`director` (administrador con `esDirector`, DPI `1234567890101`, que es el que
+pide el sistema al autorizar operaciones protegidas).
 
-| Usuario | Contrasena | Rol |
-|---|---|---|
-| `admin` | `Camotan2026!` | Administrador |
-| `preconsulta` | `Camotan2026!` | Preconsulta |
-| `medico` | `Camotan2026!` | Medico |
-| `farmacia` | `Camotan2026!` | Farmacia |
-| `director` | `Director2026!` | Administrador con `esDirector` |
-
-El director tiene DPI `1234567890101`, que es el que pide el sistema al
-autorizar operaciones protegidas.
+- **En desarrollo y en las pruebas** usan las contrasenas de prueba que estan en
+  `backend/prisma/seed.js`.
+- **En produccion** (`NODE_ENV=production`) el seed nunca usa esas contrasenas:
+  genera una al azar por usuario y la muestra una sola vez. El repositorio es
+  publico, asi que las de prueba no deben existir en ningun servidor.
 
 ## Arquitectura
 

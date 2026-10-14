@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 
@@ -83,9 +84,22 @@ async function sembrarSignosPeligro(establecimientoId) {
   }
 }
 
+// En produccion nunca se usan las contrasenas de prueba (estan en el repositorio,
+// que es publico): se genera una al azar por usuario y se muestra una sola vez.
+function contrasenaAlAzar() {
+  const letras = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const bloque = () => Array.from({ length: 4 }, () => letras[crypto.randomInt(letras.length)]).join('');
+  return `${bloque()}-${bloque()}-${bloque()}`;
+}
+
 async function sembrarUsuarios(establecimientoId) {
+  const produccion = process.env.NODE_ENV === 'production';
   for (const u of USUARIOS_PRUEBA) {
-    const passwordHash = await bcrypt.hash(u.password, COSTO_BCRYPT);
+    const existe = await prisma.usuario.findUnique({ where: { usuario: u.usuario } });
+    if (existe) continue;
+    const password = produccion ? contrasenaAlAzar() : u.password;
+    if (produccion) console.log(`Usuario ${u.usuario}: ${password}  (guardela, no se vuelve a mostrar)`);
+    const passwordHash = await bcrypt.hash(password, COSTO_BCRYPT);
     await prisma.usuario.upsert({
       where: { usuario: u.usuario },
       update: {},
@@ -106,9 +120,12 @@ async function sembrarInsumos(establecimientoId) {
   for (const [nombreGenerico, categoria, presentacion, unidadMedida, stockMinimo] of INSUMOS_MINIMOS) {
     const existente = await prisma.insumo.findFirst({ where: { establecimientoId, nombreGenerico } });
     if (existente) continue;
+    // Mismo codigo que asigna el sistema al crear un insumo (insumos.controller.js).
+    const ultimo = await prisma.insumo.findFirst({ where: { establecimientoId }, orderBy: { id: 'desc' }, select: { id: true } });
+    const codigoInterno = `INS-${String((ultimo?.id ?? 0) + 1).padStart(5, '0')}`;
     await prisma.insumo.create({
       data: {
-        establecimientoId, nombreGenerico, categoria, presentacion, unidadMedida, stockMinimo,
+        establecimientoId, codigoInterno, nombreGenerico, categoria, presentacion, unidadMedida, stockMinimo,
         prescribible: !['medico_quirurgico', 'laboratorio'].includes(categoria),
       },
     });

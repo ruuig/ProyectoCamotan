@@ -271,8 +271,8 @@ const volver = () => (window.history.length > 1 ? router.back() : router.push('/
 onMounted(async () => {
   try {
     const [datos, p] = await Promise.all([
-      servicio.signosPeligro(),
-      esNueva.value && route.query.paciente ? servicio.obtener(route.query.paciente) : null,
+      servicio.signosPeligroConCache(),
+      esNueva.value && route.query.paciente ? servicio.obtenerConCache(route.query.paciente) : null,
     ]);
     signos.value = datos.signos;
     paciente.value = p?.paciente ?? null;

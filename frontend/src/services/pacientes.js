@@ -35,4 +35,9 @@ export default {
     http.post(`/atenciones/${atencionId}/preconsulta`, datos),
 
   signosPeligro: () => http.get('/admin/signos-peligro'),
+
+  // Para la preconsulta en la tablet: sin conexion devuelven lo ultimo que se
+  // vio en este equipo, en lugar de dejar el formulario con error.
+  signosPeligroConCache: async () => (await http.getConCache('/admin/signos-peligro')).datos,
+  obtenerConCache: async (id) => (await http.getConCache(`/pacientes/${id}`)).datos,
 };

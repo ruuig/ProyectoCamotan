@@ -5,6 +5,7 @@ import { ref, computed } from 'vue';
 import { usarInstalacion } from '../../dominio/instalacion';
 import Icono from './Icono.vue';
 
+defineProps({ enLogin: { type: Boolean, default: false } });
 const { aviso, instalada, esApple, instalar } = usarInstalacion();
 const ayuda = ref(false);
 const visible = computed(() => !instalada.value && (aviso.value || esApple));
@@ -15,7 +16,7 @@ async function tocar() {
 </script>
 
 <template>
-  <div v-if="visible" class="border-t border-linea px-3 py-3">
+  <div v-if="visible" :class="enLogin ? 'mt-5' : 'border-t border-linea px-3 py-3'">
     <button type="button" class="boton-instalar" @click="tocar">
       <span class="ic"><Icono nombre="descargar" :tamano="17" /></span>
       <span><strong>Instalar la app</strong><small>Acceso directo, pantalla completa</small></span>

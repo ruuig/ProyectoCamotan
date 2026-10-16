@@ -120,7 +120,13 @@ async function cerrarDia() {
 const SEMAFORO = { vencido: 'Vencido', rojo: 'Menos de 12 meses', amarillo: '12 a 18 meses', verde: 'Más de 18 meses', sin_fecha: 'Sin fecha' };
 const fechaCorta = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
 const hora = (v) => (v ? new Date(v).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '');
-const imprimir = () => window.print();
+// Imprimir: el informe del inventario de un día (por defecto hoy), en su propia hoja.
+const fechaInforme = ref(hoy);
+const eligiendoFecha = ref(false);
+function imprimir() {
+  window.open(`/imprimir/inventario-farmacia?fecha=${fechaInforme.value}`, '_blank');
+  eligiendoFecha.value = false;
+}
 
 onMounted(() => { cargarDia(); cargarExistencias(); });
 
@@ -135,7 +141,15 @@ onMounted(() => { cargarDia(); cargarExistencias(); });
         <p class="b-antetitulo">Farmacia</p>
         <h1 class="b-titulo">Estante y pedidos</h1>
       </div>
-      <button v-if="pestana !== 'hoy' && pestana !== 'pedir'" type="button" class="b-btn secundario no-imprimir" @click="imprimir"><Icono nombre="imprimir" :tamano="20" /> Imprimir</button>
+      <div class="relative no-imprimir">
+        <button type="button" class="b-btn secundario" @click="eligiendoFecha = !eligiendoFecha"><Icono nombre="imprimir" :tamano="20" /> Imprimir</button>
+        <div v-if="eligiendoFecha" class="elegir-informe">
+          <b>Informe del inventario</b>
+          <label for="fecha-informe" class="b-etiqueta">Día</label>
+          <input id="fecha-informe" v-model="fechaInforme" type="date" :max="hoy" class="b-campo" />
+          <button type="button" class="b-btn primario w-full" :disabled="!fechaInforme" @click="imprimir"><Icono nombre="imprimir" :tamano="18" /> Imprimir</button>
+        </div>
+      </div>
     </header>
 
     <nav class="pestanas-grandes mt-5 no-imprimir" aria-label="Estante y pedidos">
@@ -233,6 +247,9 @@ onMounted(() => { cargarDia(); cargarExistencias(); });
 .pestanas-grandes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .globo { margin-left: 8px; padding: 1px 9px; border-radius: 9px; background: #D64545; color: #fff; font-size: 13px; vertical-align: 2px; }
 .solo-imprimir { display: none; }
+.elegir-informe { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; display: grid; gap: 8px; width: 260px; padding: 16px;
+  background: #fff; border: 2px solid #172A5A; border-bottom-width: 4px; border-radius: 16px; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, .35); }
+.elegir-informe b { color: #14244A; font-size: 16px; }
 .pestanas-grandes button { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border: 2px solid #E2E8F0; border-bottom-width: 5px; border-radius: 18px; background: #fff; text-align: left; color: #475569; transition: transform .06s; }
 .pestanas-grandes button:active { transform: translateY(2px); border-bottom-width: 3px; }
 .pestanas-grandes button svg { flex-shrink: 0; color: #2F83C4; }

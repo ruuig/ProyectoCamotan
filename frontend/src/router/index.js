@@ -41,6 +41,7 @@ const ComprobanteTraslado = () => import('../views/impresion/ComprobanteTraslado
 const RecetaPaciente = () => import('../views/impresion/RecetaPaciente.vue');
 const HojaRequisicion = () => import('../views/impresion/HojaRequisicion.vue');
 const HojaKardex = () => import('../views/impresion/HojaKardex.vue');
+const HojaInventarioFarmacia = () => import('../views/impresion/HojaInventarioFarmacia.vue');
 const VistaRequisiciones = () => import('../views/inventario/VistaRequisiciones.vue');
 const VistaKardex = () => import('../views/inventario/VistaKardex.vue');
 const VistaRecibir = () => import('../views/inventario/VistaRecibir.vue');
@@ -253,6 +254,7 @@ const router = createRouter({
         { path: 'receta/:id', name: 'imprimir-receta', component: RecetaPaciente, meta: { roles: FARMACIA } },
         { path: 'requisicion/:id', name: 'imprimir-requisicion', component: HojaRequisicion, meta: { roles: [...BODEGA, 'farmacia'] } },
         { path: 'kardex', name: 'imprimir-kardex', component: HojaKardex, meta: { roles: BODEGA } },
+        { path: 'inventario-farmacia', name: 'imprimir-inventario-farmacia', component: HojaInventarioFarmacia, meta: { roles: FARMACIA } },
       ],
     },
     // Cualquier otra ruta cae al guard, que envia al panel del rol o al login.

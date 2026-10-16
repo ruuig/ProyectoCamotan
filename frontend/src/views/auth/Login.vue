@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import LogoInstitucional from '../../components/comunes/LogoInstitucional.vue';
 import Icono from '../../components/comunes/Icono.vue';
+import BotonInstalar from '../../components/comunes/BotonInstalar.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -162,6 +163,7 @@ async function enviar() {
             <Icono v-if="!enviando" nombre="irA" :tamano="20" :grosor="2.2" />
           </button>
         </form>
+        <BotonInstalar en-login />
       </div>
 
       <footer class="pie">

@@ -16,9 +16,9 @@ async function tocar() {
 
 <template>
   <div v-if="visible" class="border-t border-linea px-3 py-3">
-    <button type="button" class="menu-enlace boton-instalar flex min-h-tocable w-full items-center gap-3 px-3 py-2.5" @click="tocar">
-      <Icono nombre="descargar" :tamano="20" class="shrink-0" />
-      <span class="truncate">Instalar en este equipo</span>
+    <button type="button" class="boton-instalar" @click="tocar">
+      <span class="ic"><Icono nombre="descargar" :tamano="17" /></span>
+      <span><strong>Instalar la app</strong><small>Acceso directo, pantalla completa</small></span>
     </button>
 
     <div v-if="ayuda" class="fixed inset-0 z-[60] flex items-center justify-center bg-tinta/40 px-4" @click.self="ayuda = false">
@@ -36,6 +36,10 @@ async function tocar() {
 </template>
 
 <style scoped>
-.boton-instalar { border-radius: 12px; background: #EEF2FA; color: #172A5A; font-weight: 800; }
-.boton-instalar:hover { background: #DCE4F5; }
+.boton-instalar { display: flex; align-items: center; gap: .7rem; width: 100%; padding: .65rem .8rem; border-radius: 12px; text-align: left;
+  border: 1px dashed #4A9BD6; background: #EAF4FB; color: #172A5A; }
+.boton-instalar:hover { background: #DCECF8; }
+.boton-instalar .ic { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; background: #172A5A; color: #fff; }
+.boton-instalar strong { display: block; font-size: .9rem; font-weight: 800; }
+.boton-instalar small { font-size: .78rem; color: #64748B; font-weight: 600; }
 </style>

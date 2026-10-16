@@ -76,7 +76,7 @@ const tarjetas = computed(() => [
     nota: pedidos.value.length ? `El más antiguo: ${hace(pedidos.value[0].fechaSolicitud).toLowerCase()} (${pedidos.value[0].unidadSeccion})` : 'Ningún servicio espera',
     icono: 'trasladar',
     tono: pedidos.value.some((p) => dias(p.fechaSolicitud) >= 2) ? 'atencion' : pedidos.value.length ? 'accion' : 'neutro',
-    a: '/inventario/requisiciones',
+    a: '/inventario/requisiciones?ver=pedidos',
   },
   {
     titulo: 'Por reclamar al proveedor',

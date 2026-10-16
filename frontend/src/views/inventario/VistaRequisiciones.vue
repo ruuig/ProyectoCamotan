@@ -23,7 +23,7 @@ const esBodega = computed(() => auth.rol !== 'farmacia');
 
 // Tres vistas: lo que los servicios pidieron y espera (Por atender), lo que
 // se entrega sin pedido previo, y lo ya entregado.
-const vista = ref(route.query.ver === 'sin_numero' ? 'registradas' : route.query.ver === 'nueva' ? 'nueva' : 'pedidos');
+const vista = ref(route.query.ver === 'sin_numero' ? 'registradas' : route.query.ver === 'pedidos' ? 'pedidos' : 'nueva');
 const soloSinNumero = ref(route.query.ver === 'sin_numero');
 const lista = ref([]);
 const tipos = ref([]);
@@ -223,7 +223,7 @@ onMounted(cargar);
     <header class="b-cabecera">
       <div><p class="b-antetitulo">Requisiciones</p><h1 class="b-titulo">Pedidos de los servicios</h1></div>
       <div class="b-segmentado" role="radiogroup" aria-label="Vista">
-        <button v-for="m in [['pedidos', `Por atender (${porAtender.length})`], ['nueva', 'Entregar sin pedido'], ['registradas', `Entregadas (${entregadas.length})`]]" :key="m[0]" type="button" role="radio" :aria-checked="vista === m[0]" :class="vista === m[0] ? 'on' : ''" @click="vista = m[0]">{{ m[1] }}</button>
+        <button v-for="m in [['nueva', 'Entregar'], ['pedidos', `Por atender (${porAtender.length})`], ['registradas', `Entregadas (${entregadas.length})`]]" :key="m[0]" type="button" role="radio" :aria-checked="vista === m[0]" :class="vista === m[0] ? 'on' : ''" @click="vista = m[0]">{{ m[1] }}</button>
       </div>
     </header>
 

@@ -69,7 +69,7 @@ const GRUPOS = [
   {
     titulo: 'Bodega',
     enlaces: [
-      { ruta: '/inventario/requisiciones', etiqueta: 'Pedidos', icono: 'trasladar', roles: ['bodega'], contador: 'pedidos' },
+      { ruta: '/inventario/requisiciones?ver=pedidos', etiqueta: 'Pedidos', icono: 'trasladar', roles: ['bodega'], contador: 'pedidos' },
       { ruta: '/inventario/recibir', etiqueta: 'Recibir', icono: 'recibir', roles: ['bodega'] },
       { ruta: '/inventario/productos', etiqueta: 'Existencias', icono: 'inventario', roles: ['bodega'] },
       { ruta: '/inventario/semaforo', etiqueta: 'Semáforo', icono: 'vencimiento', roles: ['bodega'] },

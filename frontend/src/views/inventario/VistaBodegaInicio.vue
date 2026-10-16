@@ -99,7 +99,7 @@ const cierre = computed(() => {
     </nav>
 
     <p v-if="r && (r.sinNumero || r.kardex)" class="pendientes">
-      <RouterLink v-if="r.sinNumero" to="/inventario/requisiciones" class="chip">{{ r.sinNumero }} requisiciones sin número de formulario</RouterLink>
+      <RouterLink v-if="r.sinNumero" to="/inventario/requisiciones?ver=sin_numero" class="chip">{{ r.sinNumero }} requisiciones sin número de formulario</RouterLink>
       <RouterLink v-if="r.kardex" to="/inventario/kardex" class="chip">{{ miles(r.kardex) }} movimientos por pasar a tarjetas</RouterLink>
     </p>
   </section>

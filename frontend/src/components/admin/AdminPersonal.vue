@@ -204,7 +204,8 @@ onMounted(cargar);
         <div class="b-panel-cuerpo b-rejilla">
           <div class="c6">
             <label for="n-usuario" class="b-etiqueta">Usuario</label>
-            <input id="n-usuario" v-model="nuevo.usuario" required autocomplete="off" autocapitalize="none" class="b-campo" />
+            <input id="n-usuario" v-model="nuevo.usuario" required autocomplete="off" autocapitalize="none" placeholder="rudy.oloroso"
+              pattern="[A-Za-z0-9._\-]{3,40}" title="Sin espacios: letras, números, punto, guion o guion bajo" class="b-campo" />
           </div>
           <div class="c6">
             <label for="n-rol" class="b-etiqueta">Rol</label>
@@ -213,8 +214,8 @@ onMounted(cargar);
             </select>
           </div>
           <div class="c12">
-            <label for="n-nombre" class="b-etiqueta">Nombre como firma</label>
-            <input id="n-nombre" v-model="nuevo.nombre" required placeholder="Dra. Nombre Apellido" class="b-campo" />
+            <label for="n-nombre" class="b-etiqueta">Nombre completo</label>
+            <input id="n-nombre" v-model="nuevo.nombre" required placeholder="Nombres y apellidos" class="b-campo" />
           </div>
           <div class="c7">
             <label for="n-cargo" class="b-etiqueta">Cargo <span class="b-opcional">opcional</span></label>

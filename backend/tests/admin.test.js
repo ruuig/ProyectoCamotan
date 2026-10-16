@@ -90,6 +90,25 @@ describe('autorizacion del director', () => {
     expect(r.body.error.mensaje).toBe('Credenciales de autorización inválidas');
   });
 
+  it('el administrador en sesion confirma con su propia contrasena, sin DPI', async () => {
+    const r = await admin(request(app).post('/api/v1/admin/signos-peligro')).send({
+      ...nuevoSigno(),
+      autorizacion: { password: 'Camotan2026!' },
+    });
+
+    expect(r.status).toBe(201);
+  });
+
+  it('sin DPI rechaza una contrasena que no es la del usuario en sesion', async () => {
+    const r = await admin(request(app).post('/api/v1/admin/signos-peligro')).send({
+      ...nuevoSigno(),
+      autorizacion: { password: DIRECTOR.password },
+    });
+
+    expect(r.status).toBe(403);
+    expect(r.body.error.mensaje).toBe('Credenciales de autorización inválidas');
+  });
+
   it('responde igual ante un DPI inexistente que ante contrasena incorrecta', async () => {
     const dpiMalo = await admin(request(app).post('/api/v1/admin/signos-peligro')).send({
       ...nuevoSigno(),

@@ -61,20 +61,31 @@ async function verificarAutorizacion({ autorizacion, establecimientoId, usuarioS
     );
   }
 
-  if (!autorizacion?.dpi || !autorizacion?.password) {
+  if (!autorizacion?.password) {
     await registrarIntento('datos de autorización incompletos');
     throw errorAutorizacion();
   }
 
-  // 2. Buscar un director activo con ese DPI en el mismo establecimiento.
-  const director = await prisma.usuario.findFirst({
-    where: {
-      dpi: autorizacion.dpi,
-      esDirector: true,
-      activo: true,
-      establecimientoId,
-    },
-  });
+  // 2. Sin DPI: quien confirma es el propio usuario en sesion, si es
+  //    administrador o director (puede haber varios administradores).
+  //    Con DPI: un director activo con ese DPI en el mismo establecimiento.
+  const director = autorizacion.dpi
+    ? await prisma.usuario.findFirst({
+      where: {
+        dpi: autorizacion.dpi,
+        esDirector: true,
+        activo: true,
+        establecimientoId,
+      },
+    })
+    : await prisma.usuario.findFirst({
+      where: {
+        id: usuarioSesionId,
+        activo: true,
+        establecimientoId,
+        OR: [{ rol: 'admin' }, { esDirector: true }],
+      },
+    });
 
   // 3. Se compara siempre, exista o no el director, para que el tiempo de
   //    respuesta no delate que DPI pertenece a uno.

@@ -3,7 +3,8 @@ const { z } = require('zod');
 // La autorizacion del director viaja dentro del cuerpo de la operacion.
 // El DPI se trata como nombre de usuario, no como secreto.
 const autorizacion = z.object({
-  dpi: z.string().trim().regex(/^[0-9]{13}$/, 'DPI invalido'),
+  // Sin DPI confirma el administrador o director en sesion con su contrasena.
+  dpi: z.string().trim().regex(/^[0-9]{13}$/, 'DPI invalido').optional(),
   password: z.string().min(1, 'La contrasena es obligatoria').max(200),
   totp: z.string().trim().regex(/^[0-9]{6}$/, 'El código debe tener 6 digitos').optional(),
 });

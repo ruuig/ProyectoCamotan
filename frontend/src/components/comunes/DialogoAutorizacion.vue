@@ -1,8 +1,12 @@
 <script setup>
 import { ref, reactive, watch } from 'vue';
+import { useAuthStore } from '../../stores/auth';
 
-// Pide la reautenticacion del director para una operacion protegida.
-// El DPI se trata como nombre de usuario: no es un secreto.
+// Pide la reautenticacion para una operacion protegida. El administrador o el
+// director en sesion confirma con su propia contrasena; los demas, con el DPI
+// y la contrasena del director (el DPI se trata como nombre de usuario).
+const auth = useAuthStore();
+const propia = auth.usuario?.rol === 'admin' || auth.usuario?.esDirector;
 const props = defineProps({
   abierto: { type: Boolean, default: false },
   operacion: { type: String, required: true },
@@ -37,7 +41,7 @@ watch(
 
 function confirmar() {
   emitir('confirmar', {
-    dpi: datos.dpi,
+    ...(propia ? {} : { dpi: datos.dpi }),
     password: datos.password,
     ...(datos.totp ? { totp: datos.totp } : {}),
   });
@@ -56,13 +60,14 @@ function confirmar() {
       @submit.prevent="confirmar"
     >
       <div>
-        <h2 class="font-semibold text-slate-800">Autorización del director</h2>
+        <h2 class="font-semibold text-slate-800">{{ propia ? 'Confirme con su contraseña' : 'Autorización del director' }}</h2>
         <p class="text-slate-500">
-          Para {{ operacion }} se requiere la autorización del director, aunque ya tenga sesión abierta.
+          <template v-if="propia">Para {{ operacion }}, escriba la contraseña con la que entró.</template>
+          <template v-else>Para {{ operacion }} se requiere la autorización del director, aunque ya tenga sesión abierta.</template>
         </p>
       </div>
 
-      <div>
+      <div v-if="!propia">
         <label for="aut-dpi" class="block text-sm font-medium text-slate-700 mb-1">DPI del director</label>
         <input
           id="aut-dpi"
@@ -76,7 +81,7 @@ function confirmar() {
       </div>
 
       <div>
-        <label for="aut-pass" class="block text-sm font-medium text-slate-700 mb-1">Contraseña</label>
+        <label for="aut-pass" class="block text-sm font-medium text-slate-700 mb-1">{{ propia ? 'Su contraseña' : 'Contraseña del director' }}</label>
         <input
           id="aut-pass"
           v-model="datos.password"

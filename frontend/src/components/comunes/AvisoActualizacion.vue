@@ -9,6 +9,11 @@ const actualizar = registerSW({
   onNeedRefresh() {
     hayVersionNueva.value = true;
   },
+  // La app instalada queda abierta todo el día: cada 15 minutos revisa si hay
+  // una versión nueva, para que el aviso salga sin recargar la página a mano.
+  onRegisteredSW(_url, registro) {
+    if (registro) setInterval(() => registro.update(), 15 * 60 * 1000);
+  },
 });
 </script>
 

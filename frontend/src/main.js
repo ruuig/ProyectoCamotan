@@ -5,6 +5,7 @@ import './styles/interfaz.css';
 import './styles/duo.css';
 import './style-impresion.css';
 import App from './App.vue';
+import './dominio/instalacion';
 import router from './router';
 import { registrarManejadorSesionExpirada } from './services/http';
 import { useAuthStore } from './stores/auth';

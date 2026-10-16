@@ -6,6 +6,7 @@ import { useEstablecimientoStore } from '../stores/establecimiento';
 import { useLogoStore } from '../stores/logo';
 import BarraConexion from '../components/comunes/BarraConexion.vue';
 import LogoInstitucional from '../components/comunes/LogoInstitucional.vue';
+import BotonInstalar from '../components/comunes/BotonInstalar.vue';
 import Icono from '../components/comunes/Icono.vue';
 import bodega from '../services/bodega';
 
@@ -189,6 +190,7 @@ onMounted(() => establecimiento.cargar());
           </RouterLink>
         </div>
       </nav>
+      <BotonInstalar />
     </aside>
 
     <!-- Menú desplegable en pantalla angosta: la barra fija no cabe -->
@@ -235,6 +237,7 @@ onMounted(() => establecimiento.cargar());
           </RouterLink>
         </div>
       </nav>
+      <BotonInstalar />
     </aside>
 
     <div :class="sinMenu ? '' : 'panel:pl-[248px]'">

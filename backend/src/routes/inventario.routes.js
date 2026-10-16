@@ -130,7 +130,11 @@ router.post(
     renglones: z.array(z.object({
       prescripcionId: z.coerce.number().int().positive(),
       cantidad: z.coerce.number().int().min(0),
+      // Inyectable o método puesto aquí, no llevado a casa.
+      aplicada: z.boolean().optional(),
     })).max(50).optional(),
+    // Se le explicó cómo tomarlo y cuándo regresar.
+    orientado: z.boolean().optional(),
   })),
   asincrono(dispensaciones.dispensarAtencion),
 );

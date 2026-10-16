@@ -5,7 +5,7 @@ import bodega from '../../services/bodega';
 import inventario from '../../services/inventario';
 import Icono from '../../components/comunes/Icono.vue';
 import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
-import { miles } from '../../components/bodega/diseno/PiezasBodega';
+import { miles, situacion } from '../../components/bodega/diseno/PiezasBodega';
 
 /**
  * Inicio de la bodega: tres tareas (recibir, entregar, cerrar el mes), cada
@@ -18,13 +18,22 @@ const router = useRouter();
 const resumen = ref(null);
 const insumos = ref([]);
 const pedidos = ref(0);
+const estado = ref(null);
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const nombreMes = (p) => (p ? MESES[Number(p.slice(5, 7)) - 1] : '');
 
 onMounted(async () => {
-  const [h, i, r] = await Promise.allSettled([bodega.hoy({}), inventario.insumos(), bodega.requisiciones()]);
+  const [h, i, r, b] = await Promise.allSettled([bodega.hoy({}), inventario.insumos(), bodega.requisiciones(), bodega.balance({})]);
   if (h.status === 'fulfilled') resumen.value = h.value;
+  if (b.status === 'fulfilled') {
+    const conteo = { agotado: 0, bajo: 0 };
+    for (const f of b.value.filas) {
+      const x = situacion(f.bres);
+      if (x in conteo) conteo[x] += 1;
+    }
+    estado.value = conteo;
+  }
   if (i.status === 'fulfilled') insumos.value = i.value.insumos ?? i.value;
   if (r.status === 'fulfilled') pedidos.value = r.value.requisiciones.filter((x) => ['solicitada', 'autorizada'].includes(x.estado)).length;
 });
@@ -75,7 +84,11 @@ const cierre = computed(() => {
     </div>
 
     <nav class="consultas" aria-label="Consultar">
-      <RouterLink to="/inventario/productos" class="consulta"><Icono nombre="inventario" :tamano="22" /> Productos</RouterLink>
+      <RouterLink to="/inventario/productos" class="consulta">
+        <Icono nombre="inventario" :tamano="22" /> Productos
+        <!-- Agotados con la regla del BRES, la misma de Existencias -->
+        <span v-if="estado?.agotado" class="aviso-rojo" :title="`${estado.agotado} agotados en bodega`">{{ estado.agotado }}</span>
+      </RouterLink>
       <RouterLink to="/inventario/semaforo" class="consulta">
         <Icono nombre="vencimiento" :tamano="22" /> Semáforo
         <span v-if="r?.vencidos" class="aviso-rojo">{{ r.vencidos }}</span>

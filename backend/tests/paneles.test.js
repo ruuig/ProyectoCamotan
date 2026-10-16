@@ -348,15 +348,16 @@ describe('panel del administrador', () => {
     expect([...rango].sort((a, b) => b - a)).toEqual(rango);
   });
 
-  it('el abastecimiento no inventa dias cuando no hay consumo registrado', async () => {
+  it('el abastecimiento usa la regla del BRES: solo agotados y bajo minimo, primero lo mas consumido', async () => {
     const r = await como('admin', request(app).get('/api/v1/indicadores/panel/admin'));
 
-    for (const fila of r.body.abastecimiento.lista) {
-      if (fila.sinConsumo) {
-        expect(fila.dias).toBeNull();
-        expect(fila.color).toBeNull();
-      }
-    }
+    const a = r.body.abastecimiento;
+    const { agotado, bajo, bien, sin_consumo: sinConsumo } = a.conteo;
+    expect(agotado + bajo + bien + sinConsumo).toBe(a.total);
+    expect(a.lista.every((f) => ['agotado', 'bajo'].includes(f.situacion))).toBe(true);
+    expect(a.lista.every((f) => f.situacion !== 'agotado' || f.bodega === 0)).toBe(true);
+    const promedios = a.lista.map((f) => f.promedio);
+    expect([...promedios].sort((x, y) => y - x)).toEqual(promedios);
   });
 
   it('no dibuja la grafica sin al menos una semana de registros', async () => {

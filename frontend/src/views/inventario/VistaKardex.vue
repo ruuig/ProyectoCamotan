@@ -7,7 +7,7 @@ import inventario from '../../services/inventario';
 import Icono from '../../components/comunes/Icono.vue';
 import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
 import { miles } from '../../components/bodega/diseno/PiezasBodega';
-import { fecha, periodoActual } from '../../dominio/bodega';
+import { fecha, periodoActual, leerAnotarReclamar, guardarAnotarReclamar, observacionKardex } from '../../dominio/bodega';
 
 /**
  * Kardex de cada producto de la bodega: cada ingreso y cada despacho con su
@@ -25,6 +25,10 @@ const tarjeta = ref(null);
 const movidos = ref([]);
 const error = ref('');
 const cargando = ref(false);
+// "Faltan N por reclamar" es un recordatorio para la bodega; hay quien no lo
+// quiere en la tarjeta. Se recuerda en este equipo y vale también al imprimir.
+const anotarReclamar = ref(leerAnotarReclamar());
+watch(anotarReclamar, guardarAnotarReclamar);
 
 const q = computed(() => (modo.value === 'todo' ? {} : modo.value === 'desde' ? { desde: desde.value } : { periodo: periodo.value }));
 const enlaceTodos = computed(() => `/imprimir/kardex?${new URLSearchParams(q.value)}`);
@@ -93,6 +97,11 @@ onMounted(async () => {
         </div>
         <BuscadorInsumo v-else :insumos="insumos" placeholder="Buscar producto" @elegir="elegir" />
       </div>
+      <label v-if="tarjeta" class="interruptor" title="Anota en Observaciones lo que llegó de menos y falta reclamar">
+        <input v-model="anotarReclamar" type="checkbox" />
+        <span class="pista" aria-hidden="true" />
+        Anotar faltantes por reclamar
+      </label>
       <RouterLink v-if="tarjeta" :to="enlaceUno" target="_blank" class="b-btn primario"><Icono nombre="imprimir" :tamano="18" /> Imprimir en la tarjeta</RouterLink>
     </div>
 
@@ -139,7 +148,7 @@ onMounted(async () => {
               <td class="n">{{ f.reajuste != null ? `${f.reajuste > 0 ? '+' : ''}${miles(f.reajuste)}` : '' }}</td>
               <td class="n fuerte">{{ miles(f.saldo) }}</td>
               <td class="n">{{ f.saldo && f.valorSaldo != null ? dinero(f.valorSaldo / f.saldo) : '' }}</td>
-              <td class="text-sm">{{ f.observaciones }}</td>
+              <td class="text-sm">{{ observacionKardex(f, anotarReclamar) }}</td>
             </tr>
             <tr v-if="!tarjeta.filas.length"><td colspan="13" class="b-vacio">Sin movimientos en {{ todo ? 'la historia' : 'este mes' }}.</td></tr>
           </tbody>
@@ -180,6 +189,13 @@ onMounted(async () => {
 .kardex { max-height: max(360px, calc(100vh - 380px)); }
 .grupo { text-align: center; border-bottom: 1px solid #E2E8F0; }
 .anterior td { background: #F8FAFC; font-weight: 700; color: #475569; }
+.interruptor { position: relative; display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 14px; font-weight: 800; font-size: 14px; color: #334155; cursor: pointer; user-select: none; }
+.interruptor input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pista { position: relative; flex-shrink: 0; width: 38px; height: 22px; border-radius: 999px; background: #CBD5E1; transition: background .15s; }
+.pista::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.interruptor input:checked + .pista { background: #2F83C4; }
+.interruptor input:checked + .pista::after { transform: translateX(16px); }
+.interruptor input:focus-visible + .pista { box-shadow: 0 0 0 3px rgba(74, 155, 214, .35); }
 /* --- Relieve (estilo duo) --- */
 .elegido { border-bottom-width: 4px; border-bottom-color: #0B163A; border-radius: 14px; }
 .resumen div { border-bottom-width: 4px; border-radius: 14px; }

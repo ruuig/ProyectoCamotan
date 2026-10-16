@@ -103,10 +103,36 @@ const sangria = (texto) => (texto ? `        ${texto}` : '');
 const nombre = (texto) => (texto ? `                    ${texto}` : '');
 const unidad = computed(() => r.value?.unidadSeccion ?? '');
 
+/**
+ * Lo que llegó a bodega con su documento, en el mismo formulario: la bodega es
+ * la unidad que recibe, lo solicitado y autorizado es lo que dice el
+ * documento, y lo despachado es lo que de verdad llegó.
+ */
+function desdeRecepcion(x) {
+  return {
+    id: x.id,
+    numero: x.numeroDocumento ?? x.acta ?? null,
+    unidadSeccion: 'Bodega',
+    fechaSolicitud: x.fecha,
+    solicitante: x.registradaPor,
+    observaciones: x.observaciones ?? '',
+    renglones: x.renglones.map((g, i) => ({
+      orden: i + 1,
+      descripcion: `${g.insumo} · Lote ${g.numeroLote}`,
+      unidadMedida: g.unidad,
+      cantidadSolicitada: g.cantidadDocumento,
+      cantidadAutorizada: g.cantidadDocumento,
+      cantidadDespachada: g.cantidadDocumento - (g.porReponer ?? 0),
+    })),
+  };
+}
+
 onMounted(async () => {
   try {
     est.value = await cargarEstablecimiento();
-    r.value = (await bodega.requisicion(route.params.id)).requisicion;
+    r.value = route.name === 'imprimir-requisicion-recepcion'
+      ? desdeRecepcion((await bodega.recepcion(route.params.id)).recepcion)
+      : (await bodega.requisicion(route.params.id)).requisicion;
     registrarImpresion('requisicion', r.value.numero ?? `id ${r.value.id}`);
   } catch (fallo) {
     error.value = fallo.message;

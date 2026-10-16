@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { RouterView, RouterLink, useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useEstablecimientoStore } from '../stores/establecimiento';
@@ -7,6 +7,7 @@ import { useLogoStore } from '../stores/logo';
 import BarraConexion from '../components/comunes/BarraConexion.vue';
 import LogoInstitucional from '../components/comunes/LogoInstitucional.vue';
 import Icono from '../components/comunes/Icono.vue';
+import bodega from '../services/bodega';
 
 // El estilo con relieve (styles/duo.css) vive solo dentro de la aplicación:
 // el login y las hojas de impresión no pasan por este layout.
@@ -20,8 +21,22 @@ logo.cargar();
 const router = useRouter();
 const route = useRoute();
 const menuAbierto = ref(false);
-// Bodega trabaja en un solo módulo: su pantalla ocupa todo el ancho, sin menú.
-const sinMenu = computed(() => auth.rol === 'bodega');
+// Todos los roles tienen el menú a la izquierda: bodega también, con sus tareas.
+const sinMenu = computed(() => false);
+
+// Pedidos de los servicios que esperan a bodega: el número junto a "Pedidos".
+const contadores = ref({});
+async function contar() {
+  if (auth.rol !== 'bodega') return;
+  try {
+    const { requisiciones } = await bodega.requisiciones();
+    contadores.value = { pedidos: requisiciones.filter((r) => ['solicitada', 'autorizada'].includes(r.estado)).length };
+  } catch {
+    // El menú no se detiene por un contador.
+  }
+}
+onMounted(contar);
+watch(() => route.fullPath, contar);
 
 /**
  * Los módulos se agrupan por lo que la persona hace, no por cómo está hecho
@@ -35,7 +50,8 @@ const GRUPOS = [
       { ruta: '__panel', etiqueta: 'Panel de inicio', icono: 'panel', roles: ['admin', 'preconsulta', 'medico', 'farmacia', 'bodega'] },
       { ruta: '/cola', etiqueta: 'Cola de atención', icono: 'cola', roles: ['admin', 'preconsulta', 'medico'] },
       { ruta: '/pacientes', etiqueta: 'Pacientes', icono: 'pacientes', roles: ['admin', 'preconsulta', 'medico'] },
-      { ruta: '/sigsa', etiqueta: 'SIGSA 3CS', icono: 'consolidado', roles: ['admin', 'medico'] },
+      // El médico revisa su propio 3C/S; dirección lo ve por responsable en Consolidados.
+      { ruta: '/sigsa', etiqueta: 'Mi SIGSA 3C/S', icono: 'consolidado', roles: ['medico'] },
     ],
   },
   {
@@ -43,16 +59,41 @@ const GRUPOS = [
     enlaces: [
       // Exacto: el control de farmacia vive dentro de /dispensacion y tiene su propio enlace.
       { ruta: '/dispensacion', etiqueta: 'Dispensación', icono: 'dispensacion', roles: ['admin', 'farmacia'], exacto: true },
-      { ruta: '/dispensacion/control', etiqueta: 'Control de farmacia', icono: 'inventario', roles: ['admin', 'farmacia'] },
-      // Farmacia pide a bodega con requisición, como los demás servicios.
-      { ruta: '/inventario/requisiciones', etiqueta: 'Requisiciones', icono: 'trasladar', roles: ['farmacia'] },
-      { ruta: '/inventario', etiqueta: 'Bodega', icono: 'inventario', roles: ['admin', 'bodega'] },
+      // Estante, pedido a bodega, el día y el conteo: todo el inventario de farmacia en un lugar.
+      { ruta: '/dispensacion/control', etiqueta: 'Estante y pedidos', icono: 'inventario', roles: ['admin', 'farmacia'] },
+      { ruta: '/inventario', etiqueta: 'Bodega', icono: 'inventario', roles: ['admin'] },
+    ],
+  },
+  // Bodega: lo del día arriba, el cierre del mes en medio, las consultas abajo.
+  {
+    titulo: 'Bodega',
+    enlaces: [
+      { ruta: '/inventario/requisiciones', etiqueta: 'Pedidos', icono: 'trasladar', roles: ['bodega'], contador: 'pedidos' },
+      { ruta: '/inventario/recibir', etiqueta: 'Recibir', icono: 'recibir', roles: ['bodega'] },
+      { ruta: '/inventario/productos', etiqueta: 'Existencias', icono: 'inventario', roles: ['bodega'] },
+      { ruta: '/inventario/semaforo', etiqueta: 'Semáforo', icono: 'vencimiento', roles: ['bodega'] },
+    ],
+  },
+  {
+    titulo: 'Cierre del mes',
+    enlaces: [
+      { ruta: '/inventario/reportes', etiqueta: 'Reportes de servicios', icono: 'consolidado', roles: ['bodega'] },
+      { ruta: '/inventario/bres', etiqueta: 'BRES', icono: 'hojaCalculo', roles: ['bodega'] },
+      { ruta: '/inventario/cierre', etiqueta: 'Inventario de cierre', icono: 'correcto', roles: ['bodega'] },
+    ],
+  },
+  {
+    titulo: 'Consultas',
+    enlaces: [
+      { ruta: '/inventario/kardex', etiqueta: 'Kardex', icono: 'hojaCalculo', roles: ['bodega'] },
+      { ruta: '/inventario/trazabilidad', etiqueta: 'Trazabilidad', icono: 'trazabilidad', roles: ['bodega'] },
+      { ruta: '/inventario/bajas', etiqueta: 'Bajas y retiros', icono: 'quitar', roles: ['bodega'] },
     ],
   },
   {
     titulo: 'Dirección',
     enlaces: [
-      { ruta: '/consolidado', etiqueta: 'Consolidado', icono: 'consolidado', roles: ['admin'] },
+      { ruta: '/consolidado', etiqueta: 'Consolidados', icono: 'consolidado', roles: ['admin'] },
       { ruta: '/administracion', etiqueta: 'Administración', icono: 'administracion', roles: ['admin'] },
     ],
   },
@@ -144,6 +185,7 @@ onMounted(() => establecimiento.cargar());
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />
             <span class="truncate">{{ enlace.etiqueta }}</span>
+            <span v-if="enlace.contador && contadores[enlace.contador]" class="contador-menu">{{ contadores[enlace.contador] }}</span>
           </RouterLink>
         </div>
       </nav>
@@ -189,6 +231,7 @@ onMounted(() => establecimiento.cargar());
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />
             <span class="truncate">{{ enlace.etiqueta }}</span>
+            <span v-if="enlace.contador && contadores[enlace.contador]" class="contador-menu">{{ contadores[enlace.contador] }}</span>
           </RouterLink>
         </div>
       </nav>
@@ -262,4 +305,5 @@ onMounted(() => establecimiento.cargar());
 .marca-centro strong { display: block; font-size: 15px; font-weight: 800; line-height: 1.2; color: #14244A; }
 .marca-centro span { display: flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 13px; font-weight: 600; color: #64748B; }
 .marca-centro svg { flex-shrink: 0; color: #4A9BD6; }
+.contador-menu { margin-left: auto; min-width: 24px; padding: 1px 8px; border-radius: 9px; background: #D64545; color: #fff; font-size: 13px; font-weight: 900; text-align: center; }
 </style>

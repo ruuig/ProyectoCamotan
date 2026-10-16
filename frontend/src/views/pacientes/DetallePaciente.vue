@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/auth';
 import BloqueAntropometria from '../../components/comunes/BloqueAntropometria.vue';
 import Icono from '../../components/comunes/Icono.vue';
 import HojaAnterior from '../../components/consulta/HojaAnterior.vue';
+import { estiloEtapa, etapaDe, iniciales } from '../../dominio/etapas';
 
 /**
  * Expediente del paciente.
@@ -205,79 +206,150 @@ onMounted(() => {
   cargar();
   cargarInsumos();
 });
+
+// --- Para el diseño ----------------------------------------------------------
+
+const etapa = computed(() => (paciente.value ? etapaDe(paciente.value) : null));
+
+/** La edad en dos piezas: cifra grande y el resto. */
+const edadGrande = computed(() => {
+  const e = paciente.value?.edad;
+  if (!e) return null;
+  if (e.anios >= 1) return { n: e.anios, u: e.anios === 1 ? 'año' : 'años', resto: e.meses > 0 ? `y ${e.meses} ${e.meses === 1 ? 'mes' : 'meses'}` : '' };
+  return { n: e.edadMeses, u: e.edadMeses === 1 ? 'mes' : 'meses', resto: '' };
+});
+
+// La atención de hoy en tres pasos, para ver de un vistazo en qué va.
+const pasos = computed(() => {
+  const a = atencionAbierta.value;
+  if (!a) return [];
+  return [
+    { texto: 'Registrada', hecho: true },
+    { texto: 'Signos vitales', hecho: Boolean(a.preconsulta) },
+    { texto: 'En consulta', hecho: a.estado === 'en_atencion' },
+  ];
+});
+
+const ESTADO_PUNTO = { atendido: 'p-bien', en_espera: 'p-atencion', en_atencion: 'p-accion', ausente: 'p-neutro', cancelada: 'p-neutro' };
 </script>
 
 <template>
-  <section v-if="paciente">
+  <section v-if="paciente" :style="estiloEtapa(etapa)" class="perfil">
     <RouterLink to="/pacientes" class="b-volver"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> Pacientes</RouterLink>
 
     <p v-if="error" role="alert" class="b-aviso error mb-4">{{ error }}</p>
 
     <!-- Quién es -->
-    <header class="b-panel encabezado">
-      <span class="codigo" :class="paciente.expedientePapel ? '' : 'sin-papel'">
-        <small>{{ paciente.expedientePapel ? 'Ficha' : 'Expediente' }}</small>
-        <b>{{ paciente.expedientePapel || paciente.expediente }}</b>
-        <small>{{ paciente.expedientePapel ? `Exp. ${paciente.expediente}` : 'sin ficha de papel' }}</small>
-      </span>
-      <div class="min-w-0 flex-1">
-        <h1 class="b-titulo">{{ paciente.apellidos }}, {{ paciente.nombres }}</h1>
-        <p class="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-apagado">
-          <span v-if="paciente.cui" class="tabular-nums">CUI {{ paciente.cui }}</span>
-          <span v-for="d in distintivos" :key="d.texto" class="b-estado" :class="d.urgente ? 'retirado' : 'agotado'">{{ d.texto }}</span>
-        </p>
+    <header class="heroe">
+      <div class="heroe-banda" />
+      <div class="heroe-cuerpo">
+        <span class="avatar">{{ iniciales(paciente) }}</span>
+        <div class="min-w-0 flex-1">
+          <h1 class="nombre">{{ paciente.apellidos }}, {{ paciente.nombres }}</h1>
+          <p class="mt-2 flex flex-wrap items-center gap-2">
+            <span v-if="etapa" class="pill etapa">{{ etapa.corta }}</span>
+            <span class="pill">{{ paciente.sexo === 'M' ? 'Hombre' : 'Mujer' }}</span>
+            <span v-if="paciente.cui" class="pill tabular-nums">CUI {{ paciente.cui }}</span>
+            <span v-for="d in distintivos" :key="d.texto" class="pill" :class="d.urgente ? 'urgente' : 'contexto'">{{ d.texto }}</span>
+          </p>
+        </div>
+        <span class="codigo" :class="paciente.expedientePapel ? '' : 'sin-papel'">
+          <small>{{ paciente.expedientePapel ? 'Ficha' : 'Expediente' }}</small>
+          <b>{{ paciente.expedientePapel || paciente.expediente }}</b>
+          <small>{{ paciente.expedientePapel ? `Exp. ${paciente.expediente}` : 'sin ficha de papel' }}</small>
+        </span>
       </div>
-      <div class="b-acciones">
-        <RouterLink :to="`/imprimir/expediente/${$route.params.id}`" target="_blank" class="b-btn secundario"><Icono nombre="imprimir" :tamano="20" /> Resumen</RouterLink>
-        <RouterLink :to="`/pacientes/${$route.params.id}/ficha`" class="b-btn secundario"><Icono nombre="lapiz" :tamano="20" /> Ficha</RouterLink>
+      <div class="heroe-acciones">
         <template v-if="puedeRegistrar">
-          <RouterLink v-if="atencionAbierta && !atencionAbierta.preconsulta" :to="`/preconsulta/${atencionAbierta.id}`" class="b-btn primario"><Icono nombre="agregar" :tamano="20" /> Registrar preconsulta</RouterLink>
-          <button v-else-if="!atencionAbierta" type="button" class="b-btn primario" :disabled="abriendo" @click="abrirAtencion">
-            <Icono nombre="agregar" :tamano="20" /> {{ abriendo ? 'Abriendo…' : 'Abrir atención' }}
+          <RouterLink v-if="atencionAbierta && !atencionAbierta.preconsulta" :to="`/preconsulta/${atencionAbierta.id}`" class="b-btn primario grande"><Icono nombre="agregar" :tamano="22" :grosor="2.4" /> Registrar preconsulta</RouterLink>
+          <button v-else-if="!atencionAbierta" type="button" class="b-btn primario grande" :disabled="abriendo" @click="abrirAtencion">
+            <Icono nombre="agregar" :tamano="22" :grosor="2.4" /> {{ abriendo ? 'Abriendo…' : 'Abrir atención' }}
           </button>
         </template>
+        <RouterLink :to="`/pacientes/${$route.params.id}/ficha`" class="b-btn secundario grande"><Icono nombre="lapiz" :tamano="20" /> Ficha</RouterLink>
+        <RouterLink :to="`/imprimir/expediente/${$route.params.id}`" target="_blank" class="b-btn secundario grande"><Icono nombre="imprimir" :tamano="20" /> Resumen</RouterLink>
       </div>
     </header>
 
-    <!-- Datos -->
-    <dl class="datos mt-4">
-      <div><dt>Edad</dt><dd>{{ edadLegible(paciente.edad) }}<small v-if="paciente.fechaNacimientoEstimada"> aprox.</small></dd></div>
-      <div><dt>Sexo</dt><dd>{{ paciente.sexo === 'M' ? 'Hombre' : 'Mujer' }}</dd></div>
-      <div><dt>Comunidad</dt><dd>{{ paciente.comunidad }}</dd></div>
-      <div><dt>Teléfono</dt><dd :class="paciente.telefono ? '' : 'vacio'">{{ paciente.telefono || '—' }}</dd></div>
-      <div v-if="paciente.responsableNombre"><dt>Responsable</dt><dd>{{ paciente.responsableNombre }}<small v-if="paciente.responsableParentesco"> · {{ paciente.responsableParentesco }}</small></dd></div>
-      <div><dt>Última atención</dt><dd :class="ultimaAtencion ? '' : 'vacio'">{{ ultimaAtencion ? fecha(ultimaAtencion.registradaEn) : 'Nunca' }}<small v-if="cerradas.length"> · {{ cerradas.length }} en total</small></dd></div>
-    </dl>
-
-    <!-- Lo que pide hacer algo -->
-    <div v-if="atencionAbierta" class="b-aviso ok mt-4 flex-wrap items-center justify-between gap-2">
-      <span>Atención {{ ESTADO_ATENCION[atencionAbierta.estado].texto.toLowerCase() }}<template v-if="atencionAbierta.preconsulta"> · preconsulta registrada</template></span>
-      <button v-if="puedeRegistrar && !cancelando" type="button" class="b-btn secundario chico" @click="cancelando = true">Cancelar atención</button>
-    </div>
-    <form v-if="cancelando" class="b-panel mt-3 flex flex-wrap items-end gap-3 p-4" @submit.prevent="cancelarAtencion">
-      <div class="min-w-[16rem] flex-1">
-        <label for="motivo-cancelar" class="b-etiqueta">Por qué se cancela</label>
-        <input id="motivo-cancelar" v-model="motivoCancelacion" required minlength="5" placeholder="Ej.: se abrió por error, era otro paciente" class="b-campo" />
+    <!-- Datos en tarjetas -->
+    <div class="datos mt-4">
+      <div class="dato edad">
+        <span class="d-et">Edad</span>
+        <span v-if="edadGrande" class="d-grande"><b>{{ edadGrande.n }}</b> {{ edadGrande.u }}</span>
+        <span class="d-sub">{{ [edadGrande?.resto, paciente.fechaNacimientoEstimada ? 'aproximada' : ''].filter(Boolean).join(' · ') }}</span>
       </div>
-      <button type="button" class="b-btn secundario" @click="cancelando = false">No cancelar</button>
-      <button type="submit" class="b-btn primario" :disabled="motivoCancelacion.trim().length < 5">Cancelar atención</button>
-    </form>
-    <div v-if="insumos && insumos.conRetiroActivo > 0" class="b-aviso error mt-4 flex-col">
-      <span>Recibió {{ insumos.conRetiroActivo }} {{ insumos.conRetiroActivo === 1 ? 'producto' : 'productos' }} bajo retiro sanitario</span>
-      <ul class="text-sm">
-        <li v-for="e in insumos.entregas.filter((x) => x.retiro)" :key="e.movimientoId">{{ e.insumo.nombreGenerico }} · lote {{ e.lote.numeroLote }} · {{ e.retiro.referencia }}</li>
-      </ul>
+      <div class="dato">
+        <span class="d-et"><Icono nombre="ubicacion" :tamano="15" :grosor="2.2" /> Comunidad</span>
+        <span class="d-valor">{{ paciente.comunidad || '—' }}</span>
+      </div>
+      <div class="dato">
+        <span class="d-et"><Icono nombre="llamar" :tamano="15" :grosor="2.2" /> Teléfono</span>
+        <span class="d-valor" :class="paciente.telefono ? '' : 'vacio'">{{ paciente.telefono || 'Sin teléfono' }}</span>
+      </div>
+      <div v-if="paciente.responsableNombre" class="dato">
+        <span class="d-et"><Icono nombre="usuario" :tamano="15" :grosor="2.2" /> Responsable</span>
+        <span class="d-valor">{{ paciente.responsableNombre }}</span>
+        <span v-if="paciente.responsableParentesco" class="d-sub">{{ paciente.responsableParentesco }}</span>
+      </div>
+      <div class="dato">
+        <span class="d-et"><Icono nombre="reloj" :tamano="15" :grosor="2.2" /> Última atención</span>
+        <span class="d-valor" :class="ultimaAtencion ? '' : 'vacio'">{{ ultimaAtencion ? fecha(ultimaAtencion.registradaEn) : 'Nunca' }}</span>
+        <span v-if="cerradas.length" class="d-sub">{{ cerradas.length }} {{ cerradas.length === 1 ? 'atención' : 'atenciones' }} en total</span>
+      </div>
     </div>
-    <div v-if="paciente.ficha && !paciente.ficha.completa" class="b-aviso atencion mt-4 items-center justify-between">
-      <span>Faltan {{ paciente.ficha.faltantes.length }} datos de la ficha: {{ paciente.ficha.faltantes.map((f) => f.etiqueta.toLowerCase()).join(', ') }}</span>
-      <RouterLink :to="`/pacientes/${$route.params.id}/ficha`" class="b-btn secundario chico shrink-0">Completar</RouterLink>
+
+    <!-- Lo que pide hacer algo hoy -->
+    <div v-if="atencionAbierta || (paciente.ficha && !paciente.ficha.completa) || (insumos && insumos.conRetiroActivo > 0)" class="tareas mt-4">
+      <div v-if="insumos && insumos.conRetiroActivo > 0" class="tarea t-critico">
+        <span class="t-ic"><Icono nombre="alerta" :tamano="24" :grosor="2.4" /></span>
+        <div class="min-w-0 flex-1">
+          <p class="t-titulo">Recibió {{ insumos.conRetiroActivo }} {{ insumos.conRetiroActivo === 1 ? 'producto' : 'productos' }} bajo retiro sanitario</p>
+          <ul class="t-texto">
+            <li v-for="e in insumos.entregas.filter((x) => x.retiro)" :key="e.movimientoId">{{ e.insumo.nombreGenerico }} · lote {{ e.lote.numeroLote }} · {{ e.retiro.referencia }}</li>
+          </ul>
+        </div>
+      </div>
+
+      <div v-if="atencionAbierta" class="tarea t-accion">
+        <span class="t-ic"><Icono nombre="cola" :tamano="24" :grosor="2.2" /></span>
+        <div class="min-w-0 flex-1">
+          <p class="t-titulo">Atención de hoy: {{ ESTADO_ATENCION[atencionAbierta.estado].texto.toLowerCase() }}</p>
+          <ol class="pasos">
+            <li v-for="(p, i) in pasos" :key="p.texto" :class="p.hecho ? 'hecho' : ''">
+              <span class="paso-n"><Icono v-if="p.hecho" nombre="correcto" :tamano="16" :grosor="3" /><template v-else>{{ i + 1 }}</template></span>
+              {{ p.texto }}
+            </li>
+          </ol>
+        </div>
+        <button v-if="puedeRegistrar && !cancelando" type="button" class="b-btn peligro chico" @click="cancelando = true">Cancelar atención</button>
+      </div>
+      <form v-if="cancelando" class="tarea t-critico flex-wrap" @submit.prevent="cancelarAtencion">
+        <div class="min-w-[16rem] flex-1">
+          <label for="motivo-cancelar" class="t-titulo block">¿Por qué se cancela?</label>
+          <input id="motivo-cancelar" v-model="motivoCancelacion" required minlength="5" placeholder="Ej.: se abrió por error, era otro paciente" class="b-campo mt-2" />
+        </div>
+        <button type="button" class="b-btn secundario" @click="cancelando = false">No cancelar</button>
+        <button type="submit" class="b-btn rojo" :disabled="motivoCancelacion.trim().length < 5">Cancelar atención</button>
+      </form>
+
+      <div v-if="paciente.ficha && !paciente.ficha.completa" class="tarea t-atencion">
+        <span class="t-ic"><Icono nombre="lapiz" :tamano="24" :grosor="2.2" /></span>
+        <div class="min-w-0 flex-1">
+          <p class="t-titulo">Faltan {{ paciente.ficha.faltantes.length }} {{ paciente.ficha.faltantes.length === 1 ? 'dato' : 'datos' }} de la ficha</p>
+          <p class="mt-1 flex flex-wrap gap-1.5">
+            <span v-for="f in paciente.ficha.faltantes" :key="f.campo" class="falta-chip">{{ f.etiqueta }}</span>
+          </p>
+        </div>
+        <RouterLink :to="`/pacientes/${$route.params.id}/ficha`" class="b-btn secundario">Completar</RouterLink>
+      </div>
     </div>
 
     <!-- Embarazo activo -->
-    <div v-if="paciente.embarazo" class="b-panel embarazo mt-4">
+    <div v-if="paciente.embarazo" class="tarea t-embarazo mt-4">
+      <span class="t-ic"><Icono nombre="crecimiento" :tamano="24" :grosor="2.2" /></span>
       <div class="min-w-0 flex-1">
-        <p class="font-bold text-tinta">{{ paciente.embarazo.texto }}</p>
-        <p v-if="paciente.embarazo.fechaProbableParto" class="text-sm font-semibold text-apagado">Parto probable {{ fecha(paciente.embarazo.fechaProbableParto) }}</p>
+        <p class="t-titulo">{{ paciente.embarazo.texto }}</p>
+        <p v-if="paciente.embarazo.fechaProbableParto" class="t-texto">Parto probable {{ fecha(paciente.embarazo.fechaProbableParto) }}</p>
       </div>
       <form v-if="cerrandoEmbarazo" class="flex flex-wrap items-center gap-2" @submit.prevent="cerrarEmbarazo">
         <input v-model="motivoCierre" required minlength="3" placeholder="Motivo del cierre" aria-label="Motivo del cierre" class="b-campo w-[260px]" />
@@ -287,32 +359,34 @@ onMounted(() => {
       <button v-else-if="puedeRegistrar" type="button" class="b-btn secundario chico" @click="cerrandoEmbarazo = true">Cerrar embarazo</button>
     </div>
 
-    <!-- Dos columnas -->
+    <!-- Historia y crecimiento -->
     <div class="columnas mt-5">
-      <section class="b-panel">
-        <header class="b-panel-cabeza">
-          <h2 class="b-panel-titulo">Historial de atenciones</h2>
-          <span class="b-contador gris">{{ atenciones.length }}</span>
+      <section class="caja">
+        <header class="caja-cabeza">
+          <h2>Historial de atenciones</h2>
+          <span class="cuenta">{{ atenciones.length }}</span>
         </header>
-        <ol v-if="atenciones.length" class="historial">
-          <li v-for="a in atenciones" :key="a.id">
+        <ol v-if="atenciones.length" class="linea-tiempo">
+          <li v-for="a in atenciones" :key="a.id" :class="ESTADO_PUNTO[a.estado] ?? 'p-neutro'">
             <span class="dia">
               <b>{{ new Date(a.registradaEn).getDate() }}</b>
               <small>{{ MESES[new Date(a.registradaEn).getMonth()] }} {{ new Date(a.registradaEn).getFullYear() }}</small>
             </span>
-            <span class="min-w-0 flex-1">
-              <b class="block text-tinta">{{ a.diagnosticoTxt || a.motivoConsulta || 'Sin diagnóstico' }}</b>
-              <span class="mt-1 flex flex-wrap items-center gap-2">
-                <span v-if="a.diagnosticoCie" class="cie">{{ a.diagnosticoCie }}</span>
-                <span class="b-estado" :class="CLASE_ESTADO[a.estado] ?? 'agotado'">{{ ESTADO_ATENCION[a.estado]?.texto ?? a.estado }}</span>
-                <span v-if="a.gravedad === 'urgente'" class="b-estado retirado">Urgente</span>
-              </span>
-              <small v-if="a.diagnosticoTxt && a.motivoConsulta">Motivo: {{ a.motivoConsulta }}</small>
-              <small v-if="a.tratamiento">{{ a.tratamiento }}</small>
-            </span>
-            <button v-if="puedeVerHoja && a.estado === 'atendido'" type="button" class="ver-hoja" @click="hojaAbierta = a.id">
-              Ver hoja <Icono nombre="irA" :tamano="14" />
-            </button>
+            <div class="evento">
+              <div class="min-w-0 flex-1">
+                <p class="ev-titulo">{{ a.diagnosticoTxt || a.motivoConsulta || 'Sin diagnóstico' }}</p>
+                <p class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <span class="estado">{{ ESTADO_ATENCION[a.estado]?.texto ?? a.estado }}</span>
+                  <span v-if="a.diagnosticoCie" class="cie">{{ a.diagnosticoCie }}</span>
+                  <span v-if="a.gravedad === 'urgente'" class="pill urgente chica">Urgente</span>
+                </p>
+                <p v-if="a.diagnosticoTxt && a.motivoConsulta" class="ev-sub">Motivo: {{ a.motivoConsulta }}</p>
+                <p v-if="a.tratamiento" class="ev-sub">{{ a.tratamiento }}</p>
+              </div>
+              <button v-if="puedeVerHoja && a.estado === 'atendido'" type="button" class="b-btn secundario chico shrink-0" @click="hojaAbierta = a.id">
+                Ver hoja <Icono nombre="irA" :tamano="14" :grosor="2.6" />
+              </button>
+            </div>
           </li>
         </ol>
         <p v-else class="b-vacio">Sin atenciones registradas.</p>
@@ -321,10 +395,10 @@ onMounted(() => {
       <div class="space-y-4">
         <BloqueAntropometria v-if="paciente.edad.edadMeses <= 60" :paciente-id="paciente.id" :edad-meses="paciente.edad.edadMeses" />
 
-        <section v-if="insumos && insumos.entregas.length" class="b-panel">
-          <header class="b-panel-cabeza">
-            <h2 class="b-panel-titulo">Insumos entregados</h2>
-            <span class="b-contador gris">{{ insumos.entregas.length }}</span>
+        <section v-if="insumos && insumos.entregas.length" class="caja">
+          <header class="caja-cabeza">
+            <h2>Insumos entregados</h2>
+            <span class="cuenta">{{ insumos.entregas.length }}</span>
           </header>
           <ul class="entregas">
             <li v-for="e in insumos.entregas" :key="e.movimientoId">
@@ -335,17 +409,17 @@ onMounted(() => {
                   · {{ fecha(e.fecha) }}<template v-if="e.entregadoPor"> · entregó {{ e.entregadoPor }}</template>
                 </small>
                 <small v-if="e.medico || e.diagnostico">Recetó {{ e.medico ?? '—' }}<template v-if="e.diagnostico"> · {{ e.diagnostico }}</template></small>
-                <small v-if="e.anulada" class="text-[#B7710A]">Entrega anulada</small>
-                <small v-if="e.retiro" class="font-bold text-[#C03535]">Bajo retiro sanitario</small>
+                <small v-if="e.anulada" class="text-[#8A4B00]">Entrega anulada</small>
+                <small v-if="e.retiro" class="font-bold text-[#A83232]">Bajo retiro sanitario</small>
               </span>
-              <b class="tabular-nums text-tinta">{{ e.cantidad }}</b>
+              <b class="cant">{{ e.cantidad }}</b>
             </li>
           </ul>
         </section>
 
-        <section v-if="ofreceEmbarazo" class="b-panel">
-          <header class="b-panel-cabeza">
-            <h2 class="b-panel-titulo">Embarazo</h2>
+        <section v-if="ofreceEmbarazo" class="caja">
+          <header class="caja-cabeza">
+            <h2>Embarazo</h2>
             <button v-if="!panelEmbarazo" type="button" class="b-btn secundario chico" @click="panelEmbarazo = true"><Icono nombre="agregar" :tamano="16" /> Abrir</button>
           </header>
           <form v-if="panelEmbarazo" class="b-panel-cuerpo b-rejilla" @submit.prevent="abrirEmbarazo">
@@ -362,6 +436,7 @@ onMounted(() => {
               <button type="submit" class="b-btn primario chico">Abrir embarazo</button>
             </div>
           </form>
+          <p v-else class="px-4 pb-4 text-sm font-semibold text-apagado">Sin embarazo activo registrado.</p>
         </section>
       </div>
     </div>
@@ -375,37 +450,97 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.ver-hoja { align-self: center; flex-shrink: 0; display: inline-flex; align-items: center; gap: 2px; padding: 6px 12px; border: 2px solid #CBD5E1; border-radius: 9px; font-size: 13px; font-weight: 800; color: #172A5A; background: #fff; }
-.ver-hoja:hover { border-color: #172A5A; background: #EEF2FA; }
-.encabezado { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; padding: 18px 20px; }
-.codigo { display: inline-flex; flex-direction: column; align-items: center; min-width: 128px; padding: 6px 14px; border: 2px solid #172A5A; border-radius: 12px; line-height: 1.1; }
-.codigo b { font-size: 34px; font-weight: 700; color: #172A5A; font-variant-numeric: tabular-nums; }
-.codigo small { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748B; }
+/* La etapa de vida pone el color (--et, --et-fondo, --et-tinta): dominio/etapas. */
+.perfil { --et: #94A3B8; --et-fondo: #F1F4F8; --et-tinta: #475569; }
+
+/* --- Quién es ------------------------------------------------------------------ */
+.heroe { overflow: hidden; background: #fff; border: 2px solid #E5E9F0; border-bottom-width: 5px; border-radius: 24px; }
+.heroe-banda { height: 14px; background: var(--et); }
+.heroe-cuerpo { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 22px; padding: 20px 24px 8px; }
+.avatar {
+  display: grid; place-items: center; flex-shrink: 0; width: 84px; height: 84px; border-radius: 50%;
+  background: var(--et); color: #fff; font-size: 30px; font-weight: 900; box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .18);
+}
+.nombre { font-size: 30px; font-weight: 900; line-height: 1.12; letter-spacing: -.01em; color: #14244A; }
+.pill { display: inline-flex; align-items: center; padding: 3px 12px; border-radius: 10px; background: #F1F4F8; font-size: 14px; font-weight: 800; color: #475569; }
+.pill.etapa { background: var(--et-fondo); color: var(--et-tinta); }
+.pill.urgente { background: #FDECEC; color: #8C2323; }
+.pill.contexto { background: #EAF3FB; color: #174E80; }
+.pill.chica { padding: 1px 9px; font-size: 12px; }
+.codigo {
+  display: inline-flex; flex-direction: column; align-items: center; min-width: 136px; padding: 6px 14px; line-height: 1.1;
+  border: 2px solid #172A5A; border-bottom-width: 5px; border-radius: 16px;
+}
+.codigo b { font-size: 36px; font-weight: 900; color: #172A5A; font-variant-numeric: tabular-nums; }
+.codigo small { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748B; }
 .codigo.sin-papel { border-color: #CBD5E1; }
 .codigo.sin-papel b { font-size: 20px; }
-.datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); border: 2px solid #E2E8F0; border-radius: 14px; background: #fff; overflow: hidden; }
-.datos div { padding: 12px 16px; border-right: 2px solid #EEF2F6; }
-.datos div:last-child { border-right: none; }
-.datos dt { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
-.datos dd { margin-top: 2px; font-weight: 600; color: #14244A; }
-.datos dd small { font-weight: 600; color: #64748B; }
-.datos dd.vacio { color: #94A3B8; }
-.embarazo { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 18px; border-color: #B5E2CB; background: #F4FBF7; }
-.columnas { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
+.heroe-acciones { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 24px 20px; }
+.b-btn.grande { min-height: 52px; padding: 0 20px; font-size: 16px; border-radius: 16px; }
+
+/* --- Datos ------------------------------------------------------------------- */
+.datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.dato { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; background: #fff; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 18px; }
+.dato.edad { background: var(--et-fondo); border-color: color-mix(in srgb, var(--et) 40%, #fff); border-bottom-color: var(--et); }
+.d-et { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
+.dato.edad .d-et, .dato.edad .d-sub { color: var(--et-tinta); }
+.d-grande { font-size: 16px; font-weight: 800; color: #14244A; }
+.d-grande b { font-size: 34px; font-weight: 900; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.d-valor { font-size: 18px; font-weight: 800; color: #14244A; }
+.d-valor.vacio { color: #94A3B8; }
+.d-sub { font-size: 13px; font-weight: 700; color: #64748B; }
+
+/* --- Tareas: lo que pide hacer algo ------------------------------------------- */
+.tareas { display: flex; flex-direction: column; gap: 10px; }
+.tarea { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 2px solid var(--t-borde); border-bottom-width: 4px; border-bottom-color: var(--t); border-radius: 18px; background: var(--t-fondo); }
+.t-accion { --t: #22A06B; --t-fondo: #E3F6EC; --t-borde: #9ED9BC; --t-tinta: #145C3D; }
+.t-atencion { --t: #E8930C; --t-fondo: #FFF4E0; --t-borde: #F5C26B; --t-tinta: #8A4B00; }
+.t-critico { --t: #D64545; --t-fondo: #FDECEC; --t-borde: #F3B1B1; --t-tinta: #8C2323; }
+.t-embarazo { --t: #C8456A; --t-fondo: #FBE3EA; --t-borde: #F0B3C4; --t-tinta: #922845; }
+.t-ic { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 48px; border-radius: 14px; background: var(--t); color: #fff; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .15); }
+.t-titulo { font-size: 17px; font-weight: 900; color: var(--t-tinta); }
+.t-texto { margin-top: 2px; font-size: 14px; font-weight: 700; color: var(--t-tinta); }
+.falta-chip { padding: 2px 10px; border-radius: 9px; background: #fff; border: 2px solid var(--t-borde); font-size: 13px; font-weight: 800; color: var(--t-tinta); }
+.pasos { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 6px; }
+.pasos li { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 800; color: #64748B; }
+.pasos li.hecho { color: var(--t-tinta); }
+.paso-n { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #fff; border: 2px solid #CBD5E1; font-size: 13px; font-weight: 900; }
+.pasos li.hecho .paso-n { background: var(--t); border-color: var(--t); color: #fff; }
+.b-btn.rojo { background: #D64545; color: #fff; border-color: #D64545; border-bottom-color: #A83232; }
+
+/* --- Columnas ------------------------------------------------------------------ */
+.columnas { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
 @media (max-width: 1099px) { .columnas { grid-template-columns: 1fr; } }
-.historial li { display: flex; gap: 16px; padding: 14px 18px; border-top: 1px solid #EEF2F6; }
-.historial li:first-child { border-top: none; }
-.historial small { display: block; margin-top: 4px; font-size: 13px; color: #475569; }
-.dia { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 64px; padding: 6px 0; border-radius: 10px; background: #F1F5F9; line-height: 1.1; }
-.dia b { font-size: 22px; font-weight: 700; color: #14244A; }
-.dia small { margin: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748B; }
-.cie { padding: 1px 8px; border-radius: 6px; background: #EEF2FA; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: #172A5A; }
-.entregas li { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid #EEF2F6; }
+.caja { overflow: hidden; background: #fff; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 20px; }
+.caja-cabeza { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 2px solid #F1F4F8; }
+.caja-cabeza h2 { font-size: 18px; font-weight: 900; color: #14244A; }
+.cuenta { padding: 1px 10px; border-radius: 999px; background: #E5E9F0; font-weight: 900; color: #334155; }
+
+/* Línea de tiempo: un punto por atención con el color de su estado. */
+.linea-tiempo { position: relative; padding: 8px 18px 14px; }
+.linea-tiempo li { --p: #94A3B8; position: relative; display: flex; gap: 14px; padding: 8px 0; }
+.linea-tiempo li::before { content: ''; position: absolute; left: 34px; top: 0; bottom: 0; width: 3px; background: #EDF1F6; }
+.linea-tiempo li:first-child::before { top: 28px; }
+.linea-tiempo li:last-child::before { bottom: calc(100% - 28px); }
+.p-bien { --p: #22A06B; } .p-atencion { --p: #E8930C; } .p-accion { --p: #2F83C4; } .p-neutro { --p: #94A3B8; }
+.dia {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 70px; padding: 6px 0;
+  border-radius: 14px; background: #fff; border: 2px solid var(--p); border-bottom-width: 4px; line-height: 1.1;
+}
+.dia b { font-size: 22px; font-weight: 900; color: #14244A; }
+.dia small { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748B; }
+.evento { display: flex; flex: 1; min-width: 0; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 16px; background: #F8FAFC; }
+.ev-titulo { font-size: 16px; font-weight: 800; color: #14244A; }
+.ev-sub { margin-top: 4px; font-size: 13px; font-weight: 600; color: #475569; }
+.estado { padding: 1px 9px; border-radius: 8px; background: color-mix(in srgb, var(--p) 15%, #fff); color: color-mix(in srgb, var(--p) 70%, #000); font-size: 12px; font-weight: 800; }
+.cie { padding: 1px 8px; border-radius: 8px; background: #EAF3FB; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-weight: 700; color: #174E80; }
+.entregas li { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 2px solid #F1F4F8; }
 .entregas li:first-child { border-top: none; }
-.entregas small { display: block; font-size: 12px; color: #64748B; }
-/* --- Relieve (estilo duo) --- */
-.ver-hoja { border-bottom-width: 4px; border-radius: 12px; }
-.ver-hoja:active { transform: translateY(2px); border-bottom-width: 2px; }
-.datos { border-bottom-width: 4px; border-radius: 18px; }
-.codigo { border-bottom-width: 4px; border-radius: 14px; }
+.entregas small { display: block; font-size: 12px; font-weight: 600; color: #64748B; }
+.cant { font-size: 18px; font-weight: 900; color: #14244A; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .nombre { font-size: 24px; }
+  .avatar { width: 64px; height: 64px; font-size: 24px; }
+  .heroe-cuerpo, .heroe-acciones { padding-left: 16px; padding-right: 16px; }
+}
 </style>

@@ -92,6 +92,7 @@ function vista(r) {
       cantidadSolicitada: g.cantidadSolicitada,
       cantidadAutorizada: g.cantidadAutorizada,
       cantidadDespachada: g.cantidadDespachada,
+      motivo: g.motivo,
       lotes: g.insumoId ? lotesDe(g.insumoId) : [],
     })),
   };
@@ -140,7 +141,7 @@ async function listar(req, res) {
     take: 300,
     include: {
       ubicacion: { select: { nombre: true } },
-      renglones: { select: { cantidadSolicitada: true, cantidadDespachada: true } },
+      renglones: { select: { cantidadSolicitada: true, cantidadAutorizada: true, cantidadDespachada: true } },
     },
   });
   res.json({
@@ -158,6 +159,9 @@ async function listar(req, res) {
       renglones: r.renglones.length,
       solicitado: r.renglones.reduce((s, g) => s + g.cantidadSolicitada, 0),
       despachado: r.renglones.reduce((s, g) => s + (g.cantidadDespachada ?? 0), 0),
+      autorizado: r.renglones.some((g) => g.cantidadAutorizada != null)
+        ? r.renglones.reduce((s, g) => s + (g.cantidadAutorizada ?? 0), 0) : null,
+      motivoAnulacion: r.motivoAnulacion,
     })),
   });
 }
@@ -310,11 +314,21 @@ async function autorizar(req, res, next) {
   if (!ESTADOS_EDITABLES.includes(r.estado)) {
     return next({ status: 409, codigo: 'no_editable', mensaje: `La requisición ya está ${r.estado}` });
   }
-  const indicadas = new Map((req.body.renglones ?? []).map((g) => [g.id, g.cantidadAutorizada]));
+  const indicadas = new Map((req.body.renglones ?? []).map((g) => [g.id, g]));
+  const sinMotivo = r.renglones.find((g) => {
+    const i = indicadas.get(g.id);
+    return i && i.cantidadAutorizada < g.cantidadSolicitada && !i.motivo;
+  });
+  if (sinMotivo) {
+    return next({ status: 400, codigo: 'falta_motivo', mensaje: `${sinMotivo.descripcion}: diga por qué se autoriza menos de lo pedido` });
+  }
   await prisma.$transaction([
     ...r.renglones.map((g) => prisma.requisicionRenglon.update({
       where: { id: g.id },
-      data: { cantidadAutorizada: indicadas.get(g.id) ?? g.cantidadSolicitada },
+      data: {
+        cantidadAutorizada: indicadas.get(g.id)?.cantidadAutorizada ?? g.cantidadSolicitada,
+        motivo: indicadas.get(g.id)?.motivo ?? null,
+      },
     })),
     prisma.requisicion.update({
       where: { id: r.id },

@@ -48,6 +48,23 @@ export function fecha(valor) {
   return valor ? new Date(valor).toLocaleDateString('es-GT', { timeZone: 'UTC' }) : '';
 }
 
+// --- Kardex: anotar o no lo que falta por reclamar ----------------------------
+// La misma preferencia rige la pantalla y la tarjeta impresa de este equipo.
+const CLAVE_RECLAMAR = 'camotan_kardex_reclamar';
+
+export function leerAnotarReclamar() {
+  try { return localStorage.getItem(CLAVE_RECLAMAR) !== 'no'; } catch { return true; }
+}
+export function guardarAnotarReclamar(si) {
+  try { localStorage.setItem(CLAVE_RECLAMAR, si ? 'si' : 'no'); } catch { /* sin almacenamiento */ }
+}
+
+/** Observaciones de un renglón del kardex, con o sin el faltante por reclamar. */
+export function observacionKardex(f, anotarReclamar) {
+  return [f.observaciones, anotarReclamar && f.porReclamar ? `Faltan ${f.porReclamar} por reclamar` : '']
+    .filter(Boolean).join('. ');
+}
+
 /** Período anterior a uno dado ('2026-01' → '2025-12'). */
 export function periodoPrevio(periodo) {
   const [a, m] = periodo.split('-').map(Number);

@@ -8,6 +8,8 @@ import Icono from '../../components/comunes/Icono.vue';
 import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
 import { miles } from '../../components/bodega/diseno/PiezasBodega';
 import { fecha } from '../../dominio/bodega';
+import AtenderPedido from '../../components/bodega/AtenderPedido.vue';
+import { estiloTono } from '../../components/bodega/diseno/PiezasBodega';
 
 /**
  * Requisiciones: la bodega registra lo que entrega y el sistema genera la
@@ -19,7 +21,9 @@ const route = useRoute();
 const auth = useAuthStore();
 const esBodega = computed(() => auth.rol !== 'farmacia');
 
-const vista = ref(route.query.ver === 'sin_numero' ? 'registradas' : 'nueva');
+// Tres vistas: lo que los servicios pidieron y espera (Por atender), lo que
+// se entrega sin pedido previo, y lo ya entregado.
+const vista = ref(route.query.ver === 'sin_numero' ? 'registradas' : route.query.ver === 'nueva' ? 'nueva' : 'pedidos');
 const soloSinNumero = ref(route.query.ver === 'sin_numero');
 const lista = ref([]);
 const tipos = ref([]);
@@ -174,7 +178,19 @@ function usarFila(f) {
 }
 
 // --- Registradas ----------------------------------------------------------------------
-const mostradas = computed(() => (soloSinNumero.value ? lista.value.filter((r) => !r.numero && r.estado !== 'anulada') : lista.value));
+// Entregadas: solo lo que de verdad salió de bodega.
+const entregadas = computed(() => lista.value.filter((r) => ['despachada', 'parcial', 'recibida'].includes(r.estado)));
+const porAtender = computed(() => lista.value.filter((r) => ['solicitada', 'autorizada'].includes(r.estado)));
+const rechazadas = computed(() => lista.value.filter((r) => r.estado === 'anulada'));
+const mostradas = computed(() => (soloSinNumero.value ? entregadas.value.filter((r) => !r.numero) : entregadas.value));
+// Desde el panel se puede abrir un pedido directo: ?pedido=ID.
+const atendiendo = ref(route.query.pedido ? Number(route.query.pedido) : null);
+async function pedidoListo(texto) {
+  aviso.value = texto;
+  atendiendo.value = null;
+  await cargar();
+}
+const diasDesde = (f) => Math.max(0, Math.floor((Date.now() - new Date(f)) / 86400000));
 const abierta = ref(null);
 const numero = ref('');
 
@@ -205,9 +221,9 @@ onMounted(cargar);
 <template>
   <section>
     <header class="b-cabecera">
-      <div><p class="b-antetitulo">Requisición</p><h1 class="b-titulo">Entregar</h1></div>
+      <div><p class="b-antetitulo">Requisiciones</p><h1 class="b-titulo">Pedidos de los servicios</h1></div>
       <div class="b-segmentado" role="radiogroup" aria-label="Vista">
-        <button v-for="m in [['nueva', 'Entregar'], ['registradas', `Entregadas (${lista.length})`]]" :key="m[0]" type="button" role="radio" :aria-checked="vista === m[0]" :class="vista === m[0] ? 'on' : ''" @click="vista = m[0]">{{ m[1] }}</button>
+        <button v-for="m in [['pedidos', `Por atender (${porAtender.length})`], ['nueva', 'Entregar sin pedido'], ['registradas', `Entregadas (${entregadas.length})`]]" :key="m[0]" type="button" role="radio" :aria-checked="vista === m[0]" :class="vista === m[0] ? 'on' : ''" @click="vista = m[0]">{{ m[1] }}</button>
       </div>
     </header>
 
@@ -217,7 +233,40 @@ onMounted(cargar);
       <RouterLink v-if="ultima" :to="`/imprimir/requisicion/${ultima.id}`" target="_blank" class="b-btn secundario chico"><Icono nombre="imprimir" :tamano="16" /> Imprimir otra vez</RouterLink>
     </div>
 
-    <!-- Entregar -->
+    <!-- Por atender: lo que pidieron y espera respuesta -->
+    <div v-if="vista === 'pedidos'" class="bandeja mt-5">
+      <ul class="pedidos">
+        <li v-for="p in porAtender" :key="p.id">
+          <button type="button" class="pedido" :class="{ on: atendiendo === p.id }" :style="estiloTono(p.estado === 'autorizada' ? 'atencion' : 'accion')" @click="atendiendo = p.id">
+            <span class="min-w-0">
+              <b>{{ p.unidadSeccion }}</b>
+              <small>{{ p.renglones }} {{ p.renglones === 1 ? 'producto' : 'productos' }} · {{ miles(p.solicitado) }} unidades · {{ p.solicitante }}</small>
+            </span>
+            <span class="espera">
+              <span class="chip">{{ p.estado === 'autorizada' ? 'Falta despachar' : 'Nuevo' }}</span>
+              <small>{{ diasDesde(p.fechaSolicitud) === 0 ? 'Hoy' : `Hace ${diasDesde(p.fechaSolicitud)} ${diasDesde(p.fechaSolicitud) === 1 ? 'día' : 'días'}` }}</small>
+            </span>
+          </button>
+        </li>
+        <li v-if="!porAtender.length" class="vacio-bandeja">
+          <Icono nombre="correcto" :tamano="28" />
+          <b>No hay pedidos esperando</b>
+          <small>Cuando farmacia o un servicio pida, aparece aquí para autorizarlo y despacharlo.</small>
+        </li>
+        <li v-if="rechazadas.length" class="rechazadas">
+          <small>Rechazados recientes</small>
+          <span v-for="p in rechazadas.slice(0, 3)" :key="p.id">{{ p.unidadSeccion }} · {{ fecha(p.fechaSolicitud) }}</span>
+        </li>
+      </ul>
+      <AtenderPedido v-if="atendiendo" :id="atendiendo" @listo="pedidoListo" @cerrar="atendiendo = null" />
+      <div v-else-if="porAtender.length" class="elija">
+        <Icono nombre="trasladar" :tamano="36" />
+        <b>Elija un pedido para atenderlo</b>
+        <small>Se revisa cuánto se da de cada producto, y se despacha con el número del formulario.</small>
+      </div>
+    </div>
+
+    <!-- Entregar sin pedido -->
     <div v-if="vista === 'nueva'" class="rejilla mt-5">
       <form class="space-y-4" @submit.prevent="entregar">
         <div class="grid gap-3 sm:grid-cols-12">
@@ -354,7 +403,7 @@ onMounted(cargar);
     </div>
 
     <!-- Entregadas -->
-    <div v-else class="rejilla-lista mt-5">
+    <div v-if="vista === 'registradas'" class="rejilla-lista mt-5">
       <div>
         <label class="mb-2 flex items-center gap-2 text-sm font-semibold"><input v-model="soloSinNumero" type="checkbox" /> Solo las que no tienen número de formulario</label>
         <div class="b-tabla-marco lista">
@@ -406,6 +455,21 @@ onMounted(cargar);
 </template>
 
 <style scoped>
+.bandeja { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1000px) { .bandeja { grid-template-columns: 1fr; } }
+.pedidos { display: grid; gap: 8px; }
+.pedido { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; min-height: 76px; padding: 12px 14px; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 18px; background: #fff; text-align: left; box-shadow: inset 6px 0 0 var(--t); }
+.pedido:hover { border-color: var(--t-borde); }
+.pedido.on { background: var(--t-fondo); border-color: var(--t); }
+.pedido b { display: block; font-size: 16px; font-weight: 900; color: #14244A; }
+.pedido small { display: block; font-size: 13px; font-weight: 600; color: #64748B; }
+.espera { display: grid; justify-items: end; gap: 2px; flex-shrink: 0; }
+.chip { padding: 2px 9px; border-radius: 9px; background: var(--t); color: #fff; font-size: 12px; font-weight: 900; }
+.vacio-bandeja, .elija { display: grid; justify-items: center; gap: 4px; padding: 28px 18px; border: 2px dashed #CBD5E1; border-radius: 20px; text-align: center; color: #64748B; }
+.vacio-bandeja b, .elija b { font-size: 17px; font-weight: 900; color: #14244A; }
+.vacio-bandeja svg { color: #22A06B; } .elija svg { color: #2F83C4; }
+.rechazadas { display: grid; gap: 2px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #8C2323; }
+.rechazadas small { font-weight: 900; text-transform: uppercase; letter-spacing: .05em; color: #64748B; }
 .no-imprime { margin-left: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; color: #94A3B8; }
 .lote-celda { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .lote-celda .lotes-salen { margin-bottom: 0; }

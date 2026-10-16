@@ -3,6 +3,40 @@ const { configuracion, rangosSemaforo } = require('./abastecimiento.service');
 const { semaforoBodega, mesesParaVencer } = require('./bodega.service');
 const { registrarReajuste, pasarEntreUbicaciones } = require('./movimientos.service');
 const { lotesDisponibles, enUbicacion } = require('./inventario.service');
+const { movimientosCentro, noEntregadoCentro } = require('./bodegaDatos.service');
+
+/**
+ * Niveles del estante de farmacia, en meses de demanda real. La farmacia
+ * (post-consulta) pide a la bodega del mismo centro, que está a unos pasos:
+ * el mínimo es un mes y el máximo, el mínimo más la frecuencia de pedido
+ * (mensual), como manda la norma logística (nivel máximo = mínimo + frecuencia).
+ */
+const MESES_MINIMO_FARMACIA = 1;
+const MESES_MAXIMO_FARMACIA = 2;
+// Ventana para el promedio de demanda real: los últimos tres meses.
+const DIAS_VENTANA = 90;
+
+/**
+ * Situación de un medicamento en el estante y cuánto pedir a bodega.
+ * Demanda real = lo entregado más lo que no se pudo entregar por falta.
+ */
+function situacionEstante({ demandaMensual, entregable, sinLote = 0, enBodega = 0 }) {
+  // Lo que está en el estante sin número de lote existe: no se pide de nuevo,
+  // se le pone el lote. Por eso cuenta para saber cuánto alcanza.
+  const fisico = entregable + sinLote;
+  // Sin entregas ni faltas en tres meses no hay contra qué medir.
+  if (!demandaMensual) return { situacion: entregable === 0 && sinLote > 0 ? 'poner_lote' : 'sin_movimiento', meses: null, pedir: 0, alcanzaBodega: 0 };
+  const meses = fisico / demandaMensual;
+  const maximo = Math.ceil(demandaMensual * MESES_MAXIMO_FARMACIA);
+  const falta = Math.max(0, maximo - fisico);
+  let situacion = 'bien';
+  if (fisico === 0) situacion = 'agotado';
+  else if (meses < MESES_MINIMO_FARMACIA) situacion = 'pedir';
+  else if (entregable === 0) situacion = 'poner_lote';
+  const pedir = situacion === 'agotado' || situacion === 'pedir' ? falta : 0;
+  // Lo que bodega puede dar de verdad: si no tiene, el pedido sube al Área.
+  return { situacion, meses: Math.round(meses * 10) / 10, pedir, alcanzaBodega: Math.min(pedir, enBodega) };
+}
 
 /**
  * Control diario de la farmacia (post-consulta).
@@ -42,15 +76,31 @@ async function existencias(establecimientoId, ahora = new Date()) {
     include: { lotes: { where: { cantidadActual: { gt: 0 } }, orderBy: { fechaVence: 'asc' } } },
     orderBy: { nombreGenerico: 'asc' },
   });
+  const desdeVentana = new Date(ahora.getTime() - DIAS_VENTANA * 86400000);
+  const [mov, faltas] = await Promise.all([
+    movimientosCentro(establecimientoId, desdeVentana, ahora),
+    noEntregadoCentro(establecimientoId, desdeVentana, ahora),
+  ]);
+  const meses = DIAS_VENTANA / 30;
   return insumos
     .map((i) => {
       const enFarmacia = i.lotes.filter((l) => l.cantidadFarmacia > 0);
       const usable = lotesDisponibles(enUbicacion(i.lotes, 'farmacia'), ahora).reduce((s, l) => s + l.cantidadActual, 0);
       const bodega = lotesDisponibles(enUbicacion(i.lotes, 'bodega'), ahora).reduce((s, l) => s + l.cantidadActual, 0);
+      const m = mov.get(i.id);
+      const demanda = (m ? m.entregado + m.consumo : 0) + (faltas.get(i.id) ?? 0);
+      const demandaMensual = Math.round(demanda / meses);
       return {
         insumoId: i.id,
         nombre: i.nombreGenerico,
         categoria: i.categoria,
+        demandaMensual,
+        ...situacionEstante({
+          demandaMensual,
+          entregable: usable,
+          sinLote: enFarmacia.filter((l) => l.numeroLote === 'SIN-LOTE').reduce((t, l) => t + l.cantidadFarmacia, 0),
+          enBodega: bodega,
+        }),
         unidadEntrega: i.unidadEntrega,
         prescribible: i.prescribible,
         enFarmacia: enFarmacia.reduce((s, l) => s + l.cantidadFarmacia, 0),
@@ -338,4 +388,15 @@ async function ponerLote(establecimientoId, { loteId, numeroLote, fechaVence, ca
   });
 }
 
-module.exports = { hoyGuatemala, limitesDelDia, existencias, resumenDelDia, cerrarDia, devolverABodega, ponerLote };
+module.exports = {
+  situacionEstante,
+  MESES_MINIMO_FARMACIA,
+  MESES_MAXIMO_FARMACIA,
+  hoyGuatemala,
+  limitesDelDia,
+  existencias,
+  resumenDelDia,
+  cerrarDia,
+  devolverABodega,
+  ponerLote,
+};

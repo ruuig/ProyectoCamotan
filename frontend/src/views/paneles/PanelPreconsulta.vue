@@ -1,5 +1,6 @@
 <script setup>
 import { cronometro } from '../../dominio/cronometro';
+import { textoEspera } from '../../dominio/espera';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import servicio from '../../services/indicadores';
@@ -147,7 +148,7 @@ onUnmounted(() => {
     <!-- Lo que no puede esperar -->
     <p v-if="datos?.advertencia" class="aviso aviso-atencion">
       <Icono nombre="alerta" :tamano="20" class="mt-0.5 shrink-0 text-advertencia" />
-      <span class="text-tinta-2">{{ datos.advertencia }}</span>
+      <span class="text-tinta-2">{{ datos.resumen.superan90 }} {{ datos.resumen.superan90 === 1 ? 'paciente lleva' : 'pacientes llevan' }} más de 90 minutos esperando. La espera más larga: {{ textoEspera(datos.resumen.esperaMaxima) }}.</span>
     </p>
 
     <!-- Buscador grande: solo si el paciente no aparece en la fila -->
@@ -227,7 +228,7 @@ onUnmounted(() => {
                 {{ e.paciente.nombreCompleto }}
               </span>
               <span class="block truncate text-apagado">
-                {{ e.paciente.comunidad }} · esperando {{ e.minutosEsperando }} min
+                {{ e.paciente.comunidad }} · esperando {{ textoEspera(e.minutosEsperando) }}
               </span>
             </span>
 

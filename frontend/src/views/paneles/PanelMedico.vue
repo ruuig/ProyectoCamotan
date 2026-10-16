@@ -7,6 +7,10 @@ import Icono from '../../components/comunes/Icono.vue';
 import Etiqueta from '../../components/comunes/Etiqueta.vue';
 import EstadoVacio from '../../components/comunes/EstadoVacio.vue';
 import CodificarCie from '../../components/consulta/CodificarCie.vue';
+import TarjetaCifra from '../../components/paneles/TarjetaCifra.vue';
+import { textoEspera, deOtroDia } from '../../dominio/espera';
+
+const fechaCorta = (f) => new Date(f).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', timeZone: 'America/Guatemala' });
 
 const datos = ref(null);
 const error = ref('');
@@ -115,9 +119,11 @@ onUnmounted(() => clearInterval(temporizador));
                   <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
                   <span class="relative inline-flex h-2 w-2 rounded-full bg-white" />
                 </span>
-                {{ datos.siguiente.atencion.estado === 'en_atencion'
-                  ? 'En consulta ahora'
-                  : 'Siguiente paciente' }}
+                {{ datos.siguiente.atencion.estado !== 'en_atencion'
+                  ? 'Siguiente paciente'
+                  : deOtroDia(datos.siguiente.atencion)
+                    ? `Consulta abierta desde el ${fechaCorta(datos.siguiente.atencion.registradaEn)}: termínela o cancélela`
+                    : 'En consulta ahora' }}
               </p>
 
               <div class="mt-2 flex flex-wrap items-center gap-4">
@@ -253,41 +259,12 @@ onUnmounted(() => clearInterval(temporizador));
           />
         </div>
 
-        <!-- Resumen del dia -->
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div class="tarjeta border-l-4 border-l-celeste-400 px-4 py-3.5">
-            <p class="text-sm text-slate-500">Atendidos hoy</p>
-            <p class="mt-1.5 text-3xl font-semibold leading-none text-mspas-700">
-              {{ datos.resumenDia.atendidos }}
-            </p>
-          </div>
-          <div class="tarjeta border-l-4 border-l-celeste-400 px-4 py-3.5">
-            <p class="text-sm text-slate-500">Urgentes</p>
-            <p class="mt-1.5 text-3xl font-semibold leading-none text-mspas-700">
-              {{ datos.resumenDia.urgentesAtendidos }}
-            </p>
-          </div>
-          <div class="tarjeta border-l-4 border-l-celeste-400 px-4 py-3.5">
-            <p class="text-sm text-slate-500">Ausentes</p>
-            <p class="mt-1.5 text-3xl font-semibold leading-none text-mspas-700">
-              {{ datos.resumenDia.ausentes }}
-            </p>
-          </div>
-          <div class="tarjeta border-l-4 border-l-celeste-400 px-4 py-3.5">
-            <p class="text-sm text-slate-500">Consulta prom.</p>
-            <p
-              class="mt-1.5 font-semibold leading-none"
-              :class="datos.resumenDia.duracionPromedioMin
-                ? 'text-3xl text-mspas-700'
-                : 'text-lg text-slate-400'"
-            >
-              {{ datos.resumenDia.duracionPromedioMin ?? 'sin dato'
-              }}<span
-                v-if="datos.resumenDia.duracionPromedioMin"
-                class="text-base font-normal text-slate-500"
-              > min</span>
-            </p>
-          </div>
+        <!-- Resumen del dia: cuánto se ha hecho y cuánto falta -->
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <TarjetaCifra titulo="Atendidos hoy" :valor="datos.resumenDia.atendidos" icono="correcto" />
+          <TarjetaCifra titulo="Esperando" :valor="datos.enEspera" icono="cola" :tono="datos.superan90 ? 'atencion' : 'neutro'" :nota="datos.enEspera ? `La espera más larga: ${textoEspera(datos.esperaMaxima)}` : 'Nadie en la cola'" a="/cola" />
+          <TarjetaCifra titulo="Ausentes" :valor="datos.resumenDia.ausentes" icono="ausente" nota="Llamados que no respondieron" />
+          <TarjetaCifra titulo="Consulta promedio" :valor="datos.resumenDia.duracionPromedioMin ?? '—'" :unidad="datos.resumenDia.duracionPromedioMin ? 'min' : ''" icono="reloj" :nota="datos.resumenDia.duracionPromedioMin ? '' : 'Sin consultas cerradas hoy'" />
         </div>
 
         <!-- Lo ya atendido hoy: contexto de la jornada sin cambiar de pantalla -->
@@ -350,7 +327,7 @@ onUnmounted(() => clearInterval(temporizador));
               <p v-if="otros(e).length" class="truncate text-xs font-semibold text-slate-500">{{ otros(e).map((f) => f.etiqueta).join(' · ') }}</p>
             </div>
             <span class="shrink-0 tabular-nums" :class="e.excedido ? 'font-bold text-urgente-700' : 'text-slate-500'" :title="e.excedido ? 'Pasó el tiempo máximo de su nivel' : ''">
-              {{ e.minutosEsperando }} min
+              {{ textoEspera(e.minutosEsperando) }}
             </span>
           </li>
         </ol>
@@ -361,7 +338,7 @@ onUnmounted(() => clearInterval(temporizador));
         >
           <Icono nombre="alerta" :tamano="19" class="shrink-0 text-urgente-600" />
           <p class="font-medium text-slate-700">
-            {{ datos.superan90 }} sobre 90 minutos (max. {{ datos.esperaMaxima }} min)
+            {{ datos.superan90 }} esperan más de 90 minutos (la más larga: {{ textoEspera(datos.esperaMaxima) }})
           </p>
         </div>
       </aside>

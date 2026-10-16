@@ -1,4 +1,5 @@
 <script setup>
+import { CARGOS_SIGSA, CARGOS_OTROS } from '../../dominio/cargos';
 import { ref, reactive, computed, onMounted } from 'vue';
 import http from '../../services/http';
 import { useAuthStore } from '../../stores/auth';
@@ -19,10 +20,7 @@ const ROLES = [
   { valor: 'bodega', texto: 'Bodega', color: '#A6561A', fondo: '#FDEEE2' },
 ];
 const ROL = Object.fromEntries(ROLES.map((r) => [r.valor, r]));
-const CARGOS = [
-  'Director del Centro de Salud', 'Médico y cirujano', 'Médico general', 'Enfermera profesional',
-  'Auxiliar de enfermería', 'Encargado de farmacia', 'Auxiliar de farmacia', 'Encargado de bodega', 'Digitador',
-];
+const CARGOS = [...CARGOS_SIGSA.map((c) => c.nombre), ...CARGOS_OTROS];
 
 const auth = useAuthStore();
 const usuarios = ref([]);

@@ -136,6 +136,9 @@ const actualizarEstablecimiento = z.object({
   nombre: z.string().trim().min(1).max(160).optional(),
   municipio: z.string().trim().min(1).max(120).optional(),
   departamento: z.string().trim().min(1).max(120).optional(),
+  // Vacío vuelve a usar el departamento y el municipio.
+  areaSalud: z.string().trim().max(120).nullable().optional().transform((v) => (v === undefined ? undefined : v || null)),
+  distritoSalud: z.string().trim().max(120).nullable().optional().transform((v) => (v === undefined ? undefined : v || null)),
   tipo: z.enum(['centro_salud_a', 'centro_salud_b', 'puesto_salud']).optional(),
   autorizacion,
 });

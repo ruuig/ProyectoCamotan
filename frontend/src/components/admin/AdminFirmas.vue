@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import http from '../../services/http';
 import inventario from '../../services/inventario';
 import Icono from '../comunes/Icono.vue';
+import { CARGOS_SIGSA, codigoSigsa } from '../../dominio/cargos';
 
 /**
  * Quién firma cada documento impreso. Los formatos de bodega llevan al
@@ -147,13 +148,13 @@ onMounted(cargar);
       <header class="b-panel-cabeza">
         <div>
           <h2 class="b-panel-titulo">Formularios SIGSA</h2>
-          <p class="mt-1 text-sm text-apagado">Responsable de la información: quien genera la hoja.</p>
+          <p class="mt-1 text-sm text-apagado">Responsable de la información: quien genera la hoja. El cargo debe ser de la lista oficial del SIGSA para que cuente en la producción por tipo de personal (SIGSA 6).</p>
         </div>
       </header>
       <div class="b-tabla-marco !rounded-none !border-0">
         <table class="b-tabla">
           <thead>
-            <tr><th>Nombre</th><th>Firma en</th><th class="w-[40%]">Cargo bajo su nombre</th><th /></tr>
+            <tr><th>Nombre</th><th>Firma en</th><th class="w-[40%]">Cargo bajo su nombre</th><th>Código SIGSA</th><th /></tr>
           </thead>
           <tbody>
             <tr v-for="u in firmantesSigsa" :key="u.id">
@@ -162,17 +163,20 @@ onMounted(cargar);
               <td>
                 <input v-model="cargos[u.id]" list="cargos-firmas" maxlength="120" :aria-label="`Cargo de ${u.nombre}`" class="b-campo !h-[38px]" :class="!cargos[u.id] ? 'falta' : ''" placeholder="Sin cargo" @keydown.enter.prevent="guardarCargo(u)" />
               </td>
+              <td>
+                <span v-if="codigoSigsa(cargos[u.id])" class="doc">{{ codigoSigsa(cargos[u.id]) }}</span>
+                <span v-else-if="cargos[u.id]" class="fuera">No es del catálogo</span>
+              </td>
               <td class="n">
                 <button type="button" class="b-btn secundario chico" :disabled="(cargos[u.id] ?? '') === (u.cargo ?? '') || guardando === `u${u.id}`" @click="guardarCargo(u)">Guardar</button>
               </td>
             </tr>
-            <tr v-if="!firmantesSigsa.length"><td colspan="4" class="b-vacio">Sin médicos ni personal de farmacia activos.</td></tr>
+            <tr v-if="!firmantesSigsa.length"><td colspan="5" class="b-vacio">Sin médicos ni personal de farmacia activos.</td></tr>
           </tbody>
         </table>
       </div>
       <datalist id="cargos-firmas">
-        <option value="Médico y cirujano" /><option value="Médico general" /><option value="Encargado de farmacia" />
-        <option value="Auxiliar de farmacia" /><option value="Director del Centro de Salud" />
+        <option v-for="c in CARGOS_SIGSA" :key="c.codigo" :value="c.nombre">Código {{ c.codigo }}</option>
       </datalist>
     </section>
   </div>
@@ -194,5 +198,6 @@ onMounted(cargar);
 .firma b { font-size: 12px; }
 .firma small { font-size: 11px; color: #374151; }
 figcaption { font-size: 12px; font-weight: 600; color: #94A3B8; text-align: right; }
+.fuera { font-size: 12px; font-weight: 700; color: #8A4B00; }
 .falta { border-color: #F5C77E; background: #FFFBF2; }
 </style>

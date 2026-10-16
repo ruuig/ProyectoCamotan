@@ -7,8 +7,7 @@ export const PANEL_POR_ROL = {
   preconsulta: '/panel/preconsulta',
   medico: '/panel/medico',
   farmacia: '/panel/farmacia',
-  // Bodega entra directo a su módulo.
-  bodega: '/inventario',
+  bodega: '/panel/bodega',
 };
 
 function leerUsuarioGuardado() {

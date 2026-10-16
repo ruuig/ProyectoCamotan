@@ -1,4 +1,5 @@
 const ExcelJS = require('exceljs');
+const { encabezadoEstablecimiento } = require('../services/encabezado.service');
 const prisma = require('../config/db');
 const { renglonesSigsa3cs } = require('../services/sigsa3cs.service');
 const { puedeVerSensibles } = require('../services/fichaPaciente.service');
@@ -39,18 +40,30 @@ async function datos3cs(req) {
     prisma.establecimiento.findUnique({ where: { id: establecimientoId } }),
     medicoId ? prisma.usuario.findFirst({ where: { id: Number(medicoId), establecimientoId }, select: { nombre: true, cargo: true } }) : null,
   ]);
+  const renglones = renglonesSigsa3cs(atenciones, { sensibles: puedeVerSensibles(req.usuario) });
+  const sinCodigo = (r) => !r.diagnosticos.some((d) => d.cie);
+  const porAtencion = new Map(renglones.map((r) => [r.atencionId, r]));
+  const porMedico = new Map();
+  for (const a of atenciones) {
+    if (!a.medico) continue;
+    const m = porMedico.get(a.medico.id) ?? { medicoId: a.medico.id, nombre: a.medico.nombre, consultas: 0, sinCie: 0 };
+    m.consultas += 1;
+    if (sinCodigo(porAtencion.get(a.id) ?? { diagnosticos: [] })) m.sinCie += 1;
+    porMedico.set(a.medico.id, m);
+  }
   return {
     desde,
     hasta,
     encabezado: {
-      areaSalud: establecimiento.departamento,
-      distrito: establecimiento.municipio,
-      municipio: establecimiento.municipio,
-      servicio: establecimiento.nombre,
+      ...encabezadoEstablecimiento(establecimiento),
       responsable: medico?.nombre ?? null,
       cargo: medico?.cargo ?? null,
     },
-    renglones: renglonesSigsa3cs(atenciones, { sensibles: puedeVerSensibles(req.usuario) }),
+    renglones,
+    // Se entrega un 3C/S por responsable: cuántas consultas tiene cada uno y
+    // cuántas van sin código CIE-10, que el distrito rechazaría.
+    porResponsable: [...porMedico.values()],
+    sinCie: renglones.filter(sinCodigo).length,
   };
 }
 

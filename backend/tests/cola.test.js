@@ -125,6 +125,36 @@ describe('GET /atenciones/cola', () => {
     expect(r.body.cola[1].puntaje).toBeGreaterThan(r.body.cola[0].puntaje);
   });
 
+  it('quien quedó en espera de otra jornada no encabeza la cola: va aparte para cerrarlo', async () => {
+    const { atencion: deAyer } = await nuevaAtencion({ gravedad: 'leve', nombres: 'Se fue ayer' });
+    await prisma.atencion.update({ where: { id: deAyer.id }, data: { registradaEn: new Date(Date.now() - 20 * 3600000) } });
+    const { atencion: deHoy } = await nuevaAtencion({ gravedad: 'leve', nombres: 'Llegó hoy' });
+
+    const r = await pre(request(app).get('/api/v1/atenciones/cola'));
+
+    expect(r.body.cola.some((e) => e.id === deAyer.id)).toBe(false);
+    expect(r.body.cola.some((e) => e.id === deHoy.id)).toBe(true);
+    expect(r.body.anteriores.map((e) => e.id)).toContain(deAyer.id);
+  });
+
+  it('el paciente que no fue atendido ayer se registra de nuevo hoy sin cancelar nada a mano', async () => {
+    const { paciente, atencion: deAyer } = await nuevaAtencion({ nombres: 'Vuelve hoy' });
+    await prisma.atencion.update({ where: { id: deAyer.id }, data: { registradaEn: new Date(Date.now() - 20 * 3600000) } });
+
+    const r = await pre(request(app).post('/api/v1/atenciones')).send({ pacienteId: paciente.id, motivoConsulta: 'Sigue con dolor' });
+
+    expect(r.status).toBe(201);
+    const ayer = await prisma.atencion.findUnique({ where: { id: deAyer.id } });
+    expect(ayer.estado).toBe('cancelada');
+    expect(ayer.motivoCancelacion).toMatch(/jornada anterior/);
+  });
+
+  it('si su atención es de hoy, no se abre otra', async () => {
+    const { paciente } = await nuevaAtencion({ nombres: 'Ya está en cola' });
+    const r = await pre(request(app).post('/api/v1/atenciones')).send({ pacienteId: paciente.id, motivoConsulta: 'Otra vez' });
+    expect(r.status).toBe(409);
+  });
+
   it('informa cuando alguien supera los 90 minutos', async () => {
     const { atencion } = await nuevaAtencion();
     await prisma.atencion.update({

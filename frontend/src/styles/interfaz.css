@@ -5,7 +5,8 @@
 */
 
 /* --- Marco con pestañas ----------------------------------------------------- */
-.b-hoja { background: #fff; border: 2px solid #CBD5E1; border-radius: 18px; overflow: hidden; }
+/* clip y no hidden: recorta las esquinas sin anular los paneles fijos (sticky) de adentro. */
+.b-hoja { background: #fff; border: 2px solid #CBD5E1; border-radius: 18px; overflow: clip; }
 .b-cuerpo { padding: 20px 24px 28px; }
 @media (max-width: 640px) { .b-cuerpo { padding: 16px; } }
 

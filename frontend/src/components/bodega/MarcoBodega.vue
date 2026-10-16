@@ -10,8 +10,9 @@ import Icono from '../comunes/Icono.vue';
  */
 const route = useRoute();
 const auth = useAuthStore();
-// Farmacia solo entra a sus requisiciones: no tiene inicio de bodega.
-const conVolver = computed(() => route.name !== 'bodega-inicio' && auth.rol !== 'farmacia');
+// Bodega navega con el menú de la izquierda; dirección entra por el inicio de
+// bodega y vuelve con este botón.
+const conVolver = computed(() => route.name !== 'bodega-inicio' && auth.rol === 'admin');
 </script>
 
 <template>

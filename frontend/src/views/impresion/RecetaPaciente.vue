@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import servicio from '../../services/inventario';
 import HojaImpresion from '../../components/comunes/HojaImpresion.vue';
+import HorarioDibujo from '../../components/farmacia/HorarioDibujo.vue';
+import { orientacionPara } from '../../dominio/orientacion';
 import { establecimiento as cargarEstablecimiento, registrarImpresion } from '../../dominio/impresionBodega';
 
 /**
@@ -34,6 +36,8 @@ function edad(e) {
   return `${e.dias} días`;
 }
 const renglones = computed(() => h.value?.renglones ?? []);
+const orientacion = computed(() => (h.value ? orientacionPara([h.value.diagnosticoCie, ...h.value.diagnosticos.map((d) => d.cie)]) : []));
+const fechaCita = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : '');
 </script>
 
 <template>
@@ -68,6 +72,8 @@ const renglones = computed(() => h.value?.renglones ?? []);
         <div class="flex-1">
           <p class="med">{{ r.medicamento }}</p>
           <p class="como">{{ r.indicaciones || 'Como le indicó el médico' }}</p>
+          <HorarioDibujo v-if="r.indicaciones && !r.aplicada" :indicaciones="r.indicaciones" impreso class="mt-1.5" />
+          <p v-if="r.aplicada" class="detalle"><b>Se le aplicó en el centro.</b></p>
           <p class="detalle">
             <template v-if="r.entregado">Se le entregaron <b>{{ r.entregado }}</b><template v-if="r.entregas?.length"> · lote {{ r.entregas.map((l) => `${l.numeroLote} (vence ${vence(l.fechaVence)})`).join(', ') }}</template></template>
             <template v-if="r.noHabia"><b class="falta"> · No había {{ r.noHabia }} en el centro</b></template>
@@ -89,7 +95,21 @@ const renglones = computed(() => h.value?.renglones ?? []);
       </ol>
     </template>
 
-    <p class="bloque-impresion receta-aviso">Tome los medicamentos completos aunque se sienta mejor. Si empeora, regrese al centro de salud.</p>
+    <div class="bloque-impresion salida">
+      <div class="cita">
+        <span>Próxima cita</span>
+        <b class="first-letter:uppercase">{{ h.proximaCita ? fechaCita(h.proximaCita) : 'Solo si empeora o no mejora' }}</b>
+      </div>
+      <div class="alarma">
+        <span>Regrese de inmediato si…</span>
+        <template v-for="g in orientacion" :key="g.clave">
+          <ul><li v-for="x in g.signos" :key="x">{{ x }}</li></ul>
+          <p v-if="g.consejo" class="consejo">{{ g.consejo }}</p>
+        </template>
+      </div>
+    </div>
+
+    <p class="bloque-impresion receta-aviso">Tome los medicamentos completos aunque se sienta mejor.</p>
   </HojaImpresion>
 </template>
 
@@ -107,5 +127,11 @@ const renglones = computed(() => h.value?.renglones ?? []);
 .como { margin-top: 2px; font-size: 18px; font-weight: 600; line-height: 1.3; }
 .detalle { margin-top: 3px; font-size: 12px; color: #334155; }
 .falta { color: #991B1B; }
+.salida { display: grid; grid-template-columns: 34% 1fr; gap: 10px; margin-top: 14px; }
+.salida > div { padding: 8px 10px; border: 2px solid #111827; border-radius: 6px; }
+.salida span { display: block; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.cita b { display: block; margin-top: 4px; font-size: 18px; font-weight: 900; line-height: 1.2; }
+.alarma ul { margin-top: 4px; padding-left: 18px; list-style: disc; font-size: 14px; font-weight: 600; }
+.consejo { margin-top: 4px; font-size: 13px; font-weight: 700; }
 .receta-aviso { margin-top: 14px; padding: 8px 10px; border: 1.5px dashed #334155; border-radius: 6px; font-size: 13px; font-weight: 600; }
 </style>

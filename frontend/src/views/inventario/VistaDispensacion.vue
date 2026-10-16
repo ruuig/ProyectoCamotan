@@ -4,6 +4,8 @@ import { RouterLink } from 'vue-router';
 import servicio from '../../services/inventario';
 import { nuevaClaveIdempotencia } from '../../services/almacenLocal';
 import Icono from '../../components/comunes/Icono.vue';
+import HorarioDibujo from '../../components/farmacia/HorarioDibujo.vue';
+import { orientacionPara } from '../../dominio/orientacion';
 import FirmaEntrega from '../../components/farmacia/FirmaEntrega.vue';
 
 /**
@@ -31,6 +33,13 @@ const porFirmar = ref([]);
 const firmando = ref(null);
 const periodo = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 7);
 let clave = null;
+// Post-consulta: lo que se puso aquí y si se le explicó al paciente.
+const aplicadas = reactive({});
+const orientado = ref(false);
+const orientacion = computed(() => (hoja.value
+  ? orientacionPara([hoja.value.diagnosticoCie, ...hoja.value.diagnosticos.map((d) => d.cie)])
+  : []));
+const fechaCita = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) : '');
 
 async function cargarCola() {
   try {
@@ -67,6 +76,8 @@ async function abrir(atencionId, verSolo = false) {
     hoja.value = await servicio.hojaDeEntrega(atencionId);
     for (const k of Object.keys(cantidades)) delete cantidades[k];
     for (const r of hoja.value.renglones) cantidades[r.prescripcionId] = String(r.aEntregar);
+    for (const k of Object.keys(aplicadas)) delete aplicadas[k];
+    orientado.value = false;
     // Una clave por entrega: si se reintenta, no se registra dos veces.
     clave = nuevaClaveIdempotencia();
   } catch (fallo) {
@@ -122,7 +133,8 @@ async function terminar() {
   enviando.value = true;
   try {
     const r = await servicio.dispensarAtencion(hoja.value.atencionId, {
-      renglones: porEntregar.value.map((x) => ({ prescripcionId: x.prescripcionId, cantidad: aSolicitar(x) })),
+      renglones: porEntregar.value.map((x) => ({ prescripcionId: x.prescripcionId, cantidad: aSolicitar(x), aplicada: Boolean(aplicadas[x.prescripcionId]) })),
+      orientado: orientado.value,
     }, clave);
     const faltaron = r.renglones.some((x) => x.noEntregado > 0);
     terminada.value = { atencionId: hoja.value.atencionId, paciente: hoja.value.paciente, renglones: r.renglones, faltaron };
@@ -184,7 +196,7 @@ onMounted(() => { cargarCola(); cargarAtendidas(); });
         <h1 class="b-titulo">Entregar medicamentos</h1>
       </div>
       <div class="b-acciones">
-        <RouterLink to="/dispensacion/control" class="b-btn secundario"><Icono nombre="inventario" :tamano="20" /> Estante de farmacia</RouterLink>
+        <RouterLink to="/dispensacion/control" class="b-btn secundario"><Icono nombre="inventario" :tamano="20" /> Estante y pedidos</RouterLink>
         <RouterLink :to="`/imprimir/sigsa4/${periodo}`" target="_blank" class="b-btn secundario"><Icono nombre="imprimir" :tamano="20" /> SIGSA-4 del mes</RouterLink>
       </div>
     </header>
@@ -314,6 +326,13 @@ onMounted(() => { cargarCola(); cargarAtendidas(); });
               <div class="med-info">
                 <p class="med-nombre">{{ r.medicamento }}</p>
                 <p v-if="r.indicaciones" class="med-indic"><Icono nombre="reloj" :tamano="15" /> {{ r.indicaciones }}</p>
+                <HorarioDibujo v-if="r.indicaciones" :indicaciones="r.indicaciones" class="mt-1.5" />
+                <label v-if="r.aplicable && !soloVer && r.pendiente && r.aEntregar" class="aplicar">
+                  <input v-model="aplicadas[r.prescripcionId]" type="checkbox" />
+                  <span class="caja"><Icono nombre="correcto" :tamano="16" :grosor="3" /></span>
+                  Se aplicó aquí (inyección, implante o DIU)
+                </label>
+                <span v-else-if="r.aplicada" class="aplicado-chip"><Icono nombre="correcto" :tamano="14" :grosor="3" /> Aplicado en el centro</span>
                 <!-- Lo que sale (o salió) y de qué lote -->
                 <div class="med-lotes">
                   <template v-if="soloVer || !r.pendiente">
@@ -361,6 +380,34 @@ onMounted(() => { cargarCola(); cargarAtendidas(); });
             </ul>
           </div>
 
+          <!-- Antes de que se vaya: cuándo vuelve y cuándo regresar de inmediato -->
+          <section class="salida">
+            <h3>Antes de que se vaya</h3>
+            <div class="salida-rejilla">
+              <div class="cita" :class="{ sin: !hoja.proximaCita }">
+                <Icono nombre="reloj" :tamano="26" :grosor="2.2" />
+                <span>
+                  <small>Próxima cita</small>
+                  <b class="first-letter:uppercase">{{ hoja.proximaCita ? fechaCita(hoja.proximaCita) : 'Sin cita' }}</b>
+                  <em v-if="!hoja.proximaCita">Solo si empeora o no mejora</em>
+                </span>
+              </div>
+              <div class="alarma">
+                <p class="alarma-titulo"><Icono nombre="alerta" :tamano="20" :grosor="2.4" /> Regrese de inmediato si…</p>
+                <template v-for="g in orientacion" :key="g.clave">
+                  <ul><li v-for="x in g.signos" :key="x">{{ x }}</li></ul>
+                  <p v-if="g.consejo" class="consejo">{{ g.consejo }}</p>
+                </template>
+              </div>
+            </div>
+            <label v-if="!soloVer" class="explique">
+              <input v-model="orientado" type="checkbox" />
+              <span class="caja"><Icono nombre="correcto" :tamano="20" :grosor="3" /></span>
+              Le expliqué cómo tomarlos, cuándo vuelve y cuándo regresar de inmediato
+            </label>
+            <p v-else-if="hoja.orientadoEn" class="explicado"><Icono nombre="correcto" :tamano="18" :grosor="2.6" /> Se le explicó al entregar</p>
+          </section>
+
           <footer class="hoja-pie no-imprimir">
             <template v-if="soloVer">
               <button type="button" class="b-btn secundario grande" @click="cerrarHoja"><Icono nombre="cerrar" :tamano="22" /> Cerrar</button>
@@ -382,6 +429,29 @@ onMounted(() => { cargarCola(); cargarAtendidas(); });
 </template>
 
 <style scoped>
+/* --- Post-consulta: aplicar, orientar, cita --- */
+.aplicar, .explique { display: inline-flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 14px; font-weight: 800; color: #334155; cursor: pointer; }
+.aplicar input, .explique input { position: absolute; opacity: 0; width: 0; height: 0; }
+.aplicar .caja, .explique .caja { display: grid; place-items: center; flex-shrink: 0; width: 30px; height: 30px; border: 2px solid #CBD5E1; border-bottom-width: 4px; border-radius: 9px; background: #fff; color: transparent; }
+.aplicar input:checked + .caja, .explique input:checked + .caja { background: #22A06B; border-color: #17784F; color: #fff; }
+.aplicar input:focus-visible + .caja, .explique input:focus-visible + .caja { outline: 3px solid #9FCDEC; }
+.aplicado-chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 2px 9px; border-radius: 9px; background: #E3F6EC; color: #145C3D; font-size: 12.5px; font-weight: 800; }
+.salida { display: grid; gap: 12px; margin-top: 14px; padding: 16px; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 18px; background: #fff; }
+.salida h3 { font-size: 17px; font-weight: 900; color: #14244A; }
+.salida-rejilla { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 12px; }
+@media (max-width: 900px) { .salida-rejilla { grid-template-columns: 1fr; } }
+.cita { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 16px; background: #EAF3FB; color: #1F6AA5; }
+.cita small { display: block; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; color: #174E80; }
+.cita b { display: block; font-size: 19px; font-weight: 900; line-height: 1.2; color: #14244A; }
+.cita em { display: block; font-style: normal; font-size: 13px; font-weight: 700; color: #475569; }
+.cita.sin { background: #F1F5F9; color: #64748B; }
+.alarma { padding: 12px 14px; border-radius: 16px; background: #FDECEC; color: #8C2323; }
+.alarma-titulo { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 900; }
+.alarma ul { display: grid; gap: 2px; margin-top: 6px; padding-left: 22px; list-style: disc; font-size: 14.5px; font-weight: 700; }
+.consejo { margin-top: 6px; padding: 6px 10px; border-radius: 10px; background: #fff; font-size: 13.5px; font-weight: 700; color: #334155; }
+.explique { position: relative; padding: 10px 12px; border-radius: 14px; background: #F8FAFC; font-size: 15px; }
+.explicado { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 800; color: #145C3D; }
+
 .columnas { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (max-width: 1099px) { .columnas { grid-template-columns: 1fr; } }
 .lado { position: sticky; top: 88px; display: grid; gap: 10px; }

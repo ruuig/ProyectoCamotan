@@ -6,6 +6,7 @@ import PanelPreconsulta from '../views/paneles/PanelPreconsulta.vue';
 import PanelMedico from '../views/paneles/PanelMedico.vue';
 import PanelFarmacia from '../views/paneles/PanelFarmacia.vue';
 import PanelAdmin from '../views/paneles/PanelAdmin.vue';
+import PanelBodega from '../views/paneles/PanelBodega.vue';
 import ListaPacientes from '../views/pacientes/ListaPacientes.vue';
 import NuevoPaciente from '../views/pacientes/NuevoPaciente.vue';
 import DetallePaciente from '../views/pacientes/DetallePaciente.vue';
@@ -75,7 +76,7 @@ const router = createRouter({
         { path: 'preconsulta', name: 'panel-preconsulta', component: PanelPreconsulta, meta: { roles: ['preconsulta'] } },
         { path: 'medico', name: 'panel-medico', component: PanelMedico, meta: { roles: ['medico'] } },
         { path: 'farmacia', name: 'panel-farmacia', component: PanelFarmacia, meta: { roles: ['farmacia'] } },
-        { path: 'bodega', name: 'panel-bodega', component: PanelFarmacia, meta: { roles: ['bodega'] } },
+        { path: 'bodega', name: 'panel-bodega', component: PanelBodega, meta: { roles: ['bodega'] } },
         { path: 'admin', name: 'panel-admin', component: PanelAdmin, meta: { roles: ['admin'] } },
       ],
     },
@@ -134,7 +135,7 @@ const router = createRouter({
             // El traslado es la requisicion: el enlace viejo lleva a ella.
             { path: 'traslados', redirect: '/inventario/requisiciones' },
             // Farmacia pide a bodega con requisición, como los demás servicios.
-            { path: 'requisiciones', name: 'requisiciones', component: VistaRequisiciones, meta: { roles: [...BODEGA, 'farmacia'] } },
+            { path: 'requisiciones', name: 'requisiciones', component: VistaRequisiciones, meta: { roles: BODEGA } },
             { path: 'kardex', name: 'kardex', component: VistaKardex, meta: { roles: BODEGA } },
             // El inicio reemplaza a "Hoy": el enlace viejo lleva a él.
             { path: 'hoy', redirect: '/inventario' },
@@ -248,6 +249,7 @@ const router = createRouter({
         { path: 'sigsa4/:periodo', name: 'imprimir-sigsa4', component: HojaSigsa4, meta: { roles: FARMACIA } },
         { path: 'semaforo', name: 'imprimir-semaforo', component: HojaSemaforo, meta: { roles: BODEGA } },
         { path: 'traslado/:id', name: 'imprimir-traslado', component: ComprobanteTraslado, meta: { roles: BODEGA } },
+        { path: 'requisicion/recepcion/:id', name: 'imprimir-requisicion-recepcion', component: HojaRequisicion, meta: { roles: BODEGA } },
         { path: 'receta/:id', name: 'imprimir-receta', component: RecetaPaciente, meta: { roles: FARMACIA } },
         { path: 'requisicion/:id', name: 'imprimir-requisicion', component: HojaRequisicion, meta: { roles: [...BODEGA, 'farmacia'] } },
         { path: 'kardex', name: 'imprimir-kardex', component: HojaKardex, meta: { roles: BODEGA } },

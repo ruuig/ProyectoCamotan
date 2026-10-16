@@ -1,9 +1,9 @@
 const prisma = require('../config/db');
-const { existenciaTotal } = require('./inventario.service');
-const { diasCobertura } = require('./indicadores.service');
-const { consumoDiario } = require('./consumo.service');
 const { describirPeriodo, MS_POR_DIA, DESFASE_LOCAL_HORAS } = require('./periodo.service');
 const { decisionesPendientes } = require('./decisiones.service');
+const bodegaDatos = require('./bodegaDatos.service');
+const { situacionBres } = require('./bodega.service');
+const { etapaDeVida } = require('./etapaVida.service');
 
 /**
  * Reglas de lectura del panel de direccion.
@@ -477,44 +477,61 @@ async function armarDiagnosticos(establecimientoId, ahora) {
   };
 }
 
-/** Los cinco insumos con menos dias de cobertura. */
+/**
+ * Abastecimiento con la regla del BRES, la misma de Existencias: cuantos
+ * insumos estan agotados en bodega o con el municipio bajo el minimo, y
+ * cuales son, primero los que mas se consumen (los que mas pacientes dejan
+ * sin medicamento).
+ */
 async function armarAbastecimiento(establecimientoId, ahora) {
-  const insumos = await prisma.insumo.findMany({
-    where: { establecimientoId, activo: true },
-    include: { lotes: true },
-  });
+  const local = new Date(new Date(ahora).getTime() - DESFASE_LOCAL_HORAS * 3600000);
+  const periodo = `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}`;
+  const b = await bodegaDatos.balance(establecimientoId, periodo);
 
-  const filas = [];
-  for (const insumo of insumos) {
-    const saldo = existenciaTotal(insumo.lotes, ahora);
-    const consumo = await consumoDiario(insumo.id, ahora);
-    const dias = consumo.historialSuficiente ? diasCobertura(saldo, consumo.consumoDia) : null;
-
-    filas.push({
-      insumoId: insumo.id,
-      nombre: insumo.nombreGenerico,
-      saldo,
-      unidad: insumo.unidadMedida,
-      dias: saldo === 0 ? 0 : dias,
-      sinExistencia: saldo === 0,
-      // Sin historial no se afirma un numero de dias: se dice que falta.
-      sinConsumo: saldo > 0 && dias === null,
-    });
+  const conteo = { agotado: 0, bajo: 0, bien: 0, sin_consumo: 0 };
+  const lista = [];
+  for (const f of b.filas) {
+    const situacion = situacionBres(f.bres);
+    conteo[situacion] += 1;
+    if (situacion === 'agotado' || situacion === 'bajo') {
+      lista.push({
+        insumoId: f.insumoId,
+        nombre: f.nombre,
+        unidad: f.unidadEntrega,
+        situacion,
+        bodega: f.bres.I,
+        municipio: f.bres.H,
+        promedio: f.bres.J,
+        meses: f.bres.K == null ? null : Math.round(f.bres.K * 10) / 10,
+      });
+    }
   }
-
-  // Primero lo que menos alcanza. Lo que no se pudo medir va al final: no se
-  // puede sostener que sea mas urgente que algo que si se midio.
-  filas.sort((a, b) => (a.dias ?? Infinity) - (b.dias ?? Infinity));
+  lista.sort((x, y) => y.promedio - x.promedio);
 
   return {
-    umbral: UMBRAL_COBERTURA_DIAS,
-    horizonte: HORIZONTE_COBERTURA,
-    lista: filas.slice(0, FILAS).map((f) => ({
-      ...f,
-      color: colorCobertura(f.dias, UMBRAL_COBERTURA_DIAS),
-      proporcion: proporcion(f.dias, HORIZONTE_COBERTURA),
-    })),
+    periodo,
+    nivelMinimoMeses: b.configuracion.nivelMinimoMeses,
+    conteo,
+    total: b.filas.length,
+    lista: lista.slice(0, 8),
   };
+}
+
+/**
+ * Pacientes atendidos en el periodo por etapa de vida: los programas del
+ * MSPAS se organizan por curso de vida, y es lo primero que se pregunta al
+ * planificar personal e insumos.
+ */
+function armarEtapas(atenciones) {
+  const conteo = { lactante_ninez: 0, adolescente_joven: 0, adulto: 0, persona_mayor: 0 };
+  for (const a of atenciones) {
+    if (!a.paciente?.fechaNacimiento) continue;
+    const meses = (new Date(a.registradaEn) - new Date(a.paciente.fechaNacimiento)) / (MS_POR_DIA * 30.4375);
+    const etapa = etapaDeVida(Math.max(0, Math.floor(meses)));
+    const clave = etapa?.clave === 'recien_nacido' ? 'lactante_ninez' : etapa?.clave;
+    if (clave in conteo) conteo[clave] += 1;
+  }
+  return conteo;
 }
 
 /** Comunidades ordenadas por lo que llevan sin una atencion registrada. */
@@ -589,11 +606,15 @@ async function panelDireccion(establecimientoId, ahora = new Date(), periodo = '
       reingresoEn: true,
       llamadaEn: true,
       cerradaEn: true,
+      diagnosticoCie: true,
+      paciente: { select: { fechaNacimiento: true } },
     },
   });
 
   const enRango = (desde, hasta) =>
     atenciones.filter((a) => new Date(a.registradaEn) >= desde && new Date(a.registradaEn) < hasta);
+
+  const actuales = enRango(rango.desde, rango.hasta);
 
   const [decisiones, diagnosticos, abastecimiento, comunidades, fichasIncompletas] =
     await Promise.all([
@@ -625,6 +646,13 @@ async function panelDireccion(establecimientoId, ahora = new Date(), periodo = '
     abastecimiento,
     comunidades,
     fichasIncompletas,
+    etapas: armarEtapas(actuales),
+    // Calidad del dato para el SIGSA: de lo atendido en el periodo, cuanto
+    // ya tiene su codigo CIE-10.
+    codificacion: {
+      atendidas: actuales.filter((a) => a.estado === 'atendido').length,
+      codificadas: actuales.filter((a) => a.estado === 'atendido' && a.diagnosticoCie).length,
+    },
   };
 }
 

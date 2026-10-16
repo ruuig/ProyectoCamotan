@@ -5,6 +5,7 @@ import { cronometro } from '../../dominio/cronometro';
 import servicio from '../../services/pacientes';
 import catalogos from '../../services/catalogos';
 import Icono from '../../components/comunes/Icono.vue';
+import { ETAPAS, estiloEtapa, etapaDe, iniciales } from '../../dominio/etapas';
 
 /**
  * Búsqueda de pacientes.
@@ -37,12 +38,6 @@ const filtros = reactive({
   pagina: 1,
 });
 
-const ETAPAS = [
-  { valor: 'lactante_ninez', etiqueta: 'Niñez (menor de 10)', corta: 'Niñez' },
-  { valor: 'adolescente_joven', etiqueta: 'Adolescencia y juventud (10 a 29)', corta: 'Adolescencia y juventud' },
-  { valor: 'adulto', etiqueta: 'Adultez (30 a 59)', corta: 'Adultez' },
-  { valor: 'persona_mayor', etiqueta: 'Persona mayor (60 y más)', corta: 'Persona mayor' },
-];
 
 /** Cuántos filtros hay puestos, para avisarlo sin tener que abrir el panel. */
 const filtrosActivos = computed(
@@ -52,13 +47,13 @@ const filtrosActivos = computed(
     ).length,
 );
 
-function edadLegible(p) {
+/** La edad en dos piezas: la cifra grande y su unidad. */
+function edad(p) {
   const { anios, meses } = p.edad ?? {};
-  if (anios == null) return '';
-  const texto = anios >= 1
-    ? `${anios} ${anios === 1 ? 'año' : 'años'}`
-    : `${meses} ${meses === 1 ? 'mes' : 'meses'}`;
-  return p.fechaNacimientoEstimada ? `${texto} aprox.` : texto;
+  if (anios == null) return null;
+  return anios >= 1
+    ? { n: anios, u: anios === 1 ? 'año' : 'años' }
+    : { n: meses, u: meses === 1 ? 'mes' : 'meses' };
 }
 
 /**
@@ -68,7 +63,7 @@ function edadLegible(p) {
 function faltan(p) {
   if (!p.ficha || p.ficha.completa) return null;
   const n = p.ficha.faltantes.length;
-  return `faltan ${n} ${n === 1 ? 'dato' : 'datos'}`;
+  return `Faltan ${n} ${n === 1 ? "dato" : "datos"}`;
 }
 
 async function buscar() {
@@ -150,129 +145,210 @@ function abrirFicha(id) {
         <h1 class="b-titulo">Pacientes</h1>
         <span v-if="paginacion" class="b-antetitulo">{{ paginacion.total.toLocaleString('en-US') }} {{ paginacion.total === 1 ? 'registrado' : 'registrados' }}</span>
       </div>
-      <RouterLink to="/pacientes/nuevo" class="b-btn primario"><Icono nombre="agregar" :tamano="20" /> Registrar paciente</RouterLink>
+      <RouterLink to="/pacientes/nuevo" class="b-btn primario alto"><Icono nombre="agregar" :tamano="22" :grosor="2.4" /> Registrar paciente</RouterLink>
     </header>
 
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
 
-    <!-- Búsqueda y filtros -->
-    <div class="b-panel mt-5 p-4">
-      <div class="flex flex-wrap gap-3">
-        <label class="b-buscar min-w-[260px] flex-1">
-          <Icono nombre="buscar" :tamano="20" />
-          <input v-model="filtros.buscar" type="search" class="b-campo grande" placeholder="Nombre, CUI, expediente o teléfono" aria-label="Buscar paciente" @input="filtros.buscar ? reloj.iniciar() : reloj.reiniciar()" />
-        </label>
-        <div class="w-full sm:w-[260px]">
-          <select v-model="filtros.lugarPobladoId" aria-label="Comunidad" class="b-campo grande">
+    <!-- Búsqueda -->
+    <label class="buscador mt-5">
+      <Icono nombre="buscar" :tamano="26" :grosor="2.4" />
+      <input v-model="filtros.buscar" type="search" placeholder="Buscar por nombre, CUI, expediente o teléfono" aria-label="Buscar paciente" @input="filtros.buscar ? reloj.iniciar() : reloj.reiniciar()" />
+      <button v-if="filtrosActivos > 0 || filtros.buscar" type="button" class="limpiar" @click="limpiar"><Icono nombre="cerrar" :tamano="16" :grosor="2.4" /> Limpiar</button>
+    </label>
+
+    <!-- Filtros, en tres grupos con nombre -->
+    <div class="filtros mt-4">
+      <div class="grupo-filtro etapas">
+        <span class="g-titulo">Etapa de vida</span>
+        <div class="fichas-etapa">
+          <button
+            v-for="e in ETAPAS"
+            :key="e.valor"
+            type="button"
+            class="etapa"
+            :class="filtros.etapa === e.valor ? 'on' : ''"
+            :style="estiloEtapa(e)"
+            :aria-pressed="filtros.etapa === e.valor"
+            @click="filtros.etapa = filtros.etapa === e.valor ? '' : e.valor"
+          >
+            <span class="etapa-punto" />
+            <span class="min-w-0 text-left">
+              <span class="block truncate">{{ e.corta }}</span>
+              <small>{{ e.rango }}</small>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div class="grupo-filtro">
+        <span class="g-titulo">Quién</span>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="b-segmentado" role="radiogroup" aria-label="Sexo">
+            <button v-for="o in [['', 'Todos'], ['F', 'Mujeres'], ['M', 'Hombres']]" :key="o[0]" type="button" role="radio" :aria-checked="filtros.sexo === o[0]" :class="filtros.sexo === o[0] ? 'on' : ''" @click="filtros.sexo = o[0]">{{ o[1] }}</button>
+          </div>
+          <span class="flex items-center gap-2">
+            <input v-model="filtros.edadMinima" inputmode="numeric" placeholder="Edad desde" aria-label="Edad desde" class="b-campo edad" />
+            <span class="font-bold text-apagado">a</span>
+            <input v-model="filtros.edadMaxima" inputmode="numeric" placeholder="hasta" aria-label="Edad hasta" class="b-campo edad" />
+          </span>
+          <select v-model="filtros.lugarPobladoId" aria-label="Comunidad" class="b-campo comunidad">
             <option value="">Todas las comunidades</option>
             <option v-for="l in lugares" :key="l.id" :value="l.id">{{ l.nombre }}{{ l.sector ? ` (${l.sector})` : '' }}</option>
           </select>
         </div>
-        <span class="flex items-center gap-2">
-          <button type="button" class="b-chip alto" :class="filtros.embarazoActivo === 'true' ? 'on' : ''" @click="alternar('embarazoActivo')">Embarazo</button>
-          <button type="button" class="b-chip alto" :class="filtros.conAlertas === 'true' ? 'on' : ''" @click="alternar('conAlertas')">Con alertas</button>
-          <button type="button" class="b-chip alto" :class="filtros.fichaIncompleta === 'true' ? 'on' : ''" @click="alternar('fichaIncompleta')">Ficha incompleta</button>
-        </span>
       </div>
 
-      <div class="mt-3 flex flex-wrap items-center gap-2">
-        <div class="b-segmentado" role="radiogroup" aria-label="Sexo">
-          <button v-for="o in [['', 'Todos'], ['F', 'Mujeres'], ['M', 'Hombres']]" :key="o[0]" type="button" role="radio" :aria-checked="filtros.sexo === o[0]" :class="filtros.sexo === o[0] ? 'on' : ''" @click="filtros.sexo = o[0]">{{ o[1] }}</button>
+      <div class="grupo-filtro">
+        <span class="g-titulo">Marcas</span>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="marca m-embarazo" :class="filtros.embarazoActivo === 'true' ? 'on' : ''" :aria-pressed="filtros.embarazoActivo === 'true'" @click="alternar('embarazoActivo')">Embarazo</button>
+          <button type="button" class="marca m-aviso" :class="filtros.conAlertas === 'true' ? 'on' : ''" :aria-pressed="filtros.conAlertas === 'true'" @click="alternar('conAlertas')"><Icono nombre="alerta" :tamano="16" :grosor="2.4" /> Con avisos clínicos</button>
+          <button type="button" class="marca m-ficha" :class="filtros.fichaIncompleta === 'true' ? 'on' : ''" :aria-pressed="filtros.fichaIncompleta === 'true'" @click="alternar('fichaIncompleta')">Ficha incompleta</button>
         </div>
-        <span class="separador" aria-hidden="true" />
-        <button
-          v-for="e in ETAPAS"
-          :key="e.valor"
-          type="button"
-          class="b-chip"
-          :class="filtros.etapa === e.valor ? 'on' : ''"
-          :aria-pressed="filtros.etapa === e.valor"
-          @click="filtros.etapa = filtros.etapa === e.valor ? '' : e.valor"
-        >
-          {{ e.corta }}
-        </button>
-        <span class="separador" aria-hidden="true" />
-        <span class="flex items-center gap-2">
-          <span class="text-sm font-bold text-apagado">Edad</span>
-          <input v-model="filtros.edadMinima" inputmode="numeric" placeholder="desde" aria-label="Edad desde" class="b-campo num edad" />
-          <span class="text-apagado">–</span>
-          <input v-model="filtros.edadMaxima" inputmode="numeric" placeholder="hasta" aria-label="Edad hasta" class="b-campo num edad" />
-        </span>
-        <span class="ml-auto">
-          <button v-if="filtrosActivos > 0 || filtros.buscar" type="button" class="b-btn secundario chico" @click="limpiar"><Icono nombre="cerrar" :tamano="16" :grosor="2.2" /> Limpiar</button>
-        </span>
       </div>
     </div>
 
     <!-- Resultados -->
-    <div class="b-tabla-marco mt-4">
-      <table class="b-tabla resultados">
-        <thead>
-          <tr>
-            <th class="w-[120px]">Código</th>
-            <th>Paciente</th>
-            <th class="w-[120px]">Edad</th>
-            <th class="w-[130px]">Ficha</th>
-            <th class="w-[40px]" />
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="p in pacientes" :key="p.id" class="fila" @click="abrirFicha(p.id)">
-            <td>
-              <span class="codigo" :class="p.expedientePapel ? '' : 'sin-papel'">
-                <b>{{ p.expedientePapel || p.expediente }}</b>
-                <small>{{ p.expedientePapel ? p.expediente : 'sin ficha' }}</small>
-              </span>
-            </td>
-            <td>
-              <RouterLink :to="`/pacientes/${p.id}`" class="nombre" @click.stop="reloj.terminar(p.id)">{{ p.apellidos }}, {{ p.nombres }}</RouterLink>
-              <span v-if="p.embarazoActivo" class="b-estado disponible ml-2">Embarazo</span>
-              <span v-if="p.conAlertas" class="b-estado retirado ml-2">Alertas</span>
-              <span class="block truncate text-[13px] text-apagado">
-                {{ p.comunidad }}<template v-if="p.responsableNombre"> · responsable {{ p.responsableNombre }}</template>
-              </span>
-              <span v-if="p.razonCoincidencia" class="block truncate text-[13px] font-semibold text-[#1F4FA8]">{{ p.razonCoincidencia }}</span>
-            </td>
-            <td>
-              <span class="block font-semibold tabular-nums text-tinta">{{ edadLegible(p) }}</span>
-              <span class="text-[13px] text-apagado">{{ p.sexo === 'M' ? 'Hombre' : 'Mujer' }}</span>
-            </td>
-            <td>
-              <span v-if="faltan(p)" class="b-estado cuarentena">{{ faltan(p) }}</span>
-              <span v-else class="b-estado disponible">Completa</span>
-            </td>
-            <td class="text-apagado"><Icono nombre="irA" :tamano="18" /></td>
-          </tr>
-          <tr v-if="!cargando && !pacientes.length">
-            <td colspan="5" class="b-vacio">Ningún paciente coincide.</td>
-          </tr>
-          <tr v-if="cargando && !pacientes.length">
-            <td colspan="5" class="b-vacio">Buscando…</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <ul class="lista mt-5" aria-label="Pacientes">
+      <li v-for="p in pacientes" :key="p.id">
+        <RouterLink :to="`/pacientes/${p.id}`" class="tarjeta-p" :style="estiloEtapa(etapaDe(p))" @click.prevent="abrirFicha(p.id)">
+          <span class="avatar" :title="etapaDe(p)?.corta">{{ iniciales(p) }}</span>
 
-    <nav v-if="paginacion && paginacion.paginas > 1" class="mt-4 flex items-center justify-center gap-3" aria-label="Páginas">
-      <button type="button" class="b-btn secundario chico" :disabled="paginacion.pagina <= 1" @click="filtros.pagina -= 1"><Icono nombre="volver" :tamano="16" :grosor="2.2" /> Anterior</button>
-      <span class="text-sm font-semibold tabular-nums text-apagado">Página <b class="text-tinta">{{ paginacion.pagina }}</b> de {{ paginacion.paginas }}</span>
-      <button type="button" class="b-btn secundario chico" :disabled="paginacion.pagina >= paginacion.paginas" @click="filtros.pagina += 1">Siguiente <Icono nombre="irA" :tamano="16" :grosor="2.2" /></button>
+          <span class="min-w-0 flex-1">
+            <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span class="nombre">{{ p.apellidos }}, {{ p.nombres }}</span>
+              <span v-if="p.embarazoActivo" class="sello s-embarazo">Embarazo</span>
+              <span v-if="p.conAlertas" class="sello s-aviso"><Icono nombre="alerta" :tamano="13" :grosor="2.6" /> Avisos</span>
+            </span>
+            <span class="linea">
+              <span v-if="etapaDe(p)" class="etapa-txt">{{ etapaDe(p).corta }}</span>
+              <span>{{ p.sexo === 'M' ? 'Hombre' : 'Mujer' }}</span>
+              <span v-if="p.comunidad" class="inline-flex items-center gap-1"><Icono nombre="ubicacion" :tamano="14" :grosor="2.2" /> {{ p.comunidad }}</span>
+              <span v-if="p.responsableNombre" class="truncate">responsable {{ p.responsableNombre }}</span>
+            </span>
+            <span v-if="p.razonCoincidencia" class="razon">{{ p.razonCoincidencia }}</span>
+          </span>
+
+          <span v-if="edad(p)" class="edad-g">
+            <b>{{ edad(p).n }}</b>
+            <small>{{ edad(p).u }}{{ p.fechaNacimientoEstimada ? ' aprox.' : '' }}</small>
+          </span>
+
+          <span class="codigo" :class="p.expedientePapel ? '' : 'sin-papel'">
+            <small class="et">{{ p.expedientePapel ? 'Ficha' : 'Expediente' }}</small>
+            <b>{{ p.expedientePapel || p.expediente }}</b>
+            <small>{{ p.expedientePapel ? p.expediente : 'sin ficha de papel' }}</small>
+          </span>
+
+          <span class="estado-ficha" :class="faltan(p) ? 'falta' : 'ok'">
+            <Icono :nombre="faltan(p) ? 'lapiz' : 'correcto'" :tamano="15" :grosor="2.4" />
+            {{ faltan(p) ?? 'Ficha completa' }}
+          </span>
+          <Icono nombre="irA" :tamano="22" :grosor="2.6" class="flecha" />
+        </RouterLink>
+      </li>
+      <li v-if="!cargando && !pacientes.length" class="b-vacio">Ningún paciente coincide.</li>
+      <li v-if="cargando && !pacientes.length" class="b-vacio">Buscando…</li>
+    </ul>
+
+    <nav v-if="paginacion && paginacion.paginas > 1" class="mt-5 flex items-center justify-center gap-3" aria-label="Páginas">
+      <button type="button" class="b-btn secundario" :disabled="paginacion.pagina <= 1" @click="filtros.pagina -= 1"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> Anterior</button>
+      <span class="font-bold tabular-nums text-apagado">Página <b class="text-tinta">{{ paginacion.pagina }}</b> de {{ paginacion.paginas }}</span>
+      <button type="button" class="b-btn secundario" :disabled="paginacion.pagina >= paginacion.paginas" @click="filtros.pagina += 1">Siguiente <Icono nombre="irA" :tamano="18" :grosor="2.2" /></button>
     </nav>
   </section>
 </template>
 
 <style scoped>
-.grande { height: 52px; font-size: 16px; }
-.separador { width: 2px; height: 26px; margin: 0 4px; background: #E2E8F0; }
-.edad { width: 76px; height: 38px; }
-.b-chip.alto { height: 52px; }
-.codigo { display: inline-flex; flex-direction: column; min-width: 92px; padding: 3px 10px; border: 2px solid #172A5A; border-radius: 8px; line-height: 1.15; }
-.codigo b { font-size: 18px; font-weight: 700; color: #172A5A; font-variant-numeric: tabular-nums; }
-.codigo small { font-size: 11px; font-weight: 600; color: #64748B; font-variant-numeric: tabular-nums; }
+.b-btn.alto { min-height: 52px; padding: 0 22px; font-size: 16px; }
+
+/* --- Buscador -------------------------------------------------------------- */
+.buscador {
+  display: flex; align-items: center; gap: 12px; height: 64px; padding: 0 12px 0 20px; background: #fff; color: #64748B;
+  border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 20px; transition: border-color .12s, box-shadow .12s;
+}
+.buscador:focus-within { border-color: #4A9BD6; border-bottom-color: #2F83C4; box-shadow: 0 0 0 4px rgba(74, 155, 214, .15); color: #2F83C4; }
+.buscador input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent; font-size: 19px; font-weight: 700; color: #14244A; }
+.buscador input::placeholder { font-weight: 600; color: #94A3B8; }
+.limpiar { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; background: #F1F4F8; font-weight: 800; font-size: 14px; color: #475569; }
+
+/* --- Filtros ---------------------------------------------------------------- */
+.filtros { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+.filtros .etapas { grid-column: 1 / -1; }
+@media (max-width: 1100px) { .filtros { grid-template-columns: 1fr; } }
+.grupo-filtro { padding: 12px 14px; background: #fff; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 18px; }
+.g-titulo { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: #64748B; }
+.fichas-etapa { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 800px) { .fichas-etapa { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.etapa {
+  display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 12px; border-radius: 16px; background: #fff;
+  border: 2px solid #E5E9F0; border-bottom-width: 4px; font-weight: 800; color: #334155; transition: transform .06s, background .12s;
+}
+.etapa small { display: block; font-size: 12px; font-weight: 700; color: #64748B; }
+.etapa:hover { border-color: var(--et); }
+.etapa:active { transform: translateY(2px); border-bottom-width: 2px; }
+.etapa.on { background: var(--et-fondo); border-color: var(--et); border-bottom-color: var(--et-tinta); color: var(--et-tinta); }
+.etapa.on small { color: var(--et-tinta); }
+.etapa-punto { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--et); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); }
+.edad { width: 110px; height: 44px; }
+.comunidad { width: 240px; height: 44px; }
+.marca {
+  display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 14px; border-radius: 14px; background: #fff;
+  border: 2px solid #E5E9F0; border-bottom-width: 4px; font-weight: 800; font-size: 14px; color: #334155; transition: transform .06s;
+}
+.marca:active { transform: translateY(2px); border-bottom-width: 2px; }
+.m-embarazo { --m: #C8456A; --m-fondo: #FBE3EA; --m-tinta: #922845; }
+.m-aviso { --m: #D64545; --m-fondo: #FDECEC; --m-tinta: #8C2323; }
+.m-ficha { --m: #E8930C; --m-fondo: #FFF4E0; --m-tinta: #8A4B00; }
+.marca:hover { border-color: var(--m); }
+.marca.on { background: var(--m-fondo); border-color: var(--m); color: var(--m-tinta); }
+
+/* --- Tarjetas de paciente ---------------------------------------------------- */
+.lista { display: flex; flex-direction: column; gap: 10px; }
+.tarjeta-p {
+  --et: #94A3B8; --et-fondo: #F1F4F8; --et-tinta: #475569;
+  display: flex; align-items: center; gap: 16px; min-height: 88px; padding: 12px 16px; background: #fff;
+  border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 20px; transition: border-color .12s, transform .06s;
+}
+.tarjeta-p:hover { border-color: var(--et); }
+.tarjeta-p:active { transform: translateY(2px); border-bottom-width: 2px; }
+.avatar {
+  display: grid; place-items: center; flex-shrink: 0; width: 56px; height: 56px; border-radius: 50%;
+  background: var(--et); color: #fff; font-size: 20px; font-weight: 900; letter-spacing: .02em; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18);
+}
+.nombre { font-size: 18px; font-weight: 900; line-height: 1.2; color: #14244A; }
+.linea { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 3px; font-size: 14px; font-weight: 700; color: #64748B; }
+.etapa-txt { padding: 1px 9px; border-radius: 8px; background: var(--et-fondo); color: var(--et-tinta); font-weight: 800; font-size: 12.5px; }
+.razon { display: block; margin-top: 3px; font-size: 13px; font-weight: 800; color: #1F6AA5; }
+.sello { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 8px; font-size: 12px; font-weight: 800; }
+.s-embarazo { background: #FBE3EA; color: #922845; }
+.s-aviso { background: #FDECEC; color: #8C2323; }
+.edad-g { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 82px; line-height: 1; }
+.edad-g b { font-size: 30px; font-weight: 900; color: #14244A; font-variant-numeric: tabular-nums; }
+.edad-g small { margin-top: 4px; font-size: 12px; font-weight: 800; color: #64748B; white-space: nowrap; }
+.codigo {
+  display: inline-flex; flex-direction: column; align-items: center; flex-shrink: 0; min-width: 112px; padding: 4px 10px;
+  border: 2px solid #172A5A; border-bottom-width: 4px; border-radius: 14px; line-height: 1.15;
+}
+.codigo .et { font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: #64748B; }
+.codigo b { font-size: 20px; font-weight: 900; color: #172A5A; font-variant-numeric: tabular-nums; }
+.codigo small { font-size: 11px; font-weight: 700; color: #64748B; font-variant-numeric: tabular-nums; }
 .codigo.sin-papel { border-color: #CBD5E1; }
-.codigo.sin-papel b { font-size: 14px; }
-.resultados .fila { cursor: pointer; }
-.resultados td { vertical-align: middle; }
-.nombre { font-weight: 700; color: #14244A; }
-.nombre:hover { text-decoration: underline; }
+.codigo.sin-papel b { font-size: 15px; }
+.estado-ficha { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; width: 150px; font-size: 13px; font-weight: 800; }
+.estado-ficha.falta { color: #8A4B00; }
+.estado-ficha.ok { color: #17784F; }
+.flecha { flex-shrink: 0; color: #94A3B8; }
+.tarjeta-p:hover .flecha { color: var(--et-tinta); }
+@media (max-width: 900px) {
+  .estado-ficha { display: none; }
+}
+@media (max-width: 640px) {
+  .tarjeta-p { flex-wrap: wrap; gap: 12px; }
+  .tarjeta-p > .min-w-0 { flex-basis: calc(100% - 72px); }
+  .avatar { width: 46px; height: 46px; font-size: 17px; }
+  .flecha { display: none; }
+  .comunidad { width: 100%; }
+}
 </style>

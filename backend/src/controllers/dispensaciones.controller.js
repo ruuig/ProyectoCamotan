@@ -1,3 +1,4 @@
+const { encabezadoEstablecimiento } = require('../services/encabezado.service');
 const prisma = require('../config/db');
 const { descontarDeLote, devolverEntrega } = require('../services/movimientos.service');
 const { limitesDePeriodo } = require('../services/abastecimiento.service');
@@ -139,6 +140,9 @@ async function crear(req, res, next) {
 
 // --- Entrega por paciente --------------------------------------------------------
 
+// Lo que se aplica en el centro en vez de llevarse: inyectables, implantes, DIU.
+const SE_APLICA = /ampolla|\bamp\b|vial|inyect|jeringa|implante|dispositivo intrauterino|\bdiu\b/i;
+
 const INCLUIR_ATENCION = {
   paciente: true,
   medico: { select: { nombre: true, cargo: true } },
@@ -218,6 +222,9 @@ async function hojaDeEntrega(req, res, next) {
       yaEntregado: r.cantidad - pendiente,
       pendiente,
       indicaciones: r.indicaciones,
+      // Se pone en el centro (inyección, implante, DIU): se marca como aplicado.
+      aplicable: SE_APLICA.test(`${r.insumo.nombreGenerico} ${r.insumo.presentacion ?? ''} ${r.insumo.formaFarmaceutica ?? ''}`),
+      aplicada: r.dispensaciones.some((d) => !d.anulada && d.aplicadaEnServicio),
       enFarmacia: existenciaTotal(lotesFarmacia, ahora),
       enBodega: enBodega(r.insumo.lotes, ahora),
       aEntregar: plan?.aEntregar ?? 0,
@@ -253,6 +260,9 @@ async function hojaDeEntrega(req, res, next) {
     },
     medico: atencion.medico,
     diagnosticos: atencion.diagnosticos.map((d) => ({ descripcion: d.descripcion, cie: d.cie })),
+    diagnosticoCie: atencion.diagnosticoCie,
+    proximaCita: atencion.proximaCita,
+    orientadoEn: atencion.orientadoEn,
     renglones,
     recetasExternas: atencion.recetasExternas.map((x) => ({ medicamento: x.medicamento, cantidad: x.cantidad, indicaciones: x.indicaciones })),
   });
@@ -304,6 +314,17 @@ async function dispensarAtencion(req, res, next) {
     }
     return salida;
   }, { timeout: 30000 });
+
+  // Lo que se puso aquí (inyección, método de planificación) y la orientación.
+  const aplicadas = resultados
+    .filter((r) => r.dispensacionId && pedidas.get(r.prescripcionId)?.aplicada)
+    .map((r) => r.dispensacionId);
+  if (aplicadas.length) {
+    await prisma.dispensacion.updateMany({ where: { id: { in: aplicadas } }, data: { aplicadaEnServicio: true } });
+  }
+  if (req.body.orientado) {
+    await prisma.atencion.update({ where: { id: atencion.id }, data: { orientadoEn: new Date() } });
+  }
 
   const entregados = resultados.filter((r) => r.entregado > 0);
   const faltaron = resultados.filter((r) => r.noEntregado > 0);
@@ -513,12 +534,7 @@ async function sigsa4(req, res) {
   await req.bitacora({ accion: 'leer', entidad: 'sigsa4', detalle: `SIGSA-4 de ${periodo}` });
   res.json({
     periodo,
-    encabezado: {
-      areaSalud: establecimiento.departamento,
-      distrito: establecimiento.municipio,
-      municipio: establecimiento.municipio,
-      servicio: establecimiento.nombre,
-    },
+    encabezado: encabezadoEstablecimiento(establecimiento),
     renglones: renglonesSigsa4(prescripciones),
   });
 }

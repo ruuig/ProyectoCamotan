@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import { registrarImpresion } from '../../dominio/impresionBodega';
+import { leerAnotarReclamar, guardarAnotarReclamar, observacionKardex } from '../../dominio/bodega';
 
 /**
  * Tarjeta de Control de Suministro (kardex) impresa sobre la tarjeta.
@@ -75,6 +76,9 @@ function mover(eje, mm) {
 const inicio = ref(1);
 const lados = ref('ambos');
 const guias = ref(true);
+// La misma preferencia que en la pantalla del kardex.
+const anotarReclamar = ref(leerAnotarReclamar());
+watch(anotarReclamar, guardarAnotarReclamar);
 const imprimir = () => window.print();
 
 // --- Formatos ----------------------------------------------------------------------
@@ -91,7 +95,7 @@ function valores(f) {
     venceCorta(f.fechaVence), f.numeroLote ?? '',
     numero(f.salida), conSigno(f.reajuste), numero(f.saldo),
     f.saldo && f.valorSaldo != null ? numero(f.valorSaldo / f.saldo) : '',
-    f.observaciones ?? '',
+    observacionKardex(f, anotarReclamar.value),
   ];
 }
 const ALINEAR = ['izq chica', 'centro', 'izq', 'centro', 'centro', 'der', 'centro', 'centro', 'centro', 'centro', 'centro', 'centro', 'izq'];
@@ -165,6 +169,7 @@ onMounted(async () => {
     <button type="button" class="rounded border px-2 py-1" @click="mover('y', 1)">1 mm ↓</button>
     <span class="tabular-nums">({{ ajuste.x }}, {{ ajuste.y }}) mm</span>
     <label class="flex items-center gap-1"><input v-model="guias" type="checkbox" /> Ver casillas</label>
+    <label class="flex items-center gap-1"><input v-model="anotarReclamar" type="checkbox" /> Anotar faltantes por reclamar</label>
     <button type="button" class="ml-auto rounded bg-black px-3 py-1.5 font-bold text-white" @click="imprimir">Imprimir</button>
     <p class="w-full text-xs text-slate-600">
       Tarjeta en papel oficio horizontal. Las casillas punteadas solo se ven aquí. Para el reverso, voltee la tarjeta y elija "Solo reverso".

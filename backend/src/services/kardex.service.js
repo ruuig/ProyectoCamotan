@@ -53,10 +53,9 @@ function describir(m) {
         columna: 'entrada',
         referencia: m.lote.recepcion?.numeroDocumento ?? req(m.lote.requisicion?.numero) ?? (m.lote.actaDonacion ? `Acta ${m.lote.actaDonacion}` : 'Inventario inicial'),
         remitenteDestinatario: m.lote.recepcion?.remitente ?? m.lote.requisicion?.almacen ?? ETIQUETA_ORIGEN[m.lote.origen] ?? '',
-        observaciones: [
-          m.lote.origen === 'donacion' ? 'Donación' : '',
-          m.lote.cantidadPorReponer ? `Faltan ${m.lote.cantidadPorReponer} por reclamar` : '',
-        ].filter(Boolean).join('. '),
+        observaciones: m.lote.origen === 'donacion' ? 'Donación' : '',
+        // Aparte, para que la pantalla y la tarjeta decidan si lo anotan.
+        porReclamar: m.lote.cantidadPorReponer || null,
       };
     case 'paso_farmacia':
       return {
@@ -109,6 +108,7 @@ function filasKardex(movimientos, saldoAnterior = 0, valorAnterior = 0) {
       saldo,
       valorSaldo: valorCompleto ? redondear(valor) : null,
       observaciones: d.observaciones,
+      porReclamar: d.porReclamar ?? null,
       usuario: m.usuario?.nombre ?? null,
     };
   });
@@ -196,7 +196,7 @@ async function encabezadoKardex(establecimientoId) {
     configuracion(establecimientoId),
   ]);
   return {
-    distrito: est ? `${est.municipio}, ${est.departamento}` : '',
+    distrito: est ? est.distritoSalud || `${est.municipio}, ${est.departamento}` : '',
     servicio: 'Bodega',
     nivelMinimo: Number(config.nivelMinimoMeses),
     nivelMaximo: Number(config.nivelMaximoMeses),

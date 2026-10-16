@@ -106,6 +106,9 @@ function aEntradaDeCola(entrada, posicion = null) {
   };
 }
 
+// Más que esto en espera ya no es de la jornada.
+const HORAS_JORNADA = 12;
+
 /**
  * Cola vigente. El puntaje se calcula al leer, nunca con un UPDATE masivo.
  */
@@ -121,8 +124,16 @@ async function obtenerCola(establecimientoId, ahora = new Date()) {
     }),
   ]);
 
+  // Quien lleva más de una jornada en espera ya se fue a su casa: si entrara
+  // al orden, su espera de días lo pondría primero y se llamaría a alguien
+  // que no está. Se devuelve aparte para cerrarlo. Se mide en horas y no por
+  // fecha para no sacar a quien llegó a las 11 de la noche.
+  const vencida = (a) => minutosEsperando(a, ahora) > HORAS_JORNADA * 60;
+  const delDia = enEspera.filter((a) => !vencida(a));
+  const anteriores = enEspera.filter(vencida);
+
   const { puntos } = await parametros(establecimientoId);
-  const ordenada = ordenarCola(enEspera, ahora, puntos);
+  const ordenada = ordenarCola(delDia, ahora, puntos);
   const resumen = resumenCola(ordenada);
 
   return {
@@ -138,6 +149,9 @@ async function obtenerCola(establecimientoId, ahora = new Date()) {
       masAntiguo: resumen.masAntiguo ? aEntradaDeCola(resumen.masAntiguo) : null,
       superan90: resumen.superan90.length,
     },
+    anteriores: anteriores
+      .sort((x, y) => new Date(x.registradaEn) - new Date(y.registradaEn))
+      .map((a) => aEntradaDeCola({ atencion: a, puntaje: 0, minutosEsperando: minutosEsperando(a, ahora) })),
     // La jornada no se cierra con pacientes en cola: solo se avisa.
     jornada: {
       finDeHorario: pasoElHorario(ahora),
@@ -187,6 +201,7 @@ async function resumenDelDia(establecimientoId, ahora = new Date()) {
 }
 
 module.exports = {
+  HORAS_JORNADA,
   FIN_HORARIO,
   INCLUIR_PACIENTE,
   horaLocal,

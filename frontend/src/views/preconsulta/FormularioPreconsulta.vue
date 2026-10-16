@@ -38,6 +38,28 @@ const resultado = ref(null);
 const justificacion = ref('');
 const gravedadElegida = ref('');
 
+// Pueblo y comunidad lingüística: el SIGSA 3C/S los pide en cada consulta y
+// el registro rápido no los pregunta. Si faltan en la ficha, se preguntan aquí
+// con un toque; en Camotán casi todos son ch'orti' o mestizos.
+const OPCIONES_PUEBLO = [
+  { clave: 'chorti', texto: "Maya ch'orti'", pueblo: '2', comunidadLinguistica: '4' },
+  { clave: 'maya', texto: 'Maya, otra comunidad', pueblo: '2', comunidadLinguistica: null },
+  { clave: 'mestizo', texto: 'Mestizo o ladino', pueblo: '1', comunidadLinguistica: null },
+  { clave: 'otro', texto: 'Otro', pueblo: '5', comunidadLinguistica: null },
+  { clave: 'no_indica', texto: 'No indica', pueblo: '6', comunidadLinguistica: null },
+];
+const puebloElegido = ref('');
+const faltaPueblo = computed(() => Boolean(paciente.value) && !paciente.value.pueblo);
+async function guardarPueblo() {
+  const o = OPCIONES_PUEBLO.find((x) => x.clave === puebloElegido.value);
+  if (!o || !paciente.value) return;
+  try {
+    await servicio.actualizar(paciente.value.id, { pueblo: o.pueblo, ...(o.comunidadLinguistica ? { comunidadLinguistica: o.comunidadLinguistica } : {}) });
+  } catch {
+    // No detiene la atención: el dato se puede completar después en la ficha.
+  }
+}
+
 // El motivo se pregunta aqui, que es el mismo momento en que se toman los
 // signos. Pedirlo antes obligaba a entrar al expediente primero.
 const motivoConsulta = ref('');
@@ -247,6 +269,7 @@ async function guardar() {
       return;
     }
     resultado.value = envio.respuesta;
+    await guardarPueblo();
   } catch (fallo) {
     error.value = fallo.message;
     detallesError.value = Array.isArray(fallo.detalles) ? fallo.detalles : [];
@@ -466,6 +489,15 @@ onMounted(async () => {
           class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-lg text-slate-900
                  outline-none transition focus:border-celeste-400 focus:ring-2 focus:ring-mspas-200"
         />
+      </div>
+
+      <!-- Pueblo: solo si falta en la ficha -->
+      <div v-if="faltaPueblo" class="tarjeta p-5">
+        <h2 class="panel-titulo">Pueblo</h2>
+        <p class="mb-3 text-sm text-apagado">Falta en su ficha y el SIGSA lo pide. Pregúntelo una vez; queda guardado.</p>
+        <div class="pueblos" role="radiogroup" aria-label="Pueblo">
+          <button v-for="o in OPCIONES_PUEBLO" :key="o.clave" type="button" role="radio" :aria-checked="puebloElegido === o.clave" :class="{ on: puebloElegido === o.clave }" @click="puebloElegido = puebloElegido === o.clave ? '' : o.clave">{{ o.texto }}</button>
+        </div>
       </div>
 
       <!-- Peso: la báscula puede ser de libras o de kilogramos -->
@@ -774,4 +806,8 @@ onMounted(async () => {
 .escala button.on { border-bottom-color: #0B163A; }
 .escala button.on.medio { border-bottom-color: #7A4F05; }
 .escala button.on.alto { border-bottom-color: #8F1D1F; }
+.pueblos { display: flex; flex-wrap: wrap; gap: 8px; }
+.pueblos button { min-height: 52px; padding: 0 18px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 14px; background: #fff; font-size: 16px; font-weight: 800; color: #334155; }
+.pueblos button:hover { border-color: #9FCDEC; }
+.pueblos button.on { border-color: #2F83C4; background: #EAF3FB; color: #174E80; }
 </style>

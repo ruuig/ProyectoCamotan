@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { RouterLink, useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import inventario from '../../services/inventario';
 import Icono from '../../components/comunes/Icono.vue';
@@ -113,6 +113,21 @@ async function registrarLlegada(cantidad) {
   }
 }
 
+// Lo que trae cada recepción: se abre en su renglón, con el detalle por lote.
+const abierta = ref(null);
+const detalles = ref({});
+async function abrir(id) {
+  abierta.value = abierta.value === id ? null : id;
+  if (abierta.value == null || detalles.value[id]) return;
+  try {
+    detalles.value = { ...detalles.value, [id]: (await bodega.recepcion(id)).recepcion };
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
+const recibido = (x) => x.cantidadDocumento - (x.porReponer ?? 0);
+const dinero = (v) => (v == null ? '' : `Q ${Number(v).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
 onMounted(cargar);
 </script>
 
@@ -197,18 +212,58 @@ onMounted(cargar);
     <!-- Recibidas -->
     <div v-else-if="vista === 'recibidas'" class="b-tabla-marco mt-5">
       <table class="b-tabla">
-        <thead><tr><th>Fecha</th><th>Documento</th><th>Llega por</th><th>Viene de</th><th class="n">Productos</th><th class="n">Unidades</th><th class="n">Por reclamar</th></tr></thead>
+        <thead><tr><th class="w-8" /><th>Fecha</th><th>Documento</th><th>Llega por</th><th>Viene de</th><th class="n">Productos</th><th class="n">Unidades</th><th class="n">Por reclamar</th><th /></tr></thead>
         <tbody>
-          <tr v-for="r in recibidas" :key="r.id">
-            <td class="whitespace-nowrap">{{ fecha(r.fecha) }}</td>
-            <td class="font-mono font-semibold text-[#172A5A]">{{ r.numeroDocumento ?? '—' }}</td>
-            <td>{{ r.procedenciaTexto }}</td>
-            <td class="font-semibold text-tinta">{{ r.remitente }}</td>
-            <td class="n">{{ r.productos }}</td>
-            <td class="n">{{ miles(r.unidades) }}</td>
-            <td class="n" :class="r.porReponer ? 'falta' : ''">{{ r.porReponer ? miles(r.porReponer) : '' }}</td>
-          </tr>
-          <tr v-if="!recibidas.length"><td colspan="7" class="b-vacio">Todavía no hay recepciones.</td></tr>
+          <template v-for="r in recibidas" :key="r.id">
+            <tr class="cursor-pointer" :class="abierta === r.id ? 'fila-abierta' : ''" :aria-expanded="abierta === r.id" @click="abrir(r.id)">
+              <td><Icono nombre="irA" :tamano="16" :grosor="2.6" class="flecha" :class="abierta === r.id ? 'abierta' : ''" /></td>
+              <td class="whitespace-nowrap">{{ fecha(r.fecha) }}</td>
+              <td class="font-mono font-semibold text-[#172A5A]">{{ r.numeroDocumento ?? '—' }}</td>
+              <td>{{ r.procedenciaTexto }}</td>
+              <td class="font-semibold text-tinta">{{ r.remitente }}</td>
+              <td class="n">{{ r.productos }}</td>
+              <td class="n">{{ miles(r.unidades) }}</td>
+              <td class="n" :class="r.porReponer ? 'rojo' : ''">{{ r.porReponer ? miles(r.porReponer) : '' }}</td>
+              <td class="n">
+                <RouterLink :to="`/imprimir/requisicion/recepcion/${r.id}`" target="_blank" class="b-btn secundario chico" title="Imprimir en el formulario de requisición (FOR-ASE-01)" @click.stop>
+                  <Icono nombre="imprimir" :tamano="16" /> Imprimir
+                </RouterLink>
+              </td>
+            </tr>
+            <tr v-if="abierta === r.id" class="detalle-fila">
+              <td colspan="9">
+                <div v-if="detalles[r.id]" class="detalle">
+                  <dl class="datos">
+                    <div><dt>{{ detalles[r.id].procedencia === 'donacion' ? 'Acta' : 'Documento' }}</dt><dd class="font-mono">{{ (detalles[r.id].procedencia === 'donacion' ? detalles[r.id].acta : detalles[r.id].numeroDocumento) ?? 'Sin número' }}</dd></div>
+                    <div><dt>Registró</dt><dd>{{ detalles[r.id].registradaPor }} · {{ fecha(detalles[r.id].registradaEn) }}</dd></div>
+                    <div v-if="detalles[r.id].observaciones" class="ancho"><dt>Observaciones</dt><dd>{{ detalles[r.id].observaciones }}</dd></div>
+                  </dl>
+                  <table class="b-tabla interna">
+                    <thead>
+                      <tr><th>Producto</th><th>Lote</th><th>Vence</th><th class="n">Según documento</th><th class="n">Recibido</th><th class="n">Por reclamar</th><th class="n">Precio u.</th><th>Estado</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="x in detalles[r.id].renglones" :key="x.loteId">
+                        <td class="font-semibold text-tinta">
+                          <RouterLink :to="`/inventario/lotes/${x.loteId}`" class="hover:underline">{{ x.insumo }}</RouterLink>
+                          <small class="block font-normal text-apagado">{{ x.unidad }}</small>
+                        </td>
+                        <td class="font-mono">{{ x.numeroLote }}</td>
+                        <td class="whitespace-nowrap">{{ fecha(x.fechaVence) }}</td>
+                        <td class="n">{{ miles(x.cantidadDocumento) }}</td>
+                        <td class="n fuerte">{{ miles(recibido(x)) }}</td>
+                        <td class="n" :class="x.porReponer ? 'rojo' : ''">{{ x.porReponer ? miles(x.porReponer) : '' }}</td>
+                        <td class="n">{{ dinero(x.costoUnitario) }}</td>
+                        <td><span class="b-estado" :class="x.estado">{{ x.estado === 'cuarentena' ? 'Cuarentena' : x.estado === 'disponible' ? 'Disponible' : x.estado }}</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p v-else class="b-vacio">Cargando el detalle…</p>
+              </td>
+            </tr>
+          </template>
+          <tr v-if="!recibidas.length"><td colspan="9" class="b-vacio">Todavía no hay recepciones.</td></tr>
         </tbody>
       </table>
     </div>
@@ -224,7 +279,7 @@ onMounted(cargar);
             <td class="font-mono">{{ f.documento ?? '—' }}</td>
             <td>{{ f.remitente ?? '' }}</td>
             <td class="whitespace-nowrap">{{ fecha(f.fecha) }}</td>
-            <td class="n falta">{{ miles(f.porReponer) }}</td>
+            <td class="n rojo">{{ miles(f.porReponer) }}</td>
             <td class="n"><button type="button" class="b-btn secundario chico" @click="llego(f)">Llegó</button></td>
           </tr>
           <tr v-if="!faltantes.length"><td colspan="7" class="b-vacio">No hay faltantes por reclamar.</td></tr>
@@ -276,6 +331,17 @@ onMounted(cargar);
 .quitar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: #64748B; }
 .quitar:hover { background: #FDECEC; color: #C03535; }
 .falta { display: block; color: #B42318; font-weight: 700; font-size: 13px; }
+.rojo { color: #A83232; font-weight: 800; }
+.flecha { color: #64748B; transition: transform .15s; }
+.flecha.abierta { transform: rotate(90deg); color: #172A5A; }
+.fila-abierta td { background: #EAF3FB; }
+.detalle-fila > td { padding: 0 !important; background: #F8FAFC; }
+.detalle { padding: 14px 16px 16px 44px; }
+.datos { display: flex; flex-wrap: wrap; gap: 8px 28px; margin-bottom: 12px; }
+.datos dt { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
+.datos dd { font-weight: 700; color: #14244A; }
+.datos .ancho { flex-basis: 100%; }
+.interna { background: #fff; border: 2px solid #E2E8F0; border-radius: 14px; overflow: hidden; }
 /* --- Relieve (estilo duo) --- */
 .celda { border-radius: 10px; }
 </style>

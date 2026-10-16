@@ -19,6 +19,9 @@ model Establecimiento {
   nombre       String
   municipio    String
   departamento String
+  // Encabezado de los formularios SIGSA. Si faltan, se usan el departamento y el municipio.
+  areaSalud     String? @map("area_salud")
+  distritoSalud String? @map("distrito_salud")
   tipo         String // centro_salud_a | centro_salud_b | puesto_salud
   activo       Boolean  @default(true)
   creadoEn     DateTime @default(now()) @map("creado_en")
@@ -401,6 +404,8 @@ model Atencion {
   diagnosticoTxt    String?   @map("diagnostico_txt")
   tratamiento       String?
   proximaCita       DateTime? @map("proxima_cita")
+  // Post-consulta: cuándo se le explicó al paciente cómo tomar el tratamiento y cuándo regresar.
+  orientadoEn       DateTime? @map("orientado_en")
 
   // Hoja de evolucion del medico.
   historiaEnfermedad String? @map("historia_enfermedad")
@@ -606,6 +611,8 @@ model Dispensacion {
   cantidad       Int
   parcial        Boolean  @default(false)
   anulada        Boolean  @default(false)
+  // Inyectable o método de planificación puesto en el centro, no llevado a casa.
+  aplicadaEnServicio Boolean @default(false) @map("aplicada_en_servicio")
   usuarioId      Int      @map("usuario_id")
   registradaEn   DateTime @default(now()) @map("registrada_en")
 
@@ -1172,6 +1179,8 @@ model RequisicionRenglon {
   cantidadSolicitada Int     @map("cantidad_solicitada")
   cantidadAutorizada Int?    @map("cantidad_autorizada")
   cantidadDespachada Int?    @map("cantidad_despachada")
+  // Por qué bodega autorizó menos de lo pedido (sin existencia, ya se le dio…).
+  motivo             String?
 
   requisicion Requisicion @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
   insumo      Insumo?     @relation(fields: [insumoId], references: [id])

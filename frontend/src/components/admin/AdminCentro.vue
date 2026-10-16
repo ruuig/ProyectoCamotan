@@ -25,8 +25,8 @@ const codigo = ref('');
 const error = ref('');
 const aviso = ref('');
 
-const CAMPOS = ['codigo', 'nombre', 'municipio', 'departamento', 'tipo'];
-const cambiado = computed(() => est.value && CAMPOS.some((k) => est.value[k] !== original.value[k]));
+const CAMPOS = ['codigo', 'nombre', 'municipio', 'departamento', 'areaSalud', 'distritoSalud', 'tipo'];
+const cambiado = computed(() => est.value && CAMPOS.some((k) => (est.value[k] ?? '') !== (original.value[k] ?? '')));
 
 async function cargar() {
   try {
@@ -136,6 +136,15 @@ onMounted(() => { cargar(); logo.cargar(); });
             <label for="e-depto" class="b-etiqueta">Departamento</label>
             <input id="e-depto" v-model="est.departamento" required class="b-campo" />
           </div>
+          <div class="c6">
+            <label for="e-area" class="b-etiqueta">Área de Salud</label>
+            <input id="e-area" v-model="est.areaSalud" maxlength="120" :placeholder="est.departamento" class="b-campo" />
+          </div>
+          <div class="c6">
+            <label for="e-distrito" class="b-etiqueta">Distrito de Salud</label>
+            <input id="e-distrito" v-model="est.distritoSalud" maxlength="120" :placeholder="est.municipio" class="b-campo" />
+          </div>
+          <p class="c12 -mt-2 text-sm text-apagado">Van en el encabezado de los formularios SIGSA. Si se dejan vacíos, se usan el departamento y el municipio.</p>
           <div class="c4">
             <label for="e-tipo" class="b-etiqueta">Tipo</label>
             <select id="e-tipo" v-model="est.tipo" class="b-campo">
@@ -151,7 +160,7 @@ onMounted(() => { cargar(); logo.cargar(); });
             <p class="text-[12px] font-bold">Ministerio de Salud Pública y Asistencia Social</p>
             <p class="text-[14px] font-bold">Título del documento</p>
             <p class="text-[12px]">{{ est.nombre }} · {{ est.municipio }}, {{ est.departamento }}</p>
-            <p class="text-[12px]">Área de Salud: {{ est.departamento }} · Distrito: {{ est.municipio }}</p>
+            <p class="text-[12px]">Área de Salud: {{ est.areaSalud || est.departamento }} · Distrito de Salud: {{ est.distritoSalud || est.municipio }}</p>
           </div>
         </div>
         <p v-if="est.codigo?.startsWith('PENDIENTE')" class="b-aviso atencion mt-4"><Icono nombre="alerta" :tamano="20" /> Falta el código institucional del MSPAS.</p>

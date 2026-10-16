@@ -1,3 +1,4 @@
+const { Prisma } = require('@prisma/client');
 const prisma = require('../config/db');
 const {
   asegurarContador,
@@ -14,7 +15,7 @@ const {
 } = require('../services/condiciones.service');
 const { fechaDesdeEdad, validarEdadDeclarada } = require('../services/edadEstimada.service');
 const { evaluarFicha } = require('../services/ficha.service');
-const { escolaridadSigsa } = require('../services/fichaIdentificacion.service');
+const { escolaridadSigsa, estructuraIdentificacion } = require('../services/fichaIdentificacion.service');
 const { fusionarCambios } = require('../services/fichaPaciente.service');
 const { etapaDeVida, camposVisibles } = require('../services/etapaVida.service');
 const { describirEpisodio, fechaProbableParto } = require('../services/embarazo.service');
@@ -82,6 +83,36 @@ const SELECCION_LISTA = {
   responsableParentesco: true,
   responsableDpi: true,
 };
+
+/**
+ * Campos que revisa la ficha para decir qué falta, en cualquier edad. La lista
+ * los lee para contar lo mismo que el expediente: con solo SELECCION_LISTA,
+ * todo campo no leído contaba como faltante (la lista decía 5 y la ficha 3).
+ */
+const CAMPOS_PACIENTE = new Set(
+  Prisma.dmmf.datamodel.models.find((m) => m.name === 'Paciente').fields
+    .filter((f) => f.kind === 'scalar').map((f) => f.name),
+);
+const SELECCION_FICHA = (() => {
+  const claves = new Set();
+  // Una fecha de nacimiento por cada ficha: neonato, niñez, adolescencia y juventud, adultez y persona mayor.
+  for (const dias of [5, 200, 4000, 6000, 15000, 30000]) {
+    const e = estructuraIdentificacion(new Date(Date.now() - dias * 86400000));
+    for (const c of [...e.campos, ...e.sigsa]) {
+      claves.add(c.clave);
+      if (c.mostrarSi) claves.add(c.mostrarSi.campo);
+    }
+  }
+  return Object.fromEntries([...claves].filter((c) => CAMPOS_PACIENTE.has(c)).map((c) => [c, true]));
+})();
+
+/** Lo que viaja en la lista: SELECCION_LISTA y lo calculado, no los campos de la ficha. */
+function soloDeLista(p) {
+  const extra = Object.keys(SELECCION_FICHA).filter((c) => !(c in SELECCION_LISTA));
+  const copia = { ...p };
+  for (const c of extra) delete copia[c];
+  return copia;
+}
 
 /**
  * Quita los campos sensibles a quien no debe verlos.
@@ -274,7 +305,7 @@ async function listar(req, res) {
     prisma.paciente.count({ where: filtros }),
     prisma.paciente.findMany({
       where: filtros,
-      select: { ...SELECCION_LISTA, embarazos: { where: { estado: 'activo' }, select: { id: true } } },
+      select: { ...SELECCION_LISTA, ...SELECCION_FICHA, embarazos: { where: { estado: 'activo' }, select: { id: true } } },
       orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
       // Con similitud se ordena por relevancia, asi que se traen todos los
       // candidatos y se pagina despues de ordenar.
@@ -294,7 +325,7 @@ async function listar(req, res) {
     pacientes: resultado.map((p) => {
       const { embarazos, ...datos } = p;
       return sinCamposSensibles({
-        ...conEdad(datos),
+        ...soloDeLista(conEdad(datos)),
         embarazoActivo: embarazos.length > 0,
         conAlertas: idsConAlertas ? idsConAlertas.has(p.id) : undefined,
         // Por que aparecio: sin esto, encontrar a una nina buscando el nombre

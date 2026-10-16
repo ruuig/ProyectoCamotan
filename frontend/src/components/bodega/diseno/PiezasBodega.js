@@ -60,12 +60,31 @@ export function estiloCategoria(clave) {
   return { '--cat': c.medio, '--cat-fondo': c.fondo, '--cat-tinta': c.tinta };
 }
 
-/** Situación de un renglón del balance, en una palabra. */
+/**
+ * Situación de un renglón del balance, en una palabra. Agotado es la bodega
+ * en cero con consumo: la misma regla que cuenta la cifra "Agotados". Sin
+ * consumo no es urgente aunque no haya existencia.
+ */
 export function situacion(bres) {
-  if (bres.I === 0 && bres.H === 0) return 'agotado';
   if (bres.sinConsumo) return 'sin_consumo';
+  if (bres.I === 0) return 'agotado';
   if (bres.bajoMinimo) return 'bajo';
   return 'bien';
+}
+
+/** Colores de estado, los mismos en cifras, reglas y etiquetas. */
+export const TONO = {
+  accion: { nombre: 'acción', fuerte: '#2F83C4', fondo: '#EAF3FB', borde: '#9FCDEC', hondo: '#1F6AA5', tinta: '#174E80' },
+  atencion: { nombre: 'atención', fuerte: '#E8930C', fondo: '#FFF4E0', borde: '#F5C26B', hondo: '#C27708', tinta: '#8A4B00' },
+  critico: { nombre: 'crítico', fuerte: '#D64545', fondo: '#FDECEC', borde: '#F3B1B1', hondo: '#A83232', tinta: '#8C2323' },
+  bien: { nombre: 'bien', fuerte: '#22A06B', fondo: '#E3F6EC', borde: '#9ED9BC', hondo: '#17784F', tinta: '#145C3D' },
+  neutro: { nombre: 'neutro', fuerte: '#94A3B8', fondo: '#F1F4F8', borde: '#CBD5E1', hondo: '#94A3B8', tinta: '#475569' },
+};
+
+/** Variables CSS de un tono, para tarjetas, franjas y etiquetas. */
+export function estiloTono(clave) {
+  const t = TONO[clave] ?? TONO.neutro;
+  return { '--t': t.fuerte, '--t-fondo': t.fondo, '--t-borde': t.borde, '--t-hondo': t.hondo, '--t-tinta': t.tinta };
 }
 
 export const decimal = (n) => (n === null || n === undefined ? '—' : Number(n).toFixed(1));

@@ -6,6 +6,7 @@ const validar = require('../middleware/validar');
 const asincrono = require('../utils/asincrono');
 const controlador = require('../controllers/indicadores.controller');
 const consolidado = require('../controllers/consolidado.controller');
+const { planificacionDelMes } = require('../services/planificacion.service');
 
 const router = express.Router();
 
@@ -117,5 +118,15 @@ router.post(
   asincrono(mediciones.registrar),
 );
 router.get('/mediciones', autorizar('admin'), asincrono(mediciones.resumen));
+
+// Planificación familiar del mes (usuarias nuevas, reconsultas y activas por método).
+router.get(
+  '/planificacion',
+  autorizar('admin', 'farmacia'),
+  validar(z.object({ periodo: z.string().regex(/^\d{4}-\d{2}$/, 'Periodo AAAA-MM') }), 'query'),
+  asincrono(async (req, res) => {
+    res.json(await planificacionDelMes(req.usuario.establecimientoId, req.query.periodo));
+  }),
+);
 
 module.exports = router;

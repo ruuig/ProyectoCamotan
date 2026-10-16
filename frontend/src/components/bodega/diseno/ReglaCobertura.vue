@@ -14,7 +14,7 @@ const props = defineProps({
   ancho: { type: Number, default: 136 },
 });
 
-const COLOR = { bien: '#22A06B', sobra: '#3D7BE0', bajo: '#E8930C', agotado: '#D64545', sin_consumo: '#94A3B8' };
+const COLOR = { bien: '#22A06B', sobra: '#4A9BD6', bajo: '#E8930C', agotado: '#D64545', sin_consumo: '#94A3B8' };
 
 const r = computed(() => {
   const tope = props.maximo * 1.5;
@@ -27,15 +27,14 @@ const r = computed(() => {
 
 <template>
   <svg :viewBox="`0 0 ${ancho} 24`" :width="ancho" height="24" class="shrink-0" aria-hidden="true">
-    <rect x="0" y="4" :width="r.xMin" height="12" fill="#FBE3BF" />
-    <rect :x="r.xMin" y="4" :width="r.xMax - r.xMin" height="12" fill="#CDEEDD" />
-    <rect :x="r.xMax" y="4" :width="ancho - r.xMax" height="12" fill="#DDE7F6" />
-    <template v-if="r.meses > 0 && tono !== 'sin_consumo'">
-      <rect x="0" y="7" :width="r.x" height="6" :fill="r.color" />
-      <rect :x="Math.max(0, r.x - 3)" y="1" width="3" height="18" :fill="r.color" />
-    </template>
-    <path v-if="r.pasa" :d="`M${ancho - 8} 5l5 5-5 5`" fill="none" stroke="#fff" stroke-width="2" />
-    <text :x="r.xMin" y="24" text-anchor="middle" font-size="7.5" font-weight="700" fill="#475569">{{ minimo }}</text>
-    <text :x="r.xMax" y="24" text-anchor="middle" font-size="7.5" font-weight="700" fill="#475569">{{ maximo }}</text>
+    <!-- Pista gris con la franja sana (entre mínimo y máximo) en verde suave. -->
+    <rect x="0" y="5" :width="ancho" height="10" rx="5" fill="#EDF1F6" />
+    <rect :x="r.xMin" y="5" :width="r.xMax - r.xMin" height="10" fill="#D5F0E2" />
+    <rect v-if="r.meses > 0 && tono !== 'sin_consumo'" x="0" y="5" :width="Math.max(10, r.x)" height="10" rx="5" :fill="r.color" />
+    <path v-if="r.pasa" :d="`M${ancho - 9} 7l4 3-4 3`" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    <line :x1="r.xMin" :x2="r.xMin" y1="3" y2="17" stroke="#94A3B8" stroke-width="1.5" />
+    <line :x1="r.xMax" :x2="r.xMax" y1="3" y2="17" stroke="#94A3B8" stroke-width="1.5" />
+    <text :x="r.xMin" y="24" text-anchor="middle" font-size="7.5" font-weight="800" fill="#64748B">{{ minimo }}</text>
+    <text :x="r.xMax" y="24" text-anchor="middle" font-size="7.5" font-weight="800" fill="#64748B">{{ maximo }}</text>
   </svg>
 </template>

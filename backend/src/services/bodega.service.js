@@ -251,7 +251,20 @@ function filaBres({ B, C, D, E, G = 0, I, saldos, promedios, config }) {
   };
 }
 
+/**
+ * Situacion de un insumo en el BRES, la misma que muestra Existencias:
+ * agotado es la bodega en cero teniendo consumo; bajo es el municipio por
+ * debajo del minimo. Sin consumo no se juzga: no hay contra que medir.
+ */
+function situacionBres(bres) {
+  if (bres.sinConsumo) return 'sin_consumo';
+  if (bres.I === 0) return 'agotado';
+  if (bres.bajoMinimo) return 'bajo';
+  return 'bien';
+}
+
 module.exports = {
+  situacionBres,
   CATEGORIAS,
   CLAVES_CATEGORIA,
   CATEGORIAS_NO_PRESCRIBIBLES,

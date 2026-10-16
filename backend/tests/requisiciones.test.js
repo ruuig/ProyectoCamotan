@@ -76,6 +76,16 @@ describe('reglas', () => {
     expect(r.filas[2].observaciones).toMatch(/Faltante/);
     expect(r.valorFinal).toBe(170);
   });
+
+  it('lo que falta por reclamar viaja aparte, para anotarlo solo si se quiere', () => {
+    const lote = { numeroLote: 'B', fechaVence: null, costoUnitario: null, origen: 'donacion', actaDonacion: '09-2023', cantidadPorReponer: 1 };
+    const [conFaltante, sinFaltante] = filasKardex([
+      { id: 1, cantidad: 70, tipo: 'ingreso', lote },
+      { id: 2, cantidad: 10, tipo: 'ingreso', lote: { ...lote, cantidadPorReponer: 0 } },
+    ]).filas;
+    expect(conFaltante).toMatchObject({ observaciones: 'Donación', porReclamar: 1 });
+    expect(sinFaltante).toMatchObject({ observaciones: 'Donación', porReclamar: null });
+  });
 });
 
 describe('requisición', () => {
@@ -100,7 +110,7 @@ describe('requisición', () => {
     )).body.requisicion;
     const [med, equipo] = creada.renglones;
 
-    const aut = await bod(request(app).post(`/api/v1/bodega/requisiciones/${creada.id}/autorizar`)).send({ renglones: [{ id: med.id, cantidadAutorizada: 30 }, { id: equipo.id, cantidadAutorizada: 0 }] });
+    const aut = await bod(request(app).post(`/api/v1/bodega/requisiciones/${creada.id}/autorizar`)).send({ renglones: [{ id: med.id, cantidadAutorizada: 30, motivo: 'Se reparte entre los servicios' }, { id: equipo.id, cantidadAutorizada: 0, motivo: 'No hay existencia' }] });
     expect(aut.body.requisicion.estado).toBe('autorizada');
 
     const demas = await bod(request(app).post(`/api/v1/bodega/requisiciones/${creada.id}/despachar`)).send({ recibidoPor: 'Promotora', renglones: [{ id: med.id, cantidadDespachada: 35 }] });
@@ -207,5 +217,48 @@ describe('requisición', () => {
     const an = await bod(request(app).post(`/api/v1/bodega/requisiciones/${sin.id}/anular`)).send({ motivo: 'Se llenó dos veces' });
     expect(an.body.requisicion.estado).toBe('anulada');
     expect((await bod(request(app).post(`/api/v1/bodega/requisiciones/${sin.id}/despachar`)).send({ recibidoPor: 'Promotora', numero: numero() })).status).toBe(409);
+  });
+});
+
+describe('Pedido de farmacia: pedir, autorizar, despachar o rechazar', () => {
+  it('bodega no puede autorizar menos de lo pedido sin decir por qué', async () => {
+    const { insumo } = await insumoConLotes([[30, 400]]);
+    const r = await far(request(app).post('/api/v1/bodega/requisiciones')).send({ ubicacionId: farmacia.id, fechaSolicitud: hoy(), solicitante: 'Personal de Farmacia', renglones: [{ insumoId: insumo.id, cantidadSolicitada: 50 }] });
+    expect(r.status).toBe(201);
+    const id = r.body.requisicion.id;
+    const renglon = r.body.requisicion.renglones[0].id;
+
+    const sinMotivo = await bod(request(app).post(`/api/v1/bodega/requisiciones/${id}/autorizar`)).send({ renglones: [{ id: renglon, cantidadAutorizada: 30 }] });
+    expect(sinMotivo.status).toBe(400);
+
+    const ok = await bod(request(app).post(`/api/v1/bodega/requisiciones/${id}/autorizar`)).send({ renglones: [{ id: renglon, cantidadAutorizada: 30, motivo: 'No hay existencia' }] });
+    expect(ok.status).toBe(200);
+    expect(ok.body.requisicion.renglones[0].motivo).toBe('No hay existencia');
+
+    // Farmacia ve en su lista que se autorizó menos.
+    const lista = await far(request(app).get('/api/v1/bodega/requisiciones'));
+    const suya = lista.body.requisiciones.find((x) => x.id === id);
+    expect(suya.estado).toBe('autorizada');
+    expect(suya.autorizado).toBe(30);
+
+    // Al despachar, entra al estante de farmacia.
+    const d = await bod(request(app).post(`/api/v1/bodega/requisiciones/${id}/despachar`)).send({ numero: numero(), recibidoPor: 'Personal de Farmacia' });
+    expect(d.status).toBe(200);
+    expect(d.body.requisicion.estado).toBe('despachada');
+    const lotes = await prisma.lote.findMany({ where: { insumoId: insumo.id } });
+    expect(lotes.reduce((t, l) => t + l.cantidadFarmacia, 0)).toBe(30);
+  });
+
+  it('un pedido rechazado lleva su motivo, y farmacia puede cancelar el suyo antes de que lo atiendan', async () => {
+    const { insumo } = await insumoConLotes([[10, 400]]);
+    const pedir = () => far(request(app).post('/api/v1/bodega/requisiciones')).send({ ubicacionId: farmacia.id, fechaSolicitud: hoy(), solicitante: 'Personal de Farmacia', renglones: [{ insumoId: insumo.id, cantidadSolicitada: 5 }] });
+    const a = (await pedir()).body.requisicion.id;
+    await bod(request(app).post(`/api/v1/bodega/requisiciones/${a}/anular`)).send({ motivo: 'Pedido repetido, ya se despachó ayer' });
+    const b = (await pedir()).body.requisicion.id;
+    expect((await far(request(app).post(`/api/v1/bodega/requisiciones/${b}/anular`)).send({ motivo: 'Farmacia canceló el pedido' })).status).toBe(200);
+
+    const lista = (await far(request(app).get('/api/v1/bodega/requisiciones'))).body.requisiciones;
+    expect(lista.find((x) => x.id === a)).toMatchObject({ estado: 'anulada', motivoAnulacion: 'Pedido repetido, ya se despachó ayer' });
+    expect(lista.find((x) => x.id === b).estado).toBe('anulada');
   });
 });

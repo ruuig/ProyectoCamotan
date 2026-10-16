@@ -158,7 +158,11 @@ router.post(
   '/requisiciones/:id/autorizar',
   deBodega,
   validar(z.object({ id }), 'params'),
-  validar(z.object({ renglones: z.array(z.object({ id, cantidadAutorizada: z.coerce.number().int().min(0) })).optional() })),
+  validar(z.object({ renglones: z.array(z.object({
+    id,
+    cantidadAutorizada: z.coerce.number().int().min(0),
+    motivo: z.string().trim().max(200).optional().nullable(),
+  })).optional() })),
   asincrono(requisiciones.autorizar),
 );
 router.post(

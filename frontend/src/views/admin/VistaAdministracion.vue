@@ -10,13 +10,16 @@ import AdminRespaldos from '../../components/admin/AdminRespaldos.vue';
 import AdminPrioridad from '../../components/admin/AdminPrioridad.vue';
 
 /** Administración: cada pestaña es una parte del sistema que configura dirección. */
+// Ordenadas como se configura un centro nuevo: quién es el centro, quién
+// trabaja, quién firma; luego cómo se atiende y cómo se maneja la bodega;
+// al final los catálogos y los respaldos, que se tocan poco.
 const PESTANAS = [
+  { clave: 'centro', texto: 'Centro y seguridad' },
   { clave: 'personal', texto: 'Personal' },
-  { clave: 'prioridad', texto: 'Prioridad' },
   { clave: 'firmas', texto: 'Firmas' },
+  { clave: 'prioridad', texto: 'Prioridad de la cola' },
   { clave: 'bodega', texto: 'Bodega' },
   { clave: 'catalogos', texto: 'Catálogos' },
-  { clave: 'centro', texto: 'Centro y seguridad' },
   { clave: 'respaldos', texto: 'Respaldos' },
 ];
 

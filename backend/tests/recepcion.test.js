@@ -71,7 +71,8 @@ describe('recepción con documento', () => {
 
     const k = (await bod(request(app).get(`/api/v1/bodega/kardex?insumoId=${a.id}`))).body.tarjetas[0];
     expect(k.filas[0]).toMatchObject({ referencia: `D${sufijo}`, remitenteDestinatario: 'Almacén DDRISS Chiquimula', entrada: 50, valorEntrada: 100 });
-    expect(k.filas[0].observaciones).toMatch(/Faltan 5/);
+    // El faltante viaja aparte: la pantalla y la tarjeta deciden si lo anotan.
+    expect(k.filas[0].porReclamar).toBe(5);
 
     const rep = await bod(request(app).post(`/api/v1/bodega/lotes/${loteA.id}/reponer`)).send({ cantidad: 5 });
     expect(rep.body.lote.porReponer).toBe(0);

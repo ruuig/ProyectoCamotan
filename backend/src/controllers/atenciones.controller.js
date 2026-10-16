@@ -8,6 +8,7 @@ const { evaluarMedicion } = require('../services/antropometriaDatos.service');
 const { ETIQUETA_CLASIFICACION } = require('./antropometria.controller');
 const { triaje, bajaDe } = require('../services/triaje.service');
 const { parametros } = require('../services/parametrosPriorizacion.service');
+const { HORAS_JORNADA } = require('../services/cola.service');
 
 // Los patrones de crecimiento de la OMS cubren hasta los 5 anios.
 const EDAD_MAX_ANTROPOMETRIA_MESES = 60;
@@ -25,9 +26,7 @@ async function crear(req, res, next) {
   }
 
   // Un paciente no puede estar dos veces en la cola del mismo dia.
-  const abierta = await prisma.atencion.findFirst({
-    where: { pacienteId, estado: { in: ['en_espera', 'en_atencion'] } },
-  });
+  const abierta = await atencionAbierta(req, pacienteId);
 
   if (abierta) {
     return next({
@@ -286,9 +285,7 @@ async function crearConPreconsulta(req, res, next) {
   const paciente = await prisma.paciente.findFirst({ where: { id: pacienteId, establecimientoId, activo: true } });
   if (!paciente) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Paciente no encontrado' });
 
-  const abierta = await prisma.atencion.findFirst({
-    where: { pacienteId, estado: { in: ['en_espera', 'en_atencion'] } },
-  });
+  const abierta = await atencionAbierta(req, pacienteId);
   if (abierta) {
     return next({
       status: 409,
@@ -325,6 +322,28 @@ async function crearConPreconsulta(req, res, next) {
 
 // Se puede cancelar mientras el medico no haya escrito nada de la consulta.
 const CANCELABLES = ['en_espera', 'ausente', 'en_atencion'];
+
+/**
+ * La atención en curso del paciente, si la hay. Si es una espera de otra
+ * jornada (el paciente no fue atendido y se fue), se cierra sola con su
+ * motivo: el paciente que vuelve al día siguiente se registra de nuevo sin
+ * que alguien tenga que buscar y cancelar la de ayer.
+ */
+async function atencionAbierta(req, pacienteId) {
+  const abierta = await prisma.atencion.findFirst({
+    where: { pacienteId, estado: { in: ['en_espera', 'en_atencion'] } },
+  });
+  if (!abierta || abierta.estado !== 'en_espera') return abierta;
+  const desde = new Date(abierta.reingresoEn ?? abierta.registradaEn);
+  if (Date.now() - desde.getTime() <= HORAS_JORNADA * 3600000) return abierta;
+  const motivo = 'Quedó en espera de una jornada anterior y no fue atendido';
+  await prisma.atencion.update({
+    where: { id: abierta.id },
+    data: { estado: 'cancelada', clinicaId: null, canceladaEn: new Date(), canceladaPor: req.usuario.id, motivoCancelacion: motivo },
+  });
+  await req.bitacora({ accion: 'actualizar', entidad: 'atencion', entidadId: abierta.id, detalle: `Atención cancelada al registrar una nueva. Motivo: ${motivo}` });
+  return null;
+}
 
 /**
  * Cancela una atencion abierta por error. No se borra: queda con su motivo,

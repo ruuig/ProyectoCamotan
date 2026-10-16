@@ -15,8 +15,8 @@ const props = defineProps({
 
 const lugarId = ref('bodega');
 const lugares = computed(() => [
-  { id: 'bodega', nombre: 'Bodega', reportado: true },
-  { id: 'post', nombre: 'Post-consulta', reportado: true },
+  { id: 'bodega', nombre: 'Bodega', informado: true },
+  { id: 'post', nombre: 'Post-consulta', informado: true },
   ...props.balance.servicios,
 ]);
 const lugar = computed(() => lugares.value.find((l) => l.id === lugarId.value));
@@ -51,7 +51,7 @@ const conAjustes = computed(() => esBodega.value && filas.value.some((x) => x.aj
         @click="lugarId = l.id"
       >
         <span class="truncate">{{ l.nombre }}</span>
-        <span v-if="!l.reportado" class="b-estado cuarentena">Sin reporte</span>
+        <span v-if="!l.informado" class="b-estado cuarentena">Sin informe</span>
       </button>
     </nav>
     <div class="b-tabla-marco alta min-w-0">
@@ -83,7 +83,7 @@ const conAjustes = computed(() => esBodega.value && filas.value.some((x) => x.aj
             <td v-if="conAjustes" class="n" :class="!x.ajuste ? 'cero' : ''">{{ n(x.ajuste) }}</td>
             <td class="n fuerte">
               {{ n(x.saldo) }}
-              <span v-if="x.diferencia" class="block text-[11px] font-bold text-[#B7710A]">reportó {{ x.diferencia > 0 ? '+' : '' }}{{ miles(x.diferencia) }}</span>
+              <span v-if="x.diferencia" class="block text-[11px] font-bold text-[#B7710A]">informó {{ x.diferencia > 0 ? '+' : '' }}{{ miles(x.diferencia) }}</span>
             </td>
             <td v-if="!esBodega" class="n" :class="!x.promedio ? 'cero' : ''">{{ x.promedio ? general(x.promedio) : "–" }}</td>
           </tr>

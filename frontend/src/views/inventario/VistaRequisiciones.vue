@@ -52,7 +52,7 @@ async function cargar() {
     lista.value = r.requisiciones.filter((x) => x.direccion !== 'superior');
     tipos.value = r.tipos;
     lugares.value = u.ubicaciones
-      .filter((x) => x.activo !== false && (x.tipo === 'centro_salud' || (esBodega.value && (x.tipo === 'unidad_interna' || x.reporta))))
+      .filter((x) => x.activo !== false && (x.tipo === 'centro_salud' || (esBodega.value && (x.tipo === 'unidad_interna' || x.informa))))
       .map((x) => (x.tipo === 'centro_salud' ? { ...x, nombre: 'Farmacia (post-consulta)' } : x));
     insumos.value = i.insumos.map((x) => ({ ...x, saldoTotal: x.saldoBodega ?? x.saldoTotal }));
     solicitantes.value = s.solicitantes;

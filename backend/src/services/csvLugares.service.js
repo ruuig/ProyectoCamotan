@@ -2,7 +2,7 @@
 //
 // El municipio tiene sus propias aldeas, caserios y sectores, y el sistema no
 // los inventa: los carga la direccion desde un archivo. Por eso el lector es
-// tolerante con la forma del archivo pero estricto con el contenido, y reporta
+// tolerante con la forma del archivo pero estricto con el contenido, y informa
 // cada problema con su numero de linea para poder corregirlo.
 //
 // Funcion pura: recibe el texto y devuelve filas y errores. No toca la base.
@@ -81,7 +81,7 @@ function normalizarCategoria(texto) {
  * Lee el CSV completo.
  *
  * Devuelve { filas, errores }. Una fila con error no entra en `filas`: se
- * prefiere cargar lo valido y reportar el resto antes que rechazar el archivo
+ * prefiere cargar lo valido y informar el resto antes que rechazar el archivo
  * entero por una linea mal escrita.
  */
 function parsearCsvLugares(texto) {

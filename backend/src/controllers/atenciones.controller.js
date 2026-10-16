@@ -245,7 +245,7 @@ async function registrarPreconsulta(req, res, next) {
   });
 
   // La informacion derivada se devuelve en el momento de la accion, no en una
-  // pantalla de reportes aparte.
+  // pantalla de informes aparte.
   res.status(201).json({
     preconsulta,
     gravedad: gravedadFinal,

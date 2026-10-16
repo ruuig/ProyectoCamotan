@@ -372,7 +372,7 @@ const filasServicio = computed(() => {
             @click="servicioId = s.id"
           >
             <span class="truncate">{{ s.nombre }}</span>
-            <span v-if="s.reportado" class="b-estado disponible">Reportó</span>
+            <span v-if="s.informado" class="b-estado disponible">Informó</span>
           </button>
         </nav>
         <div class="min-w-0">

@@ -118,16 +118,16 @@ const cargandoMes = ref(false);
 async function cargarMes() {
   cargandoMes.value = true;
   const periodo = mes.value;
-  const [cuatro, bres, reportes, cierre, semaforo, pf] = await Promise.all([
+  const [cuatro, bres, informes, cierre, semaforo, pf] = await Promise.all([
     intentar(inventario.sigsa4(periodo)),
     intentar(inventario.bresDe(periodo)),
-    intentar(bodega.estadoReportes(periodo)),
+    intentar(bodega.estadoInformes(periodo)),
     intentar(bodega.inventarioCierre({ periodo })),
     intentar(bodega.semaforo({})),
     intentar(http.get(`/indicadores/planificacion?periodo=${periodo}`)),
   ]);
   if (periodo !== mes.value) return;
-  delMes.value = { cuatro, bres: bres?.bres ?? null, reportes, cierre, semaforo, pf };
+  delMes.value = { cuatro, bres: bres?.bres ?? null, informes, cierre, semaforo, pf };
   cargandoMes.value = false;
 }
 
@@ -135,8 +135,8 @@ const documentosMes = computed(() => {
   const d = delMes.value;
   const entregas = d.cuatro?.renglones ?? [];
   const sinConstancia = entregas.filter((e) => !e.constancia).length;
-  const servicios = d.reportes?.servicios ?? [];
-  const recibidos = servicios.filter((s) => s.reportado).length;
+  const servicios = d.informes?.servicios ?? [];
+  const recibidos = servicios.filter((s) => s.informado).length;
   const filasCierre = d.cierre?.filas?.length ?? 0;
   const s = d.semaforo?.resumen;
   const enCurso = mes.value === mesActual;
@@ -159,14 +159,14 @@ const documentosMes = computed(() => {
       codigo: 'Balance',
       nombre: 'Balance por servicio',
       porque: 'Saldos y consumo de cada puesto y centro comunitario. Sin él no se puede armar el BRES.',
-      prepara: 'Bodega, con los reportes de los servicios',
-      estado: !d.reportes ? null
+      prepara: 'Bodega, con los informes de los servicios',
+      estado: !d.informes ? null
         : !servicios.length ? { tono: 'neutro', texto: 'Sin servicios' }
-          : recibidos < servicios.length ? { tono: 'atencion', texto: `Faltan ${servicios.length - recibidos} de ${servicios.length} reportes` }
-            : { tono: 'bien', texto: `${recibidos} de ${servicios.length} reportes` },
+          : recibidos < servicios.length ? { tono: 'atencion', texto: `Faltan ${servicios.length - recibidos} de ${servicios.length} informes` }
+            : { tono: 'bien', texto: `${recibidos} de ${servicios.length} informes` },
       imprimir: `/imprimir/balance/${mes.value}`,
       excel: () => descargar('balance', `/bodega/balance/${mes.value}/excel?orden=alfabetico`, `balance-${mes.value}.xlsx`),
-      abrir: '/inventario/reportes',
+      abrir: '/inventario/informes',
     },
     {
       clave: 'bres',

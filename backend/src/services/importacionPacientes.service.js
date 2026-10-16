@@ -11,7 +11,7 @@
  * script que escribe en la base esta en scripts/importarPacientes.js.
  *
  * Regla general: no se inventa nada. Lo que no se puede leer con seguridad se
- * deja fuera y se reporta, para que alguien lo corrija a mano.
+ * deja fuera y se informa, para que alguien lo corrija a mano.
  */
 
 const { normalizarTexto, similitud } = require('./pacientes.service');

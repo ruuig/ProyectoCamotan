@@ -5,11 +5,11 @@ import Icono from '../comunes/Icono.vue';
 import { cierre, nombrePeriodo, periodoPrevio, periodoActual } from '../../dominio/bodega';
 
 /** Encabezado del cierre del mes: el mes que se cierra y sus tres pasos. */
-defineProps({ estado: { type: Object, default: () => ({}) } }); // { reportes: '18/30' }
+defineProps({ estado: { type: Object, default: () => ({}) } }); // { informes: '18/30' }
 
 const route = useRoute();
 const PASOS = [
-  { ruta: 'reportes-servicios', a: '/inventario/reportes', texto: 'Reportes de servicios', clave: 'reportes' },
+  { ruta: 'informes-servicios', a: '/inventario/informes', texto: 'Informes de servicios', clave: 'informes' },
   { ruta: 'inventario-cierre', a: '/inventario/cierre', texto: 'Inventario de cierre', clave: 'inventario' },
   { ruta: 'bres', a: '/inventario/bres', texto: 'BRES', clave: 'bres' },
 ];

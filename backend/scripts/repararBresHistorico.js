@@ -28,13 +28,13 @@ function previo(p) {
 }
 
 async function datosDelMes(eid, periodo) {
-  const [hist, reportes] = await Promise.all([
+  const [hist, informes] = await Promise.all([
     prisma.inventarioCierreHistorico.findMany({ where: { establecimientoId: eid, periodo } }),
-    prisma.reporteServicioRenglon.findMany({ where: { reporte: { periodo, ubicacion: { establecimientoId: eid } } }, select: { insumoId: true, saldoSiguiente: true } }),
+    prisma.informeServicioRenglon.findMany({ where: { informe: { periodo, ubicacion: { establecimientoId: eid } } }, select: { insumoId: true, saldoSiguiente: true } }),
   ]);
   const cierre = new Map(hist.map((h) => [h.insumoId, h]));
   const servicios = new Map();
-  for (const r of reportes) servicios.set(r.insumoId, (servicios.get(r.insumoId) ?? 0) + r.saldoSiguiente);
+  for (const r of informes) servicios.set(r.insumoId, (servicios.get(r.insumoId) ?? 0) + r.saldoSiguiente);
   return { cierre, servicios };
 }
 
@@ -107,7 +107,7 @@ async function main() {
   await prisma.$transaction(async (tx) => {
     for (const c of cambios) await tx.bresRenglon.update({ where: { id: c.id }, data: c.data });
     await tx.bitacora.create({
-      data: { usuarioId: admin.id, accion: 'actualizar', entidad: 'bres', detalle: `BRES importados reparados con el inventario de cierre y los reportes: ${rotos.map((b) => b.periodo).join(', ')}` },
+      data: { usuarioId: admin.id, accion: 'actualizar', entidad: 'bres', detalle: `BRES importados reparados con el inventario de cierre y los informes: ${rotos.map((b) => b.periodo).join(', ')}` },
     });
   }, { timeout: 600000 });
   console.log(`Reparados ${cambios.length} renglones.`);

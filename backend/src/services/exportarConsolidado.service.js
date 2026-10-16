@@ -23,7 +23,7 @@ function agregarHoja(libro, nombre, columnas, filas) {
 
 /**
  * Construye el libro XLSX del consolidado mensual.
- * Una hoja por bloque del reporte, mas una de portada.
+ * Una hoja por bloque del informe, mas una de portada.
  */
 async function construirLibro(consolidado) {
   const libro = new ExcelJS.Workbook();

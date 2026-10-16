@@ -8,7 +8,7 @@
  *
  * Cada nombre del Excel se empareja con el catalogo: primero por sus alias,
  * luego por las equivalencias escritas a mano y al final por parecido. Los
- * que no se emparejan se reportan en documentacion/bd/importacion/cierre/ y no se cargan.
+ * que no se emparejan se informan en documentacion/bd/importacion/cierre/ y no se cargan.
  * Los valores se guardan tal como estan en el Excel, aunque no sumen.
  */
 
@@ -116,7 +116,7 @@ async function main() {
   console.log(`Renglones repetidos en un mismo mes: ${repetidos.length}`);
 
   if (!APLICAR) {
-    console.log('Revisión sin cambios. Reportes en documentacion/bd/importacion/cierre/.');
+    console.log('Revisión sin cambios. Informes en documentacion/bd/importacion/cierre/.');
     return;
   }
   const admin = await prisma.usuario.findFirst({ where: { establecimientoId: eid, rol: 'admin' } });

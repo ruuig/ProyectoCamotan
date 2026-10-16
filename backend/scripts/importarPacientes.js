@@ -15,7 +15,7 @@
  *      visita y el codigo del papel como "expediente en papel".
  *   4. Deja constancia en la bitacora.
  *
- * Los reportes (comunidades agrupadas y filas que no se pudieron cargar) se
+ * Los informes (comunidades agrupadas y filas que no se pudieron cargar) se
  * escriben en documentacion/bd/importacion/.
  */
 
@@ -29,7 +29,7 @@ const { condicionesPorEdad } = require('../src/services/condiciones.service');
 
 const [, , rutaFilas, bandera] = process.argv;
 const APLICAR = bandera === '--aplicar';
-const CARPETA_REPORTES = path.join(__dirname, '..', '..', 'documentacion', 'bd', 'importacion');
+const CARPETA_INFORMES = path.join(__dirname, '..', '..', 'documentacion', 'bd', 'importacion');
 
 function csv(filas) {
   const celda = (v) => {
@@ -114,19 +114,19 @@ async function main() {
     p.expediente = formatearExpediente(anio, contadores[anio]);
   }
 
-  // Reportes.
-  fs.mkdirSync(CARPETA_REPORTES, { recursive: true });
+  // Informes.
+  fs.mkdirSync(CARPETA_INFORMES, { recursive: true });
   fs.writeFileSync(
-    path.join(CARPETA_REPORTES, 'comunidades.csv'),
+    path.join(CARPETA_INFORMES, 'comunidades.csv'),
     `﻿${csv([['comunidad', 'categoria', 'pacientes_en_el_libro', 'formas_de_escribirla'],
       ...comunidades.comunidades.map((c) => [c.nombre, c.categoria, c.total, c.variantes.join(' | ')])])}`,
   );
   fs.writeFileSync(
-    path.join(CARPETA_REPORTES, 'filas_no_cargadas.csv'),
+    path.join(CARPETA_INFORMES, 'filas_no_cargadas.csv'),
     `﻿${csv([['hoja', 'fila', 'motivo', 'codigo', 'nombre', 'sexo', 'edad', 'comunidad'], ...omitidas])}`,
   );
   fs.writeFileSync(
-    path.join(CARPETA_REPORTES, 'pacientes_cargados.csv'),
+    path.join(CARPETA_INFORMES, 'pacientes_cargados.csv'),
     `﻿${csv([['expediente', 'expediente_papel', 'apellidos', 'nombres', 'sexo', 'nacimiento_aprox', 'comunidad', 'veces_en_el_libro', 'origen'],
       ...cargables.map((p) => [p.expediente, p.codigo, p.apellidos, p.nombres, p.sexo,
         p.fechaNacimiento.toISOString().slice(0, 10), p.comunidad, p.registros, p.origen.join(' / ')])])}`,

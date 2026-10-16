@@ -156,7 +156,7 @@ async function limpiar() {
   const ids = insumos.map((i) => i.id);
   await prisma.bresRenglon.deleteMany({ where: { insumoId: { in: ids } } });
   await prisma.bres.deleteMany({ where: { periodo: { in: PERIODOS }, observaciones: { startsWith: 'Importado' } } });
-  await prisma.reporteServicio.deleteMany({ where: { periodo: { in: PERIODOS }, importado: true } });
+  await prisma.informeServicio.deleteMany({ where: { periodo: { in: PERIODOS }, importado: true } });
   await prisma.insumoAlias.deleteMany({ where: { insumoId: { in: ids } } });
   await prisma.insumo.deleteMany({ where: { id: { in: ids } } });
 }

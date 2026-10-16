@@ -16,7 +16,7 @@ const p = reactive({
   semaforoRojoMeses: 12,
   semaforoAmarilloMeses: 18,
   diaCorteBres: 25,
-  diaCorteReportes: 25,
+  diaCorteInformes: 25,
   lugaresReparto: 32,
   diasMaximoCuarentena: 7,
   provisional: true,
@@ -149,8 +149,8 @@ onMounted(cargar);
             <div class="unidad"><span class="antes">día</span><input id="corte" v-model.number="p.diaCorteBres" type="number" min="1" max="28" required class="b-campo num" /></div>
           </div>
           <div class="c4">
-            <label for="dcrep" class="b-etiqueta">Corte de reportes</label>
-            <div class="unidad"><span class="antes">día</span><input id="dcrep" v-model.number="p.diaCorteReportes" type="number" min="1" max="28" required class="b-campo num" /></div>
+            <label for="dcrep" class="b-etiqueta">Corte de informes</label>
+            <div class="unidad"><span class="antes">día</span><input id="dcrep" v-model.number="p.diaCorteInformes" type="number" min="1" max="28" required class="b-campo num" /></div>
           </div>
           <div class="c4">
             <label for="dcua" class="b-etiqueta">Cuarentena máxima</label>

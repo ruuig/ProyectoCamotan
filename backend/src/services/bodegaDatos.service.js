@@ -1,13 +1,13 @@
 /**
  * Lecturas de la base para la bodega: existencia del centro, traslados a los
- * servicios, reportes mensuales de los servicios, balance consolidado y BRES
+ * servicios, informes mensuales de los servicios, balance consolidado y BRES
  * del municipio. Las reglas de calculo viven en bodega.service.js.
  *
  * Como se reparte la existencia (MD/Bodega.md):
  *   - Bodega: los lotes del centro. Post-consulta entrega desde esos mismos
  *     lotes, asi que no tiene saldo propio; en el balance es la columna de
  *     lo entregado a pacientes en el centro.
- *   - Puestos y centros comunitarios: su saldo es lo que reportan cada mes,
+ *   - Puestos y centros comunitarios: su saldo es lo que informan cada mes,
  *     partiendo de lo que la bodega les traslado.
  */
 
@@ -15,7 +15,7 @@ const prisma = require('../config/db');
 const { limitesDePeriodo, configuracion } = require('./abastecimiento.service');
 const { periodoDe } = require('./logistica.service');
 const {
-  filaReporte, filaBres, periodoAnterior, ultimosPeriodos, CATEGORIAS,
+  filaInforme, filaBres, periodoAnterior, ultimosPeriodos, CATEGORIAS,
 } = require('./bodega.service');
 
 const sumar = (mapa, clave, valor) => mapa.set(clave, (mapa.get(clave) ?? 0) + valor);
@@ -29,8 +29,8 @@ async function ubicaciones(establecimientoId, { soloActivas = true } = {}) {
   });
 }
 
-/** Servicios que reciben traslados y reportan: ni la bodega ni post-consulta. */
-const esServicioQueReporta = (u) => u.tipo === 'puesto_salud' || u.tipo === 'centro_comunitario';
+/** Servicios que reciben traslados y informan: ni la bodega ni post-consulta. */
+const esServicioQueInforma = (u) => u.tipo === 'puesto_salud' || u.tipo === 'centro_comunitario';
 
 /** Parametros numericos del BRES del centro. */
 function parametrosBres(config) {
@@ -127,25 +127,25 @@ async function trasladosHasta(establecimientoId, hasta) {
 /**
  * Saldo anterior y entradas de cada servicio e insumo para un periodo.
  *
- * Saldo anterior: el saldo siguiente del ultimo reporte del servicio, mas lo
- * que se le traslado despues de ese reporte y antes del periodo. Si nunca ha
- * reportado, todo lo que se le traslado antes del periodo.
+ * Saldo anterior: el saldo siguiente del ultimo informe del servicio, mas lo
+ * que se le traslado despues de ese informe y antes del periodo. Si nunca ha
+ * informado, todo lo que se le traslado antes del periodo.
  * Entradas: lo trasladado dentro del periodo (precargado, no se pregunta).
  */
 async function arranqueServicios(establecimientoId, periodo) {
   const { hasta } = limitesDePeriodo(periodo);
-  const [traslados, reportes] = await Promise.all([
+  const [traslados, informes] = await Promise.all([
     trasladosHasta(establecimientoId, hasta),
-    prisma.reporteServicio.findMany({
+    prisma.informeServicio.findMany({
       where: { ubicacion: { establecimientoId }, periodo: { lt: periodo } },
       select: { ubicacionId: true, periodo: true, renglones: { select: { insumoId: true, saldoSiguiente: true } } },
       orderBy: { periodo: 'desc' },
     }),
   ]);
 
-  // El ultimo reporte de cada servicio antes del periodo.
+  // El ultimo informe de cada servicio antes del periodo.
   const ultimo = new Map();
-  for (const r of reportes) if (!ultimo.has(r.ubicacionId)) ultimo.set(r.ubicacionId, r);
+  for (const r of informes) if (!ultimo.has(r.ubicacionId)) ultimo.set(r.ubicacionId, r);
 
   const saldoAnterior = new Map();
   const entradas = new Map();
@@ -157,45 +157,45 @@ async function arranqueServicios(establecimientoId, periodo) {
     if (t.periodo === periodo) {
       sumar(entradas, k, t.cantidad);
     } else if (t.periodo < periodo) {
-      const desdeReporte = ultimo.get(t.ubicacionId)?.periodo;
-      if (!desdeReporte || t.periodo > desdeReporte) sumar(saldoAnterior, k, t.cantidad);
+      const desdeInforme = ultimo.get(t.ubicacionId)?.periodo;
+      if (!desdeInforme || t.periodo > desdeInforme) sumar(saldoAnterior, k, t.cantidad);
     }
   }
   return { saldoAnterior, entradas };
 }
 
 /**
- * Formulario del reporte mensual de un servicio: todos los insumos activos,
+ * Formulario del informe mensual de un servicio: todos los insumos activos,
  * con saldo anterior y entradas ya calculados, y lo que ya se haya capturado.
  */
-async function formularioReporte(establecimientoId, ubicacionId, periodo) {
+async function formularioInforme(establecimientoId, ubicacionId, periodo) {
   const ubicacion = await prisma.ubicacion.findFirst({ where: { id: ubicacionId, establecimientoId } });
   if (!ubicacion) return null;
 
-  const [insumos, arranque, reporte, alguna] = await Promise.all([
+  const [insumos, arranque, informe, alguna] = await Promise.all([
     prisma.insumo.findMany({ where: { establecimientoId, activo: true }, orderBy: { nombreGenerico: 'asc' } }),
     arranqueServicios(establecimientoId, periodo),
-    prisma.reporteServicio.findUnique({
+    prisma.informeServicio.findUnique({
       where: { ubicacionId_periodo: { ubicacionId, periodo } },
       include: { renglones: true, usuario: { select: { nombre: true } } },
     }),
-    // Insumos que el servicio maneja: alguna vez se le trasladaron o los reporto.
-    prisma.reporteServicioRenglon.findMany({
-      where: { reporte: { ubicacionId } },
+    // Insumos que el servicio maneja: alguna vez se le trasladaron o los informo.
+    prisma.informeServicioRenglon.findMany({
+      where: { informe: { ubicacionId } },
       select: { insumoId: true },
       distinct: ['insumoId'],
     }),
   ]);
 
-  const capturado = new Map((reporte?.renglones ?? []).map((r) => [r.insumoId, r]));
+  const capturado = new Map((informe?.renglones ?? []).map((r) => [r.insumoId, r]));
   const maneja = new Set(alguna.map((a) => a.insumoId));
 
   const renglones = insumos.map((i) => {
     const k = clave2(ubicacionId, i.id);
     const previo = capturado.get(i.id);
-    // Un reporte importado del Excel trae su propio saldo anterior y sus
+    // Un informe importado del Excel trae su propio saldo anterior y sus
     // entradas: esos meses no tienen traslados en el sistema.
-    const delExcel = reporte?.importado && previo;
+    const delExcel = informe?.importado && previo;
     const saldoAnterior = delExcel ? previo.saldoAnterior : (arranque.saldoAnterior.get(k) ?? 0);
     const entradas = delExcel ? previo.entradas : (arranque.entradas.get(k) ?? 0);
     if (saldoAnterior || entradas) maneja.add(i.id);
@@ -207,13 +207,13 @@ async function formularioReporte(establecimientoId, ubicacionId, periodo) {
       unidadEntrega: i.unidadEntrega,
       categoria: i.categoria,
       maneja: maneja.has(i.id),
-      ...filaReporte({
+      ...filaInforme({
         saldoAnterior,
         entradas,
         entregado: previo?.entregado ?? 0,
         noEntregado: previo?.noEntregado ?? 0,
-        saldoReportado: previo?.saldoReportado ?? null,
-        entradasReportadas: previo?.entradasReportadas ?? null,
+        saldoInformado: previo?.saldoInformado ?? null,
+        entradasInformadas: previo?.entradasInformadas ?? null,
       }),
       capturado: Boolean(previo),
     };
@@ -222,20 +222,20 @@ async function formularioReporte(establecimientoId, ubicacionId, periodo) {
   return {
     ubicacion,
     periodo,
-    reporte: reporte
-      ? { id: reporte.id, capturadoEn: reporte.capturadoEn, capturadoPor: reporte.usuario?.nombre, revisado: reporte.revisado, observacion: reporte.observacion, importado: reporte.importado }
+    informe: informe
+      ? { id: informe.id, capturadoEn: informe.capturadoEn, capturadoPor: informe.usuario?.nombre, revisado: informe.revisado, observacion: informe.observacion, importado: informe.importado }
       : null,
     renglones,
   };
 }
 
 /**
- * Guarda el reporte de un servicio. Solo se capturan entregado, no
- * entregado y, si se tienen, el saldo y las entradas que reporta el servicio;
+ * Guarda el informe de un servicio. Solo se capturan entregado, no
+ * entregado y, si se tienen, el saldo y las entradas que informa el servicio;
  * el resto se recalcula aqui.
  */
-async function guardarReporte(establecimientoId, ubicacionId, periodo, { renglones, observacion }, usuarioId) {
-  const form = await formularioReporte(establecimientoId, ubicacionId, periodo);
+async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglones, observacion }, usuarioId) {
+  const form = await formularioInforme(establecimientoId, ubicacionId, periodo);
   if (!form) return null;
 
   const base = new Map(form.renglones.map((r) => [r.insumoId, r]));
@@ -243,44 +243,44 @@ async function guardarReporte(establecimientoId, ubicacionId, periodo, { renglon
   for (const r of renglones) {
     const b = base.get(r.insumoId);
     if (!b) continue;
-    const f = filaReporte({
+    const f = filaInforme({
       saldoAnterior: b.saldoAnterior,
       entradas: b.entradas,
       entregado: r.entregado ?? 0,
       noEntregado: r.noEntregado ?? 0,
-      saldoReportado: r.saldoReportado,
-      entradasReportadas: r.entradasReportadas,
+      saldoInformado: r.saldoInformado,
+      entradasInformadas: r.entradasInformadas,
     });
     filas.push({ insumoId: r.insumoId, ...f });
   }
   // Los insumos que no se tocaron pero tienen movimiento quedan con su saldo.
   for (const b of form.renglones) {
     if (!filas.some((f) => f.insumoId === b.insumoId) && (b.saldoAnterior || b.entradas)) {
-      filas.push({ insumoId: b.insumoId, ...filaReporte({ saldoAnterior: b.saldoAnterior, entradas: b.entradas }) });
+      filas.push({ insumoId: b.insumoId, ...filaInforme({ saldoAnterior: b.saldoAnterior, entradas: b.entradas }) });
     }
   }
 
   const diferencias = filas.filter((f) => f.diferenciaSaldo || f.diferenciaEntradas).length;
 
   await prisma.$transaction(async (tx) => {
-    const reporte = await tx.reporteServicio.upsert({
+    const informe = await tx.informeServicio.upsert({
       where: { ubicacionId_periodo: { ubicacionId, periodo } },
       create: { ubicacionId, periodo, capturadoPor: usuarioId, observacion: observacion ?? null, revisado: diferencias === 0 },
-      // Volver a capturar deja el reporte por revisar otra vez.
+      // Volver a capturar deja el informe por revisar otra vez.
       update: { capturadoPor: usuarioId, capturadoEn: new Date(), observacion: observacion ?? null, revisado: diferencias === 0 },
     });
-    await tx.reporteServicioRenglon.deleteMany({ where: { reporteId: reporte.id } });
-    await tx.reporteServicioRenglon.createMany({
+    await tx.informeServicioRenglon.deleteMany({ where: { informeId: informe.id } });
+    await tx.informeServicioRenglon.createMany({
       data: filas.map((f) => ({
-        reporteId: reporte.id,
+        informeId: informe.id,
         insumoId: f.insumoId,
         saldoAnterior: f.saldoAnterior,
         entradas: f.entradas,
-        entradasReportadas: f.entradasReportadas,
+        entradasInformadas: f.entradasInformadas,
         entregado: f.entregado,
         noEntregado: f.noEntregado,
         saldoSiguiente: f.saldoSiguiente,
-        saldoReportado: f.saldoReportado,
+        saldoInformado: f.saldoInformado,
       })),
     });
   });
@@ -288,27 +288,27 @@ async function guardarReporte(establecimientoId, ubicacionId, periodo, { renglon
   return { renglones: filas.length, diferencias };
 }
 
-/** Que servicios ya reportaron el mes y cuales faltan. */
-async function estadoReportes(establecimientoId, periodo) {
-  const [lista, reportes] = await Promise.all([
+/** Que servicios ya informaron el mes y cuales faltan. */
+async function estadoInformes(establecimientoId, periodo) {
+  const [lista, informes] = await Promise.all([
     ubicaciones(establecimientoId),
-    prisma.reporteServicio.findMany({
+    prisma.informeServicio.findMany({
       where: { ubicacion: { establecimientoId }, periodo },
       include: { renglones: true, usuario: { select: { nombre: true } } },
     }),
   ]);
-  const porUbicacion = new Map(reportes.map((r) => [r.ubicacionId, r]));
-  return lista.filter(esServicioQueReporta).map((u) => {
+  const porUbicacion = new Map(informes.map((r) => [r.ubicacionId, r]));
+  return lista.filter(esServicioQueInforma).map((u) => {
     const r = porUbicacion.get(u.id);
     const diferencias = r
-      ? r.renglones.filter((x) => (x.saldoReportado !== null && x.saldoReportado !== x.saldoSiguiente)
-        || (x.entradasReportadas !== null && x.entradasReportadas !== x.entradas)).length
+      ? r.renglones.filter((x) => (x.saldoInformado !== null && x.saldoInformado !== x.saldoSiguiente)
+        || (x.entradasInformadas !== null && x.entradasInformadas !== x.entradas)).length
       : 0;
     return {
       ubicacionId: u.id,
       nombre: u.nombre,
       tipo: u.tipo,
-      reportado: Boolean(r),
+      informado: Boolean(r),
       capturadoEn: r?.capturadoEn ?? null,
       capturadoPor: r?.usuario?.nombre ?? null,
       revisado: r?.revisado ?? false,
@@ -326,14 +326,14 @@ async function estadoReportes(establecimientoId, periodo) {
  * en null: no hay datos, no son ceros.
  */
 async function demandaMunicipal(establecimientoId, periodos) {
-  const [primero, primerReporte] = await Promise.all([
+  const [primero, primerInforme] = await Promise.all([
     prisma.movimientoInsumo.findFirst({
       where: { lote: { insumo: { establecimientoId } } },
       orderBy: { registradoEn: 'asc' },
       select: { registradoEn: true },
     }),
-    // El historial importado de los Excel llega como reportes, sin movimientos.
-    prisma.reporteServicio.findFirst({
+    // El historial importado de los Excel llega como informes, sin movimientos.
+    prisma.informeServicio.findFirst({
       where: { ubicacion: { establecimientoId } },
       orderBy: { periodo: 'asc' },
       select: { periodo: true },
@@ -341,7 +341,7 @@ async function demandaMunicipal(establecimientoId, periodos) {
   ]);
   const candidatos = [
     primero ? periodoDe(new Date(new Date(primero.registradoEn).getTime() - 6 * 3600000)) : null,
-    primerReporte?.periodo ?? null,
+    primerInforme?.periodo ?? null,
   ].filter(Boolean).sort();
   const inicio = candidatos[0] ?? null;
 
@@ -349,12 +349,12 @@ async function demandaMunicipal(establecimientoId, periodos) {
   for (const p of periodos) {
     if (!inicio || p < inicio) { porPeriodo.set(p, null); continue; }
     const { desde, hasta } = limitesDePeriodo(p);
-    const [mov, dna, reportes] = await Promise.all([
+    const [mov, dna, informes] = await Promise.all([
       movimientosCentro(establecimientoId, desde, hasta),
       noEntregadoCentro(establecimientoId, desde, hasta),
-      prisma.reporteServicioRenglon.findMany({
-        where: { reporte: { periodo: p, ubicacion: { establecimientoId } } },
-        select: { insumoId: true, entregado: true, noEntregado: true, reporte: { select: { ubicacionId: true } } },
+      prisma.informeServicioRenglon.findMany({
+        where: { informe: { periodo: p, ubicacion: { establecimientoId } } },
+        select: { insumoId: true, entregado: true, noEntregado: true, informe: { select: { ubicacionId: true } } },
       }),
     ]);
     // Total del municipio, lo del centro y lo de cada servicio, por insumo.
@@ -363,9 +363,9 @@ async function demandaMunicipal(establecimientoId, periodos) {
     const porServicio = new Map();
     for (const [id, m] of mov) { sumar(total, id, m.entregado + m.consumo); sumar(centro, id, m.entregado + m.consumo); }
     for (const [id, n] of dna) { sumar(total, id, n); sumar(centro, id, n); }
-    for (const r of reportes) {
+    for (const r of informes) {
       sumar(total, r.insumoId, r.entregado + r.noEntregado);
-      sumar(porServicio, clave2(r.reporte.ubicacionId, r.insumoId), r.entregado + r.noEntregado);
+      sumar(porServicio, clave2(r.informe.ubicacionId, r.insumoId), r.entregado + r.noEntregado);
     }
     porPeriodo.set(p, { total, centro, porServicio });
   }
@@ -424,7 +424,7 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
   // el promedio: se usan los meses completos anteriores.
   const finVentana = mesAbierto(periodo, config.diaCorteBres) ? periodoAnterior(periodo) : periodo;
 
-  const [lista, movimientos, saldoInicio, saldoFin, farmaciaInicio, farmaciaFin, dna, arranque, reportes, demandas, cerrado, anterior] = await Promise.all([
+  const [lista, movimientos, saldoInicio, saldoFin, farmaciaInicio, farmaciaFin, dna, arranque, informes, demandas, cerrado, anterior] = await Promise.all([
     ubicaciones(establecimientoId),
     movimientosCentro(establecimientoId, desde, hasta),
     saldoCentro(establecimientoId, desde, 'bodega'),
@@ -433,7 +433,7 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
     saldoCentro(establecimientoId, hasta, 'farmacia'),
     noEntregadoCentro(establecimientoId, desde, hasta),
     arranqueServicios(establecimientoId, periodo),
-    prisma.reporteServicio.findMany({
+    prisma.informeServicio.findMany({
       where: { ubicacion: { establecimientoId }, periodo },
       include: { renglones: true },
     }),
@@ -454,7 +454,7 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
   // se usen: un mes viejo se ve con todos sus renglones.
   const conCifras = new Set([
     ...(congelado ? congelado.keys() : []),
-    ...reportes.flatMap((r) => r.renglones.map((x) => x.insumoId)),
+    ...informes.flatMap((r) => r.renglones.map((x) => x.insumoId)),
   ]);
   const insumos = await prisma.insumo.findMany({
     where: {
@@ -471,22 +471,22 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
   const historico = congelado ? [] : await prisma.inventarioCierreHistorico.findMany({ where: { establecimientoId, periodo } });
   const cierreExcel = new Map(historico.map((h) => [h.insumoId, h]));
   const centro = lista.find((u) => u.tipo === 'centro_salud');
-  const reportePost = centro ? reportes.find((r) => r.ubicacionId === centro.id) : null;
-  const postImportado = reportePost?.importado ? new Map(reportePost.renglones.map((r) => [r.insumoId, r])) : null;
+  const informePost = centro ? informes.find((r) => r.ubicacionId === centro.id) : null;
+  const postImportado = informePost?.importado ? new Map(informePost.renglones.map((r) => [r.insumoId, r])) : null;
 
-  const servicios = lista.filter(esServicioQueReporta);
+  const servicios = lista.filter(esServicioQueInforma);
   const conTraslados = new Set((await prisma.traslado.findMany({
     where: { establecimientoId, registradoEn: { lt: hasta } },
     select: { ubicacionId: true },
     distinct: ['ubicacionId'],
   })).map((t) => t.ubicacionId));
-  const reportado = new Map();
+  const informado = new Map();
   const importado = new Set();
-  for (const r of reportes) {
+  for (const r of informes) {
     if (r.importado) importado.add(r.ubicacionId);
-    for (const ren of r.renglones) reportado.set(clave2(r.ubicacionId, ren.insumoId), ren);
+    for (const ren of r.renglones) informado.set(clave2(r.ubicacionId, ren.insumoId), ren);
   }
-  const conReporte = new Set(reportes.map((r) => r.ubicacionId));
+  const conInforme = new Set(informes.map((r) => r.ubicacionId));
 
   // Promedio de cada servicio en un mes abierto: la demanda de los ultimos
   // meses, redondeada, como la anota cada servicio en su balance.
@@ -549,25 +549,25 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
 
     const columnas = servicios.map((s) => {
       const k = clave2(s.id, i.id);
-      const ren = reportado.get(k);
+      const ren = informado.get(k);
       if (importado.has(s.id)) {
-        // Reporte del Excel: cada cifra como se anoto, aunque no cuadre.
+        // Informe del Excel: cada cifra como se anoto, aunque no cuadre.
         const saldoSiguiente = ren?.saldoSiguiente ?? 0;
         return {
           ubicacionId: s.id,
-          reportado: true,
-          ...filaReporte({ saldoAnterior: ren?.saldoAnterior ?? 0, entradas: ren?.entradas ?? 0, entregado: ren?.entregado ?? 0, noEntregado: ren?.noEntregado ?? 0 }),
+          informado: true,
+          ...filaInforme({ saldoAnterior: ren?.saldoAnterior ?? 0, entradas: ren?.entradas ?? 0, entregado: ren?.entregado ?? 0, noEntregado: ren?.noEntregado ?? 0 }),
           saldoSiguiente,
           negativo: saldoSiguiente < 0,
           promedio: numero(ren?.promedioAnotado) ?? 0,
         };
       }
       const f = ren
-        ? filaReporte({ saldoAnterior: ren.saldoAnterior, entradas: ren.entradas, entregado: ren.entregado, noEntregado: ren.noEntregado, saldoReportado: ren.saldoReportado, entradasReportadas: ren.entradasReportadas })
-        : filaReporte({ saldoAnterior: arranque.saldoAnterior.get(k) ?? 0, entradas: arranque.entradas.get(k) ?? 0 });
+        ? filaInforme({ saldoAnterior: ren.saldoAnterior, entradas: ren.entradas, entregado: ren.entregado, noEntregado: ren.noEntregado, saldoInformado: ren.saldoInformado, entradasInformadas: ren.entradasInformadas })
+        : filaInforme({ saldoAnterior: arranque.saldoAnterior.get(k) ?? 0, entradas: arranque.entradas.get(k) ?? 0 });
       return {
         ubicacionId: s.id,
-        reportado: conReporte.has(s.id),
+        informado: conInforme.has(s.id),
         ...f,
         promedio: promedio((d) => d.porServicio.get(k) ?? 0),
       };
@@ -617,7 +617,7 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
   return {
     periodo,
     cerrado: Boolean(congelado),
-    servicios: servicios.map((s) => ({ id: s.id, nombre: s.nombre, tipo: s.tipo, reportado: conReporte.has(s.id) })),
+    servicios: servicios.map((s) => ({ id: s.id, nombre: s.nombre, tipo: s.tipo, informado: conInforme.has(s.id) })),
     filas,
     configuracion: { ...p, semaforoRojoMeses: config.semaforoRojoMeses, semaforoAmarilloMeses: config.semaforoAmarilloMeses },
     firmas: {
@@ -627,8 +627,8 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
       cargoCoordinador: config.cargoCoordinador,
     },
     categorias: CATEGORIAS,
-    // Solo se espera reporte de quien ya recibe traslados por el sistema.
-    pendientesDeReporte: servicios.filter((s) => !conReporte.has(s.id) && conTraslados.has(s.id)).length,
+    // Solo se espera informe de quien ya recibe traslados por el sistema.
+    pendientesDeInforme: servicios.filter((s) => !conInforme.has(s.id) && conTraslados.has(s.id)).length,
   };
 }
 
@@ -639,15 +639,15 @@ function mesAbierto(periodo, diaCorte, ahora = new Date()) {
   return periodo === actual && local.getUTCDate() < diaCorte;
 }
 
-/** Promedio mensual de entregas reportadas por cada servicio, para distribuir. */
+/** Promedio mensual de entregas informadas por cada servicio, para distribuir. */
 async function promedioPorServicio(establecimientoId, insumoId, periodo, meses) {
   const periodos = ultimosPeriodos(periodoAnterior(periodo), meses);
-  const filas = await prisma.reporteServicioRenglon.findMany({
-    where: { insumoId, reporte: { periodo: { in: periodos }, ubicacion: { establecimientoId } } },
-    select: { entregado: true, reporte: { select: { ubicacionId: true } } },
+  const filas = await prisma.informeServicioRenglon.findMany({
+    where: { insumoId, informe: { periodo: { in: periodos }, ubicacion: { establecimientoId } } },
+    select: { entregado: true, informe: { select: { ubicacionId: true } } },
   });
   const suma = new Map();
-  for (const f of filas) sumar(suma, f.reporte.ubicacionId, f.entregado);
+  for (const f of filas) sumar(suma, f.informe.ubicacionId, f.entregado);
   return new Map([...suma].map(([id, total]) => [id, total / meses]));
 }
 
@@ -655,15 +655,15 @@ module.exports = {
   bresGuardado,
   mesAbierto,
   ubicaciones,
-  esServicioQueReporta,
+  esServicioQueInforma,
   parametrosBres,
   movimientosCentro,
   saldoCentro,
   noEntregadoCentro,
   arranqueServicios,
-  formularioReporte,
-  guardarReporte,
-  estadoReportes,
+  formularioInforme,
+  guardarInforme,
+  estadoInformes,
   demandaMunicipal,
   balance,
   promedioPorServicio,

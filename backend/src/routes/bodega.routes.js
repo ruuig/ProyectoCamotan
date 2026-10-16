@@ -260,32 +260,32 @@ router.post(
 // --- Hoy: lo pendiente ---------------------------------------------------------------
 router.get('/hoy', deBodega, validar(z.object({ kardexDesde: fecha.optional() }), 'query'), asincrono(hoy));
 
-// --- Reportes de los servicios ---------------------------------------------------
-router.get('/reportes', deBodega, validar(z.object({ periodo: periodo.optional() }), 'query'), asincrono(bodega.estadoReportes));
-const parametrosReporte = z.object({ ubicacionId: id, periodo });
-router.get('/reportes/:ubicacionId/:periodo', deBodega, validar(parametrosReporte, 'params'), asincrono(bodega.obtenerReporte));
+// --- Informes de los servicios ---------------------------------------------------
+router.get('/informes', deBodega, validar(z.object({ periodo: periodo.optional() }), 'query'), asincrono(bodega.estadoInformes));
+const parametrosInforme = z.object({ ubicacionId: id, periodo });
+router.get('/informes/:ubicacionId/:periodo', deBodega, validar(parametrosInforme, 'params'), asincrono(bodega.obtenerInforme));
 router.put(
-  '/reportes/:ubicacionId/:periodo',
+  '/informes/:ubicacionId/:periodo',
   deBodega,
-  validar(parametrosReporte, 'params'),
+  validar(parametrosInforme, 'params'),
   validar(z.object({
     observacion: z.string().trim().max(500).optional().nullable(),
     renglones: z.array(z.object({
       insumoId: id,
       entregado: z.coerce.number().int().min(0).default(0),
       noEntregado: z.coerce.number().int().min(0).default(0),
-      saldoReportado: z.coerce.number().int().min(0).optional().nullable(),
-      entradasReportadas: z.coerce.number().int().min(0).optional().nullable(),
+      saldoInformado: z.coerce.number().int().min(0).optional().nullable(),
+      entradasInformadas: z.coerce.number().int().min(0).optional().nullable(),
     })).max(1000),
   })),
-  asincrono(bodega.guardarReporte),
+  asincrono(bodega.guardarInforme),
 );
 router.post(
-  '/reportes/:ubicacionId/:periodo/revisar',
+  '/informes/:ubicacionId/:periodo/revisar',
   deBodega,
-  validar(parametrosReporte, 'params'),
+  validar(parametrosInforme, 'params'),
   validar(z.object({ observacion: z.string().trim().min(5, 'Explique por qué se aceptan las diferencias').max(500) })),
-  asincrono(bodega.revisarReporte),
+  asincrono(bodega.revisarInforme),
 );
 
 // --- Balance, semáforo e inventario de cierre --------------------------------------

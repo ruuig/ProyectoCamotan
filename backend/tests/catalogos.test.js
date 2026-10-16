@@ -168,7 +168,7 @@ describe('Carga de lugares por CSV', () => {
     expect(guardado.categoria).toBe('barrio');
   });
 
-  it('carga lo valido y reporta la linea con error', async () => {
+  it('carga lo valido y informa la linea con error', async () => {
     const csv = [
       'nombre,categoria,territorio,sector',
       `${MARCA} Bueno,aldea,,`,

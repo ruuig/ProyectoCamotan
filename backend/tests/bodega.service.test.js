@@ -76,7 +76,7 @@ describe('propuestaDistribucion', () => {
     expect(r.filas.map((f) => f.cantidad)).toEqual([75, 25, 0]);
   });
 
-  it('sin consumo reportado, reparte en partes iguales y lo avisa', () => {
+  it('sin consumo informado, reparte en partes iguales y lo avisa', () => {
     const r = b.propuestaDistribucion({ cantidad: 9, servicios: servicios.map((s) => ({ ...s, promedio: 0 })), modo: 'consumo' });
     expect(r.modo).toBe('iguales');
     expect(r.aviso).toMatch(/partes iguales/);
@@ -103,19 +103,19 @@ describe('propuestaDistribucion', () => {
   });
 });
 
-describe('filaReporte', () => {
+describe('filaInforme', () => {
   it('saldo siguiente = anterior + entradas − entregado', () => {
-    expect(b.filaReporte({ saldoAnterior: 10, entradas: 50, entregado: 35, noEntregado: 4 }).saldoSiguiente).toBe(25);
+    expect(b.filaInforme({ saldoAnterior: 10, entradas: 50, entregado: 35, noEntregado: 4 }).saldoSiguiente).toBe(25);
   });
 
-  it('marca la diferencia con el saldo y las entradas que reporta el servicio', () => {
-    const r = b.filaReporte({ saldoAnterior: 10, entradas: 50, entregado: 35, saldoReportado: 20, entradasReportadas: 40 });
+  it('marca la diferencia con el saldo y las entradas que informa el servicio', () => {
+    const r = b.filaInforme({ saldoAnterior: 10, entradas: 50, entregado: 35, saldoInformado: 20, entradasInformadas: 40 });
     expect(r.diferenciaSaldo).toBe(-5);
     expect(r.diferenciaEntradas).toBe(-10);
   });
 
-  it('sin saldo reportado no hay diferencia que marcar', () => {
-    expect(b.filaReporte({ saldoAnterior: 1 }).diferenciaSaldo).toBeNull();
+  it('sin saldo informado no hay diferencia que marcar', () => {
+    expect(b.filaInforme({ saldoAnterior: 1 }).diferenciaSaldo).toBeNull();
   });
 });
 
@@ -128,7 +128,7 @@ describe('filaBres con las fórmulas del balance del centro', () => {
     const f = b.filaBres(base);
     expect(f.F).toBe(100);
     expect(f.H).toBe(205);
-    // B + C - D: lo que debería haber; la diferencia con H es lo que no se reportó.
+    // B + C - D: lo que debería haber; la diferencia con H es lo que no se informó.
     expect(f.saldoPorDemanda).toBe(410);
   });
 

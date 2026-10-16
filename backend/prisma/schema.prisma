@@ -92,7 +92,7 @@ model Usuario {
   cambiosFicha         CambioFicha[]            @relation("CambioFichaPor")
   archivosSubidos      ArchivoPaciente[]        @relation("ArchivoSubidoPor")
   traslados            Traslado[]               @relation("TrasladoEntregadoPor")
-  reportesServicio     ReporteServicio[]        @relation("ReporteCapturadoPor")
+  informesServicio     InformeServicio[]        @relation("InformeCapturadoPor")
   operaciones          OperacionIdempotente[]
   atencionesAtendidas  Atencion[]               @relation("AtencionAtendidaPor")
   atencionesCanceladas Atencion[]               @relation("AtencionCanceladaPor")
@@ -517,7 +517,7 @@ model Insumo {
   demandaNoAtendida         DemandaNoAtendida[]
   renglonesBres             BresRenglon[]
   alias                     InsumoAlias[]
-  renglonesReporte          ReporteServicioRenglon[]
+  renglonesInforme          InformeServicioRenglon[]
   inventarioCierreHistorico InventarioCierreHistorico[]
   conteosFarmacia           ConteoFarmacia[]
 
@@ -696,7 +696,7 @@ model ConfiguracionLogistica {
   formulaPedido           String    @default("centro") @map("formula_pedido")
   semaforoRojoMeses       Int       @default(12) @map("semaforo_rojo_meses")
   semaforoAmarilloMeses   Int       @default(18) @map("semaforo_amarillo_meses")
-  diaCorteReportes        Int       @default(25) @map("dia_corte_reportes")
+  diaCorteInformes        Int       @default(25) @map("dia_corte_reportes")
   // Entre cuantos lugares se reparte en partes iguales (Saldo Actual / 32).
   lugaresReparto          Int       @default(32) @map("lugares_reparto")
   encargadoBodega         String?   @map("encargado_bodega")
@@ -783,7 +783,7 @@ model ConteoFisico {
 }
 
 /// Balance, Requisicion y Envio de Suministros: el informe mensual con el que
-/// el servicio reporta y pide. Las cifras se congelan al generarlo.
+/// el servicio informa y pide. Las cifras se congelan al generarlo.
 model Bres {
   id                Int       @id @default(autoincrement())
   establecimientoId Int       @map("establecimiento_id")
@@ -1063,7 +1063,7 @@ model Cie10Capitulo {
   @@map("cie10_capitulo")
 }
 
-// --- Bodega: ubicaciones, traslados y reportes de servicios -------------------
+// --- Bodega: ubicaciones, traslados y informes de servicios -------------------
 
 model InsumoAlias {
   id               Int    @id @default(autoincrement())
@@ -1089,7 +1089,7 @@ model Ubicacion {
 
   establecimiento Establecimiento   @relation(fields: [establecimientoId], references: [id])
   traslados       Traslado[]
-  reportes        ReporteServicio[]
+  informes        InformeServicio[]
   requisiciones   Requisicion[]
 
   @@unique([establecimientoId, nombre], map: "ubicacion_nombre_unico")
@@ -1190,7 +1190,9 @@ model RequisicionRenglon {
   @@map("requisicion_renglon")
 }
 
-model ReporteServicio {
+/// Informe mensual de un servicio. La tabla de la base conserva su nombre original
+/// (reporte_servicio): cambiarlo exige una migración en el servidor.
+model InformeServicio {
   id           Int      @id @default(autoincrement())
   ubicacionId  Int      @map("ubicacion_id")
   periodo      String   @db.Char(7)
@@ -1201,31 +1203,31 @@ model ReporteServicio {
   importado    Boolean  @default(false)
 
   ubicacion Ubicacion                @relation(fields: [ubicacionId], references: [id])
-  usuario   Usuario                  @relation("ReporteCapturadoPor", fields: [capturadoPor], references: [id])
-  renglones ReporteServicioRenglon[]
+  usuario   Usuario                  @relation("InformeCapturadoPor", fields: [capturadoPor], references: [id])
+  renglones InformeServicioRenglon[]
 
   @@unique([ubicacionId, periodo], map: "reporte_servicio_unico")
   @@map("reporte_servicio")
 }
 
-model ReporteServicioRenglon {
+model InformeServicioRenglon {
   id                 Int      @id @default(autoincrement())
-  reporteId          Int      @map("reporte_id")
+  informeId          Int      @map("reporte_id")
   insumoId           Int      @map("insumo_id")
   saldoAnterior      Int      @map("saldo_anterior")
   entradas           Int
-  entradasReportadas Int?     @map("entradas_reportadas")
+  entradasInformadas Int?     @map("entradas_reportadas")
   entregado          Int      @default(0)
   noEntregado        Int      @default(0) @map("no_entregado")
   saldoSiguiente     Int      @map("saldo_siguiente")
-  saldoReportado     Int?     @map("saldo_reportado")
+  saldoInformado     Int?     @map("saldo_reportado")
   // El promedio que anoto el servicio; algunos llevan decimales.
   promedioAnotado    Decimal? @map("promedio_anotado") @db.Decimal(12, 3)
 
-  reporte ReporteServicio @relation(fields: [reporteId], references: [id], onDelete: Cascade)
+  informe InformeServicio @relation(fields: [informeId], references: [id], onDelete: Cascade)
   insumo  Insumo          @relation(fields: [insumoId], references: [id])
 
-  @@unique([reporteId, insumoId], map: "reporte_renglon_unico")
+  @@unique([informeId, insumoId], map: "reporte_renglon_unico")
   @@map("reporte_servicio_renglon")
 }
 

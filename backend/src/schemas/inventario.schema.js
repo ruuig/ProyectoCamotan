@@ -192,7 +192,7 @@ const configurarLogistica = z.object({
   formulaPedido: z.enum(['centro', 'mspas']).optional(),
   semaforoRojoMeses: z.coerce.number().int().min(1).max(60).optional(),
   semaforoAmarilloMeses: z.coerce.number().int().min(2).max(72).optional(),
-  diaCorteReportes: z.coerce.number().int().min(1).max(28).optional(),
+  diaCorteInformes: z.coerce.number().int().min(1).max(28).optional(),
   lugaresReparto: z.coerce.number().int().min(1).max(200).optional(),
   encargadoBodega: z.string().trim().max(160).optional().nullable(),
   coordinadorMunicipal: z.string().trim().max(160).optional().nullable(),

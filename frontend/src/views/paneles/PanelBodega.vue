@@ -18,7 +18,7 @@ import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
  *  1. Atender a tiempo lo que piden farmacia y los servicios (pedidos).
  *  2. Que haya medicamento y que no se venza (agotados, faltantes por
  *     reclamar, semáforo).
- *  3. Cerrar el mes: reportes de los servicios, BRES e inventario de cierre.
+ *  3. Cerrar el mes: informes de los servicios, BRES e inventario de cierre.
  */
 const auth = useAuthStore();
 const router = useRouter();
@@ -106,13 +106,13 @@ const tarjetas = computed(() => [
 
 /* --- Cierre del mes ------------------------------------------------------------- */
 const pasos = computed(() => {
-  const rep = r.value?.reportes;
+  const rep = r.value?.informes;
   return [
     {
-      texto: 'Reportes de los servicios',
+      texto: 'Informes de los servicios',
       detalle: rep ? `${rep.listos} de ${rep.de} recibidos` : '·',
       listo: rep ? rep.de > 0 && rep.listos === rep.de : false,
-      a: '/inventario/reportes',
+      a: '/inventario/informes',
     },
     {
       texto: 'BRES',

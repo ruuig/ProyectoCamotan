@@ -29,7 +29,7 @@ const r = computed(() => datos.value?.resumen);
 
 /** Lo que hay que hacer, en el orden en que conviene hacerlo. */
 // Primero lo urgente: faltantes y vencidos; después lo administrativo.
-const ORDEN = ['faltantes', 'vencidos', 'sin_numero', 'reportes', 'por_vencer'];
+const ORDEN = ['faltantes', 'vencidos', 'sin_numero', 'informes', 'por_vencer'];
 const tareas = computed(() => (datos.value?.pendientes ?? [])
   .filter((p) => p.clave !== 'kardex' && p.clave !== 'cierre')
   .sort((a, b) => ORDEN.indexOf(a.clave) - ORDEN.indexOf(b.clave))
@@ -38,7 +38,7 @@ const tareas = computed(() => (datos.value?.pendientes ?? [])
       case 'faltantes': return { ...p, tono: 'rojo', titulo: `Reclamar faltantes de ${p.cantidad} ${p.cantidad === 1 ? 'producto' : 'productos'}`, detalle: `${miles(p.unidades)} unidades que dice el documento y no llegaron`, accion: 'Ver faltantes' };
       case 'vencidos': return { ...p, tono: 'rojo', titulo: `Verificar ${p.cantidad} ${p.cantidad === 1 ? 'lote vencido' : 'lotes vencidos'}`, detalle: 'Tienen existencia en el sistema: confirme si siguen en la estantería', accion: 'Revisar' };
       case 'sin_numero': return { ...p, tono: 'ambar', titulo: `Anotar el número de ${p.cantidad} ${p.cantidad === 1 ? 'requisición' : 'requisiciones'}`, detalle: 'Sin número, el kardex queda sin referencia', accion: 'Completar' };
-      case 'reportes': return { ...p, tono: 'azul', titulo: `Capturar ${p.cantidad} ${p.cantidad === 1 ? 'reporte' : 'reportes'} de ${mes(p.periodo)}`, detalle: `${p.de - p.cantidad} de ${p.de} servicios ya reportaron`, accion: 'Ir a reportes' };
+      case 'informes': return { ...p, tono: 'azul', titulo: `Capturar ${p.cantidad} ${p.cantidad === 1 ? 'informe' : 'informes'} de ${mes(p.periodo)}`, detalle: `${p.de - p.cantidad} de ${p.de} servicios ya informaron`, accion: 'Ir a informes' };
       case 'por_vencer': return { ...p, tono: 'ambar', titulo: `Entregar primero ${p.cantidad} ${p.cantidad === 1 ? 'lote' : 'lotes'} por vencer`, detalle: 'Vencen en menos de 3 meses', accion: 'Ver semáforo' };
       default: return { ...p, tono: 'azul', titulo: p.clave, detalle: '', accion: 'Ver' };
     }
@@ -80,8 +80,8 @@ onMounted(cargar);
     <template v-if="r">
       <!-- Cifras -->
       <div class="b-franja mt-5">
-        <RouterLink to="/inventario/reportes" class="b-cifra enlace">
-          <span class="n">{{ r.reportes.listos }}<small>/{{ r.reportes.de }}</small></span><span class="e">Reportes de {{ mes(datos.periodo) }}</span>
+        <RouterLink to="/inventario/informes" class="b-cifra enlace">
+          <span class="n">{{ r.informes.listos }}<small>/{{ r.informes.de }}</small></span><span class="e">Informes de {{ mes(datos.periodo) }}</span>
         </RouterLink>
         <RouterLink to="/inventario/recibir?ver=faltantes" class="b-cifra enlace">
           <span class="n" :class="r.faltantes.productos ? 'rojo' : 'cero'">{{ r.faltantes.productos }}</span><span class="e">Faltantes por reclamar</span>

@@ -32,12 +32,12 @@ async function main() {
   }
 
   const centro = await prisma.ubicacion.findFirst({ where: { establecimientoId: eid, tipo: 'centro_salud' } });
-  const reporte = await prisma.reporteServicio.findFirst({
+  const informe = await prisma.informeServicio.findFirst({
     where: { ubicacionId: centro.id, importado: true },
     orderBy: { periodo: 'desc' },
     include: { renglones: true },
   });
-  if (!reporte) throw new Error('No hay un mes importado de post-consulta');
+  if (!informe) throw new Error('No hay un mes importado de post-consulta');
   const primerIngreso = await prisma.movimientoInsumo.findFirst({
     where: { tipo: 'ingreso', lote: { insumo: { establecimientoId: eid } } },
     orderBy: { registradoEn: 'asc' },
@@ -48,7 +48,7 @@ async function main() {
   const fecha = new Date(primerIngreso.registradoEn.getTime() + 30000);
   const admin = await prisma.usuario.findFirst({ where: { establecimientoId: eid, rol: 'admin' } });
 
-  const objetivo = new Map(reporte.renglones.filter((r) => r.saldoSiguiente > 0).map((r) => [r.insumoId, r.saldoSiguiente]));
+  const objetivo = new Map(informe.renglones.filter((r) => r.saldoSiguiente > 0).map((r) => [r.insumoId, r.saldoSiguiente]));
   const lotes = await prisma.lote.findMany({
     where: { insumo: { establecimientoId: eid } },
     include: { movimientos: { select: { cantidad: true, ubicacion: true, registradoEn: true } }, insumo: { select: { nombreGenerico: true } } },
@@ -96,7 +96,7 @@ async function main() {
   }
 
   const unidades = pasos.reduce((s, p) => s + p.cantidad, 0);
-  console.log(`Mes de post-consulta: ${reporte.periodo}. Fecha del paso: ${fecha.toISOString()}`);
+  console.log(`Mes de post-consulta: ${informe.periodo}. Fecha del paso: ${fecha.toISOString()}`);
   console.log(`Insumos con saldo en post-consulta: ${objetivo.size}; unidades: ${[...objetivo.values()].reduce((s, v) => s + v, 0)}`);
   console.log(`Pasos a farmacia: ${pasos.length} lotes, ${unidades} unidades`);
   for (const a of avisos) console.log(`  ${a}`);
@@ -109,14 +109,14 @@ async function main() {
     for (const p of pasos) {
       await tx.movimientoInsumo.createMany({
         data: [
-          { loteId: p.lote.id, tipo: 'paso_farmacia', ubicacion: 'bodega', cantidad: -p.cantidad, saldoResultante: p.enFecha - p.cantidad, usuarioId: admin.id, motivo: `Existencia de post-consulta al cierre de ${reporte.periodo}`, registradoEn: fecha },
-          { loteId: p.lote.id, tipo: 'paso_farmacia', ubicacion: 'farmacia', cantidad: p.cantidad, saldoResultante: p.cantidad, usuarioId: admin.id, motivo: `Existencia de post-consulta al cierre de ${reporte.periodo}`, registradoEn: fecha },
+          { loteId: p.lote.id, tipo: 'paso_farmacia', ubicacion: 'bodega', cantidad: -p.cantidad, saldoResultante: p.enFecha - p.cantidad, usuarioId: admin.id, motivo: `Existencia de post-consulta al cierre de ${informe.periodo}`, registradoEn: fecha },
+          { loteId: p.lote.id, tipo: 'paso_farmacia', ubicacion: 'farmacia', cantidad: p.cantidad, saldoResultante: p.cantidad, usuarioId: admin.id, motivo: `Existencia de post-consulta al cierre de ${informe.periodo}`, registradoEn: fecha },
         ],
       });
       await tx.lote.update({ where: { id: p.lote.id }, data: { cantidadFarmacia: p.farmaciaFinal } });
     }
     await tx.bitacora.create({
-      data: { usuarioId: admin.id, accion: 'crear', entidad: 'lote', detalle: `Farmacia con existencia propia: ${unidades} unidades de post-consulta (${reporte.periodo}) en ${pasos.length} lotes` },
+      data: { usuarioId: admin.id, accion: 'crear', entidad: 'lote', detalle: `Farmacia con existencia propia: ${unidades} unidades de post-consulta (${informe.periodo}) en ${pasos.length} lotes` },
     });
   }, { timeout: 600000 });
 

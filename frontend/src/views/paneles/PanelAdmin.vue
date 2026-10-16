@@ -52,14 +52,14 @@ async function cargar() {
   const [, c, rep, bres, tres, sem] = await Promise.all([
     cargarPanel(),
     intentar(atenciones.cola()),
-    intentar(bodega.estadoReportes(periodoCierre)),
+    intentar(bodega.estadoInformes(periodoCierre)),
     intentar(inventario.bresDe(periodoCierre)),
     intentar(inventario.sigsa4(periodoCierre)),
     intentar(bodega.semaforo({})),
   ]);
   cola.value = c;
   semaforo.value = sem?.resumen ?? null;
-  cierreMes.value = { reportes: rep?.servicios ?? null, bres: bres?.bres, sigsa4: tres?.renglones ?? null };
+  cierreMes.value = { informes: rep?.servicios ?? null, bres: bres?.bres, sigsa4: tres?.renglones ?? null };
   cargando.value = false;
 }
 watch(periodo, cargarPanel);
@@ -146,15 +146,15 @@ const meses = (m) => (m == null ? '—' : m < 1 ? 'menos de 1 mes' : `${m.toLoca
 /* ---------- 3. Documentos ---------- */
 const pasosCierre = computed(() => {
   const c = cierreMes.value;
-  const servicios = c.reportes ?? [];
-  const recibidos = servicios.filter((s) => s.reportado).length;
+  const servicios = c.informes ?? [];
+  const recibidos = servicios.filter((s) => s.informado).length;
   const sinFirma = (c.sigsa4 ?? []).filter((r) => !r.constancia).length;
   return [
     {
-      texto: 'Reportes de los servicios',
-      detalle: !c.reportes ? '·' : `${recibidos} de ${servicios.length} recibidos`,
+      texto: 'Informes de los servicios',
+      detalle: !c.informes ? '·' : `${recibidos} de ${servicios.length} recibidos`,
       listo: servicios.length > 0 && recibidos === servicios.length,
-      a: '/inventario/reportes',
+      a: '/inventario/informes',
     },
     {
       texto: 'BRES',

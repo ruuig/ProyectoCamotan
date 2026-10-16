@@ -1,11 +1,11 @@
 /**
  * Importacion del historial de la bodega desde los Excel del centro
- * (documentacion/Plantillas/): catalogo, alias, reportes de los servicios, BRES historicos
+ * (documentacion/Plantillas/): catalogo, alias, informes de los servicios, BRES historicos
  * y existencia inicial con sus lotes.
  *
  * Funciones puras. El script que escribe en la base es
  * scripts/importarBodega.js; lo que no se puede emparejar con seguridad se
- * deja fuera y se reporta, no se adivina.
+ * deja fuera y se informa, no se adivina.
  */
 
 const { normalizarTexto, similitud } = require('./pacientes.service');
@@ -157,7 +157,7 @@ function fechaCreible(fecha) {
  * vencimiento mas lejano hacia atras hasta completar la existencia.
  *
  * Si los lotes no alcanzan, lo que falta queda "sin lote" para verificar en
- * el inventario fisico. Si sobran, se reporta y no se crea.
+ * el inventario fisico. Si sobran, se informa y no se crea.
  */
 function conciliarLotes(lotes, existencia) {
   const validos = lotes

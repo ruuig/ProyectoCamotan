@@ -95,7 +95,7 @@ async function consolidadoDelMes(establecimientoId, mes) {
 
   // Consultas cerradas sin codigo CIE-10. Se cuentan aparte en vez de quedar
   // fuera en silencio: quien exporta debe saber que al consolidado le faltan
-  // esas atenciones antes de reportarlo.
+  // esas atenciones antes de informarlo.
   const sinCodificar = atendidas.filter((a) => !a.diagnosticoCie).length;
 
   // 3. Consumo de insumos del periodo.

@@ -725,7 +725,7 @@ describe('cálculos del MSPAS sobre datos reales', () => {
 
 // ===========================================================================
 describe('el saldo cuadra con los movimientos', () => {
-  it('verifica todos los lotes y reporta descuadres', async () => {
+  it('verifica todos los lotes y informa descuadres', async () => {
     const insumo = await nuevoInsumo();
     await recibirLote(insumo.id, { cantidad: 50, dias: 400 });
 

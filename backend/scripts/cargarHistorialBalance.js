@@ -1,5 +1,5 @@
 /**
- * Carga el historial del balance (reportes de cada servicio y totales B a M
+ * Carga el historial del balance (informes de cada servicio y totales B a M
  * de cada mes) tal como lo muestra el Excel del centro.
  *
  *   python scripts/leerBalanceExcel.py <BALANCE.xlsx> <INVENTARIOS CIERRE.xlsx> <excel.json>
@@ -7,9 +7,9 @@
  *   node scripts/cargarHistorialBalance.js <excel.json> --aplicar    (escribe)
  *   node scripts/verificarBalance.js <excel.json>                    (comprueba)
  *
- * Solo reemplaza lo que vino del Excel: los reportes marcados como
+ * Solo reemplaza lo que vino del Excel: los informes marcados como
  * importados y los BRES importados de esos meses. No toca lotes, movimientos,
- * traslados ni los reportes capturados en el sistema.
+ * traslados ni los informes capturados en el sistema.
  *
  * Cada renglon del Excel se reconoce por su nombre o sus alias (una misma
  * fila cambia de insumo entre meses). Los insumos que solo existen en meses
@@ -151,10 +151,10 @@ async function cargarHistorial({ meses, eid, aplicar = false, log = console.log 
 
     for (const m of meses) {
       // Lo importado de este mes se rehace; lo capturado en el sistema se queda.
-      await tx.reporteServicio.deleteMany({ where: { periodo: m.periodo, importado: true, ubicacion: { establecimientoId: eid } } });
+      await tx.informeServicio.deleteMany({ where: { periodo: m.periodo, importado: true, ubicacion: { establecimientoId: eid } } });
       await tx.bres.deleteMany({ where: { establecimientoId: eid, periodo: m.periodo, observaciones: { startsWith: 'Importado' } } });
 
-      // Reportes de cada servicio, con sus seis cifras.
+      // Informes de cada servicio, con sus seis cifras.
       for (const [nombreServicio, ubicacion] of servicioDe) {
         const renglones = [];
         for (const r of m.renglones) {
@@ -173,12 +173,12 @@ async function cargarHistorial({ meses, eid, aplicar = false, log = console.log 
           });
         }
         if (!renglones.length) continue;
-        const existente = await tx.reporteServicio.findUnique({ where: { ubicacionId_periodo: { ubicacionId: ubicacion.id, periodo: m.periodo } } });
+        const existente = await tx.informeServicio.findUnique({ where: { ubicacionId_periodo: { ubicacionId: ubicacion.id, periodo: m.periodo } } });
         if (existente) continue; // capturado en el sistema: manda lo capturado
-        const rep = await tx.reporteServicio.create({
+        const rep = await tx.informeServicio.create({
           data: { ubicacionId: ubicacion.id, periodo: m.periodo, capturadoPor: admin.id, revisado: true, importado: true, observacion: `Importado de ${m.hoja}` },
         });
-        await tx.reporteServicioRenglon.createMany({ data: renglones.map((x) => ({ ...x, reporteId: rep.id })) });
+        await tx.informeServicioRenglon.createMany({ data: renglones.map((x) => ({ ...x, informeId: rep.id })) });
       }
 
       // Totales del mes, como BRES cerrado.

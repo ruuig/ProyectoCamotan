@@ -89,7 +89,7 @@ onBeforeUnmount(() => estiloPagina?.remove());
       <span class="celda negrita izquierda abajo" :style="[caja('B', 'D', 3), { fontSize: tamanoPx(9) }]">{{ encabezado.municipio }}</span>
       <span class="celda negrita centro abajo" :style="[caja('G', 'G', 3), { fontSize: tamanoPx(9) }]">{{ encabezado.serviciosTotal }}</span>
       <span class="celda negrita izquierda abajo" :style="[caja('B', 'D', 4), { fontSize: tamanoPx(9) }]">{{ encabezado.servicio }}</span>
-      <span class="celda negrita centro abajo" :style="[caja('G', 'G', 4), { fontSize: tamanoPx(9) }]">{{ encabezado.serviciosReportaron }}</span>
+      <span class="celda negrita centro abajo" :style="[caja('G', 'G', 4), { fontSize: tamanoPx(9) }]">{{ encabezado.serviciosInformaron }}</span>
       <span class="celda negrita derecha medio" :style="[caja('I', 'I', 4, 6), { fontSize: tamanoPx(10) }]">{{ encabezado.minimo }}</span>
       <span class="celda negrita derecha medio" :style="[caja('J', 'J', 4, 6), { fontSize: tamanoPx(10) }]">{{ encabezado.maximo }}</span>
       <span class="celda negrita derecha medio" :style="[caja('L', 'L', 4, 6), { fontSize: tamanoPx(10) }]">{{ encabezado.mes }}</span>

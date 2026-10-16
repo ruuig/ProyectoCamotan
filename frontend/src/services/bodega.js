@@ -5,7 +5,7 @@ const consulta = (parametros = {}) => new URLSearchParams(
 ).toString();
 
 /**
- * Bodega del centro: ubicaciones, traslados, reportes de los servicios,
+ * Bodega del centro: ubicaciones, traslados, informes de los servicios,
  * balance consolidado, semáforo e inventario de cierre (MD/Bodega.md).
  */
 export default {
@@ -42,11 +42,11 @@ export default {
 
   hoy: (parametros) => http.get(`/bodega/hoy?${consulta(parametros)}`),
 
-  estadoReportes: (periodo) => http.get(`/bodega/reportes?${consulta({ periodo })}`),
-  reporte: (ubicacionId, periodo) => http.get(`/bodega/reportes/${ubicacionId}/${periodo}`),
-  guardarReporte: (ubicacionId, periodo, datos) => http.put(`/bodega/reportes/${ubicacionId}/${periodo}`, datos),
-  revisarReporte: (ubicacionId, periodo, observacion) =>
-    http.post(`/bodega/reportes/${ubicacionId}/${periodo}/revisar`, { observacion }),
+  estadoInformes: (periodo) => http.get(`/bodega/informes?${consulta({ periodo })}`),
+  informe: (ubicacionId, periodo) => http.get(`/bodega/informes/${ubicacionId}/${periodo}`),
+  guardarInforme: (ubicacionId, periodo, datos) => http.put(`/bodega/informes/${ubicacionId}/${periodo}`, datos),
+  revisarInforme: (ubicacionId, periodo, observacion) =>
+    http.post(`/bodega/informes/${ubicacionId}/${periodo}/revisar`, { observacion }),
 
   balance: (parametros) => http.get(`/bodega/balance?${consulta(parametros)}`),
   semaforo: (parametros) => http.get(`/bodega/semaforo?${consulta(parametros)}`),

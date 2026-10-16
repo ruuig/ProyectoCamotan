@@ -29,7 +29,7 @@ const VistaBajas = () => import('../views/inventario/VistaBajas.vue');
 const VistaRetiros = () => import('../views/inventario/VistaRetiros.vue');
 import MarcoBodega from '../components/bodega/MarcoBodega.vue';
 const VistaTrazabilidad = () => import('../views/inventario/VistaTrazabilidad.vue');
-const VistaReportes = () => import('../views/inventario/VistaReportes.vue');
+const VistaInformes = () => import('../views/inventario/VistaInformes.vue');
 const VistaSemaforo = () => import('../views/inventario/VistaSemaforo.vue');
 const HojaBalance = () => import('../views/impresion/HojaBalance.vue');
 const HojaInventarioCierre = () => import('../views/impresion/HojaInventarioCierre.vue');
@@ -141,7 +141,7 @@ const router = createRouter({
             { path: 'hoy', redirect: '/inventario' },
             { path: 'recibir', name: 'recibir', component: VistaRecibir, meta: { roles: BODEGA } },
             { path: 'trazabilidad', name: 'trazabilidad', component: VistaTrazabilidad, meta: { roles: BODEGA } },
-            { path: 'reportes', name: 'reportes-servicios', component: VistaReportes, meta: { roles: BODEGA } },
+            { path: 'informes', name: 'informes-servicios', component: VistaInformes, meta: { roles: BODEGA } },
             // El balance quedo dentro del BRES como "Detalle por servicio".
             { path: 'balance', redirect: '/inventario/bres' },
             { path: 'semaforo', name: 'semaforo', component: VistaSemaforo, meta: { roles: BODEGA } },

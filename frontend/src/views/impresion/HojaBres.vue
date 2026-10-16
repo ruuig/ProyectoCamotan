@@ -48,9 +48,9 @@ const encabezadoPreimpreso = computed(() => {
     municipio: est.value?.municipio ?? 'Camotán',
     servicio: 'Bodega',
     // PENDIENTE DE CONFIRMAR: en el Excel del centro estas dos casillas dicen 31.
-    // Se interpretan como servicios que deben reportar y servicios que reportaron.
+    // Se interpretan como servicios que deben informar y servicios que informaron.
     serviciosTotal: enBlanco ? '' : datos.value?.serviciosTotal ?? '',
-    serviciosReportaron: enBlanco ? '' : datos.value?.serviciosReportaron ?? '',
+    serviciosInformaron: enBlanco ? '' : datos.value?.serviciosInformaron ?? '',
     minimo: datos.value?.configuracion.nivelMinimoMeses,
     maximo: datos.value?.configuracion.nivelMaximoMeses,
     mes: enBlanco ? '' : MESES[mes - 1],
@@ -157,8 +157,8 @@ onMounted(cargar);
       <strong>Atención:</strong> el saldo anterior de {{ datos.descuadres.length }} insumo(s) no coincide con el BRES de
       {{ nombrePeriodo(datos.periodoAnterior) }}. Revise antes de enviar.
     </p>
-    <p v-if="!enBlanco && datos.serviciosSinReporte" class="bloque-impresion mb-2 text-xs">
-      {{ datos.serviciosSinReporte }} servicio(s) sin reporte del mes: su entregado cuenta como cero.
+    <p v-if="!enBlanco && datos.serviciosSinInforme" class="bloque-impresion mb-2 text-xs">
+      {{ datos.serviciosSinInforme }} servicio(s) sin informe del mes: su entregado cuenta como cero.
     </p>
 
     <section v-for="(hoja, h) in hojas" :key="h" :class="h > 0 ? 'salto-pagina' : ''">

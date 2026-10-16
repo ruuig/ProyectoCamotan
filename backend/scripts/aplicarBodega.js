@@ -44,7 +44,7 @@ module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, mes
     await tx.prescripcion.deleteMany({ where: { id: { in: prescripciones } } });
     await tx.bresRenglon.deleteMany({ where: { insumoId: { in: insumos } } });
     await tx.bres.deleteMany({ where: { establecimientoId: eid } });
-    await tx.reporteServicio.deleteMany({ where: { ubicacion: { establecimientoId: eid } } });
+    await tx.informeServicio.deleteMany({ where: { ubicacion: { establecimientoId: eid } } });
     await tx.lote.deleteMany({ where: { id: { in: lotes } } });
     await tx.insumoAlias.deleteMany({ where: { insumoId: { in: insumos } } });
     await tx.insumo.deleteMany({ where: { id: { in: insumos } } });
@@ -72,7 +72,7 @@ module.exports = async function aplicar({ prisma, eid, catalogo, duenoAlias, mes
     });
 
     // --- 3. Historial ---------------------------------------------------------------
-    // El historial del balance (reportes de cada servicio y totales de cada
+    // El historial del balance (informes de cada servicio y totales de cada
     // mes) lo carga scripts/cargarHistorialBalance.js, que lo lee tal como lo
     // muestra Excel y lo comprueba celda por celda con verificarBalance.js.
 

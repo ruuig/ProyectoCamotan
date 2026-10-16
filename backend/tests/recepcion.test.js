@@ -111,7 +111,7 @@ describe('entregar en un paso', () => {
     expect(r.body.requisicion).toMatchObject({ estado: 'despachada', numero: null });
     expect(r.body.requisicion.renglones[0]).toMatchObject({ cantidadSolicitada: 30, cantidadAutorizada: 30, cantidadDespachada: 30 });
 
-    // A una unidad del centro es consumo interno: no queda como traslado a un servicio que reporta.
+    // A una unidad del centro es consumo interno: no queda como traslado a un servicio que informa.
     const mov = await prisma.movimientoInsumo.findFirst({ where: { lote: { insumoId: a.id }, cantidad: -30 } });
     expect(mov.tipo).toBe('consumo_interno');
 

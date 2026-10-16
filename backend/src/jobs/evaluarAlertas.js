@@ -242,17 +242,17 @@ async function evaluarCalendario(establecimientoId, ahora) {
   // movimientos. Se cierran avisos viejos de inventario pendiente.
   await cerrarResueltas(establecimientoId, 'inventario_pendiente', [], ahora);
 
-  // Reporte mensual de los servicios. Solo se espera de los que ya reciben
-  // traslados por el sistema: uno que nunca recibió nada no tiene qué reportar.
-  const conReportePendiente = [];
-  if (diaDelMes >= config.diaCorteReportes) {
+  // Informe mensual de los servicios. Solo se espera de los que ya reciben
+  // traslados por el sistema: uno que nunca recibió nada no tiene qué informar.
+  const conInformePendiente = [];
+  if (diaDelMes >= config.diaCorteInformes) {
     const servicios = await prisma.ubicacion.findMany({
       where: {
         establecimientoId,
         activo: true,
         tipo: { in: ['puesto_salud', 'centro_comunitario'] },
         traslados: { some: {} },
-        reportes: { none: { periodo } },
+        informes: { none: { periodo } },
       },
       select: { id: true, nombre: true },
     });
@@ -263,15 +263,15 @@ async function evaluarCalendario(establecimientoId, ahora) {
         severidad: 'media',
         entidadTipo: 'ubicacion',
         entidadId: s.id,
-        mensaje: `${s.nombre} no ha enviado su reporte de ${periodo} y ya pasó el día ${config.diaCorteReportes}`,
+        mensaje: `${s.nombre} no ha enviado su informe de ${periodo} y ya pasó el día ${config.diaCorteInformes}`,
       });
-      conReportePendiente.push(s.id);
+      conInformePendiente.push(s.id);
     }
   }
-  await cerrarResueltas(establecimientoId, 'reporte_pendiente', conReportePendiente, ahora);
+  await cerrarResueltas(establecimientoId, 'reporte_pendiente', conInformePendiente, ahora);
 
-  // Reportes cuyo saldo o entradas no cuadran y nadie ha revisado.
-  const conDiferencia = await prisma.reporteServicio.findMany({
+  // Informes cuyo saldo o entradas no cuadran y nadie ha revisado.
+  const conDiferencia = await prisma.informeServicio.findMany({
     where: { revisado: false, ubicacion: { establecimientoId } },
     include: { ubicacion: { select: { nombre: true } } },
   });
@@ -282,12 +282,12 @@ async function evaluarCalendario(establecimientoId, ahora) {
       severidad: 'baja',
       entidadTipo: 'reporte_servicio',
       entidadId: r.id,
-      mensaje: `El reporte de ${r.ubicacion.nombre} de ${r.periodo} no cuadra con lo trasladado o con su saldo`,
+      mensaje: `El informe de ${r.ubicacion.nombre} de ${r.periodo} no cuadra con lo trasladado o con su saldo`,
     });
   }
   await cerrarResueltas(establecimientoId, 'diferencia_reporte', conDiferencia.map((r) => r.id), ahora);
 
-  return { calendarioPendiente: pendientes.length, reportesPendientes: conReportePendiente.length, reportesConDiferencia: conDiferencia.length };
+  return { calendarioPendiente: pendientes.length, informesPendientes: conInformePendiente.length, informesConDiferencia: conDiferencia.length };
 }
 
 // --- Desnutricion ----------------------------------------------------------

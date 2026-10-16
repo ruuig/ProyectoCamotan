@@ -310,7 +310,7 @@ describe('resumenCola', () => {
     expect(resumen.superan90).toHaveLength(2);
   });
 
-  it('no reporta espera con la cola vacia', () => {
+  it('no informa espera con la cola vacia', () => {
     expect(resumenCola([])).toEqual({
       enEspera: 0,
       esperaPromedio: 0,

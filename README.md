@@ -5,7 +5,7 @@ Camotan, Chiquimula, Guatemala.
 
 ## Que resuelve
 
-El sistema no tiene un modulo de reportes que alguien tenga que visitar. Cada
+El sistema no tiene un modulo de informes que alguien tenga que visitar. Cada
 pantalla muestra informacion ya interpretada en el punto donde se toma la
 decision correspondiente:
 
@@ -15,7 +15,7 @@ decision correspondiente:
 - Al prescribir se avisa si no hay existencia con que cumplir la receta.
 - Al dispensar, el sistema propone el lote de vencimiento mas proximo y exige
   motivo escrito si se elige otro.
-- El consolidado SIGSA esta siempre armado: al reportar solo se exporta.
+- El consolidado SIGSA esta siempre armado: al informar solo se exporta.
 
 Cuando un dato no se puede calcular, el sistema lo dice. Nunca muestra un 0
 que se leeria como un valor real.

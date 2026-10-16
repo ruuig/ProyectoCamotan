@@ -41,7 +41,7 @@ onMounted(async () => {
 const r = computed(() => resumen.value?.resumen ?? null);
 const cierre = computed(() => {
   if (!r.value) return null;
-  const { listos, de } = r.value.reportes;
+  const { listos, de } = r.value.informes;
   const cerrado = r.value.cierreAnterior === 'cerrado';
   return { listos, de, cerrado, avance: cerrado ? 100 : de ? Math.round((listos / de) * 70) : 0 };
 });
@@ -73,11 +73,11 @@ const cierre = computed(() => {
         <span v-if="pedidos" class="pend azul">{{ pedidos }} {{ pedidos === 1 ? 'pedido' : 'pedidos' }}</span>
       </RouterLink>
 
-      <RouterLink to="/inventario/reportes" class="tarea marino">
+      <RouterLink to="/inventario/informes" class="tarea marino">
         <span class="ic"><Icono nombre="hojaCalculo" :tamano="46" /></span>
         <span class="txt">
           <b>Cerrar el mes</b>
-          <small v-if="cierre">{{ cierre.cerrado ? `${nombreMes(resumen.anterior)}: cerrado` : `${nombreMes(resumen.anterior)}: ${cierre.listos} de ${cierre.de} reportes` }}</small>
+          <small v-if="cierre">{{ cierre.cerrado ? `${nombreMes(resumen.anterior)}: cerrado` : `${nombreMes(resumen.anterior)}: ${cierre.listos} de ${cierre.de} informes` }}</small>
         </span>
         <span v-if="cierre" class="barra"><span :style="{ width: `${cierre.avance}%` }" /></span>
       </RouterLink>

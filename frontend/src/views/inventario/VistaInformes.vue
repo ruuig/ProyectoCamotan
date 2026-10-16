@@ -8,7 +8,7 @@ import { estiloCategoria, miles } from '../../components/bodega/diseno/PiezasBod
 import { cierre } from '../../dominio/bodega';
 
 /**
- * Paso 1 del cierre: el reporte mensual de cada puesto y centro comunitario.
+ * Paso 1 del cierre: el informe mensual de cada puesto y centro comunitario.
  * Las entradas vienen de los traslados de la bodega; se captura lo entregado,
  * lo no entregado y el saldo que manda el servicio. Enter baja de fila.
  */
@@ -23,7 +23,7 @@ const observacionRevision = ref('');
 
 async function cargarEstado() {
   try {
-    estado.value = await bodega.estadoReportes(cierre.periodo);
+    estado.value = await bodega.estadoInformes(cierre.periodo);
   } catch (fallo) {
     error.value = fallo.message;
   }
@@ -34,7 +34,7 @@ async function abrir(s) {
   aviso.value = '';
   elegido.value = s;
   try {
-    form.value = await bodega.reporte(s.ubicacionId, cierre.periodo);
+    form.value = await bodega.informe(s.ubicacionId, cierre.periodo);
     await nextTick();
     document.getElementById('r-0-e')?.focus();
   } catch (fallo) {
@@ -55,9 +55,9 @@ watch(() => cierre.periodo, () => {
 
 const servicios = computed(() => estado.value?.servicios ?? []);
 const grupos = computed(() => ({
-  diferencia: servicios.value.filter((s) => s.reportado && s.diferencias && !s.revisado),
-  pendiente: servicios.value.filter((s) => !s.reportado),
-  listo: servicios.value.filter((s) => s.reportado && !(s.diferencias && !s.revisado)),
+  diferencia: servicios.value.filter((s) => s.informado && s.diferencias && !s.revisado),
+  pendiente: servicios.value.filter((s) => !s.informado),
+  listo: servicios.value.filter((s) => s.informado && !(s.diferencias && !s.revisado)),
 }));
 const FILTROS = [
   { clave: 'todos', texto: 'Todos' },
@@ -78,8 +78,8 @@ const visibles = computed(() => (form.value?.renglones ?? []).filter((r) => alca
 const vacio = (v) => v === null || v === undefined || v === '';
 const numero = (v) => (vacio(v) ? 0 : Number(String(v).replace(/[^\d]/g, '')) || 0);
 const saldoSiguiente = (r) => r.saldoAnterior + r.entradas - numero(r.entregado);
-const diferenciaSaldo = (r) => (vacio(r.saldoReportado) ? null : numero(r.saldoReportado) - saldoSiguiente(r));
-const diferenciaEntradas = (r) => (vacio(r.entradasReportadas) ? null : numero(r.entradasReportadas) - r.entradas);
+const diferenciaSaldo = (r) => (vacio(r.saldoInformado) ? null : numero(r.saldoInformado) - saldoSiguiente(r));
+const diferenciaEntradas = (r) => (vacio(r.entradasInformadas) ? null : numero(r.entradasInformadas) - r.entradas);
 const conDiferencia = computed(() => visibles.value.filter((r) => diferenciaSaldo(r) || diferenciaEntradas(r)).length);
 
 /** Enter baja a la misma columna de la fila siguiente. */
@@ -93,18 +93,18 @@ async function guardar() {
   aviso.value = '';
   guardando.value = true;
   try {
-    const r = await bodega.guardarReporte(elegido.value.ubicacionId, cierre.periodo, {
+    const r = await bodega.guardarInforme(elegido.value.ubicacionId, cierre.periodo, {
       renglones: form.value.renglones
-        .filter((x) => x.maneja || numero(x.entregado) || numero(x.noEntregado) || !vacio(x.saldoReportado))
+        .filter((x) => x.maneja || numero(x.entregado) || numero(x.noEntregado) || !vacio(x.saldoInformado))
         .map((x) => ({
           insumoId: x.insumoId,
           entregado: numero(x.entregado),
           noEntregado: numero(x.noEntregado),
-          saldoReportado: vacio(x.saldoReportado) ? null : numero(x.saldoReportado),
-          entradasReportadas: vacio(x.entradasReportadas) ? null : numero(x.entradasReportadas),
+          saldoInformado: vacio(x.saldoInformado) ? null : numero(x.saldoInformado),
+          entradasInformadas: vacio(x.entradasInformadas) ? null : numero(x.entradasInformadas),
         })),
     });
-    aviso.value = r.diferencias ? `Reporte guardado. ${r.diferencias} insumo(s) no cuadran.` : 'Reporte guardado. Todo cuadra.';
+    aviso.value = r.diferencias ? `Informe guardado. ${r.diferencias} insumo(s) no cuadran.` : 'Informe guardado. Todo cuadra.';
     await Promise.all([cargarEstado(), abrir(elegido.value)]);
   } catch (fallo) {
     error.value = fallo.message;
@@ -115,7 +115,7 @@ async function guardar() {
 
 async function aceptarDiferencias() {
   try {
-    await bodega.revisarReporte(elegido.value.ubicacionId, cierre.periodo, observacionRevision.value);
+    await bodega.revisarInforme(elegido.value.ubicacionId, cierre.periodo, observacionRevision.value);
     observacionRevision.value = '';
     aviso.value = 'Diferencias aceptadas.';
     await Promise.all([cargarEstado(), abrir(elegido.value)]);
@@ -129,7 +129,7 @@ onMounted(cargarEstado);
 
 <template>
   <section>
-    <PasosCierre :estado="{ reportes: estado ? `${grupos.listo.length} de ${servicios.length} listos` : '' }" />
+    <PasosCierre :estado="{ informes: estado ? `${grupos.listo.length} de ${servicios.length} listos` : '' }" />
 
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
     <p v-if="aviso" class="b-aviso ok mt-4" aria-live="polite">{{ aviso }}</p>
@@ -140,7 +140,7 @@ onMounted(cargarEstado);
         <div class="flex items-baseline gap-2 whitespace-nowrap">
           <span class="text-[34px] font-bold leading-none tabular-nums text-tinta">{{ grupos.listo.length }}</span>
           <span class="text-xl font-bold text-apagado">/ {{ servicios.length }}</span>
-          <span class="b-antetitulo ml-1">reportes listos</span>
+          <span class="b-antetitulo ml-1">informes listos</span>
         </div>
         <div class="barra" aria-hidden="true">
           <span class="ok" :style="{ flexGrow: grupos.listo.length }" />
@@ -163,7 +163,7 @@ onMounted(cargarEstado);
           <span class="min-w-0 flex-1">
             <span class="block truncate font-semibold text-tinta">{{ s.nombre }}</span>
             <small v-if="s.estado === 'diferencia'" class="text-[#B7710A]">{{ s.diferencias }} {{ s.diferencias === 1 ? 'insumo' : 'insumos' }} sin cuadrar</small>
-            <small v-else-if="s.estado === 'pendiente'">Sin reporte</small>
+            <small v-else-if="s.estado === 'pendiente'">Sin informe</small>
             <small v-else>{{ new Date(s.capturadoEn).toLocaleDateString('es-GT') }} · {{ s.capturadoPor }}</small>
           </span>
           <button type="button" class="b-btn chico" :class="s.estado === 'listo' ? 'secundario' : 'primario'" @click="abrir(s)">{{ ACCION[s.estado] }}</button>
@@ -180,7 +180,7 @@ onMounted(cargarEstado);
           <div>
             <h2 class="text-[22px] font-semibold leading-tight text-tinta">{{ form.ubicacion.nombre }}</h2>
             <p class="text-sm font-semibold text-apagado">
-              <template v-if="form.reporte">Capturado por {{ form.reporte.capturadoPor }} · {{ new Date(form.reporte.capturadoEn).toLocaleDateString('es-GT') }}</template>
+              <template v-if="form.informe">Capturado por {{ form.informe.capturadoPor }} · {{ new Date(form.informe.capturadoEn).toLocaleDateString('es-GT') }}</template>
               <template v-else>Sin capturar</template>
             </p>
           </div>
@@ -218,11 +218,11 @@ onMounted(cargarEstado);
               <td class="n col-captura"><input :id="`r-${i}-n`" v-model="r.noEntregado" inputmode="numeric" :aria-label="`No entregado de ${r.nombre}`" class="celda" @keydown.enter="bajar($event, i, 'n')" /></td>
               <td class="n fuerte" :class="saldoSiguiente(r) < 0 ? 'text-[#C03535]' : ''">{{ miles(saldoSiguiente(r)) }}</td>
               <td class="n col-captura">
-                <input :id="`r-${i}-s`" v-model="r.saldoReportado" inputmode="numeric" :aria-label="`Saldo del servicio de ${r.nombre}`" class="celda" :class="diferenciaSaldo(r) ? 'difiere' : ''" @keydown.enter="bajar($event, i, 's')" />
+                <input :id="`r-${i}-s`" v-model="r.saldoInformado" inputmode="numeric" :aria-label="`Saldo del servicio de ${r.nombre}`" class="celda" :class="diferenciaSaldo(r) ? 'difiere' : ''" @keydown.enter="bajar($event, i, 's')" />
                 <span v-if="diferenciaSaldo(r)" class="dif">{{ diferenciaSaldo(r) > 0 ? '+' : '' }}{{ miles(diferenciaSaldo(r)) }}</span>
               </td>
               <td class="n col-captura">
-                <input :id="`r-${i}-x`" v-model="r.entradasReportadas" inputmode="numeric" :aria-label="`Entradas del servicio de ${r.nombre}`" class="celda" :class="diferenciaEntradas(r) ? 'difiere' : ''" @keydown.enter="bajar($event, i, 'x')" />
+                <input :id="`r-${i}-x`" v-model="r.entradasInformadas" inputmode="numeric" :aria-label="`Entradas del servicio de ${r.nombre}`" class="celda" :class="diferenciaEntradas(r) ? 'difiere' : ''" @keydown.enter="bajar($event, i, 'x')" />
                 <span v-if="diferenciaEntradas(r)" class="dif">{{ diferenciaEntradas(r) > 0 ? '+' : '' }}{{ miles(diferenciaEntradas(r)) }}</span>
               </td>
             </tr>
@@ -234,10 +234,10 @@ onMounted(cargarEstado);
       <div class="barra-guardar">
         <span v-if="conDiferencia" class="b-estado cuarentena">{{ conDiferencia }} sin cuadrar</span>
         <span v-else class="text-sm font-semibold text-apagado">{{ visibles.length }} insumos</span>
-        <button type="submit" class="b-btn primario" :disabled="guardando"><Icono nombre="guardar" :tamano="20" /> {{ guardando ? 'Guardando…' : 'Guardar reporte' }}</button>
+        <button type="submit" class="b-btn primario" :disabled="guardando"><Icono nombre="guardar" :tamano="20" /> {{ guardando ? 'Guardando…' : 'Guardar informe' }}</button>
       </div>
 
-      <div v-if="form.reporte && !form.reporte.revisado && conDiferencia" class="b-panel mt-4">
+      <div v-if="form.informe && !form.informe.revisado && conDiferencia" class="b-panel mt-4">
         <header class="b-panel-cabeza"><h3 class="b-panel-titulo">Aceptar las cifras del servicio</h3></header>
         <div class="b-panel-cuerpo flex flex-wrap gap-2">
           <input v-model="observacionRevision" minlength="5" maxlength="500" placeholder="Motivo" aria-label="Motivo" class="b-campo min-w-[16rem] flex-1" />
@@ -246,7 +246,7 @@ onMounted(cargarEstado);
       </div>
     </form>
 
-    <p v-if="!estado && !error" class="b-vacio">Cargando reportes…</p>
+    <p v-if="!estado && !error" class="b-vacio">Cargando informes…</p>
   </section>
 </template>
 

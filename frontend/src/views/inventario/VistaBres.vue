@@ -169,9 +169,9 @@ function celda(r, c) {
       </ul>
     </div>
 
-    <div v-if="datos?.serviciosSinReporte" class="b-aviso atencion mt-4 items-center justify-between">
-      <span>{{ datos.serviciosSinReporte }} {{ datos.serviciosSinReporte === 1 ? 'servicio no ha enviado' : 'servicios no han enviado' }} su reporte: su entregado cuenta como cero.</span>
-      <RouterLink to="/inventario/reportes" class="b-btn secundario chico">Capturar</RouterLink>
+    <div v-if="datos?.serviciosSinInforme" class="b-aviso atencion mt-4 items-center justify-between">
+      <span>{{ datos.serviciosSinInforme }} {{ datos.serviciosSinInforme === 1 ? 'servicio no ha enviado' : 'servicios no han enviado' }} su informe: su entregado cuenta como cero.</span>
+      <RouterLink to="/inventario/informes" class="b-btn secundario chico">Capturar</RouterLink>
     </div>
 
     <p v-if="cargando" class="b-vacio">Calculando el BRES…</p>
@@ -206,7 +206,7 @@ function celda(r, c) {
       </div>
 
       <div class="mt-3 flex items-center justify-between gap-3">
-        <span class="text-sm font-bold text-apagado">{{ renglones.length }} insumos · {{ datos.serviciosReportaron }} de {{ datos.serviciosTotal }} servicios reportaron</span>
+        <span class="text-sm font-bold text-apagado">{{ renglones.length }} insumos · {{ datos.serviciosInformaron }} de {{ datos.serviciosTotal }} servicios informaron</span>
         <div class="b-segmentado" role="radiogroup" aria-label="Vista">
           <button v-for="v in [['bres', 'BRES'], ['servicio', 'Detalle por servicio']]" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="vista = v[0]">{{ v[1] }}</button>
         </div>

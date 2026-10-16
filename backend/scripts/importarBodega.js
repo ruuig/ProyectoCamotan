@@ -6,13 +6,13 @@
  *   node scripts/importarBodega.js <bodega.json> --aplicar    (escribe)
  *
  * Fuentes (documentacion/Plantillas/):
- *   BALANCE*.xlsx            catalogo (ultimo mes), reportes de los servicios y
+ *   BALANCE*.xlsx            catalogo (ultimo mes), informes de los servicios y
  *                            totales del BRES de cada mes
  *   INVENTARIOS CIERRE*.xlsx existencia de la bodega al ultimo cierre y nombres
  *                            viejos (alias)
  *   SEMAFORO*.xlsx           lotes y vencimientos
  *
- * Los reportes de revision se escriben en documentacion/bd/importacion/bodega/.
+ * Los informes de revision se escriben en documentacion/bd/importacion/bodega/.
  */
 
 require('dotenv').config();
@@ -139,7 +139,7 @@ async function main() {
   const conciliacion = catalogo.map((c) => ({ c, ...ib.conciliarLotes(lotesPorClave.get(c.clave) ?? [], existenciaCentro(c.clave)) }));
 
 
-  // --- Reportes de revision ----------------------------------------------------
+  // --- Informes de revision ----------------------------------------------------
   fs.mkdirSync(CARPETA, { recursive: true });
   const escribir = (archivo, filas) => fs.writeFileSync(path.join(CARPETA, archivo), csv(filas));
   escribir('catalogo.csv', [['orden', 'nombre', 'seccion_en_el_excel', 'categoria', 'revisar_categoria', 'existencia_bodega', 'existencia_post_consulta', 'alias'],
@@ -176,7 +176,7 @@ async function main() {
   console.log(`Lotes del semáforo: ${conLotes.reduce((s, x) => s + x.lotes.length, 0)} lotes para ${conLotes.length} insumos; ${unidadesSinLote} unidades quedan sin lote; ${conciliacion.reduce((s, x) => s + x.descartados.length, 0)} lotes con fecha imposible`);
 
   if (!APLICAR) {
-    console.log('Revisión sin cambios. Reportes en documentacion/bd/importacion/bodega/.');
+    console.log('Revisión sin cambios. Informes en documentacion/bd/importacion/bodega/.');
     return;
   }
   await require('./aplicarBodega')({

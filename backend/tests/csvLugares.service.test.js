@@ -99,7 +99,7 @@ describe('parsearCsvLugares', () => {
     expect(filas).toHaveLength(1);
   });
 
-  it('reporta el nombre vacio con su numero de linea', () => {
+  it('informa el nombre vacio con su numero de linea', () => {
     const { filas, errores } = parsearCsvLugares(`${ENCABEZADO}\n,aldea,,`);
 
     expect(filas).toHaveLength(0);
@@ -107,7 +107,7 @@ describe('parsearCsvLugares', () => {
     expect(errores[0].mensaje).toContain('vacío');
   });
 
-  it('reporta la categoria desconocida sin descartar el resto del archivo', () => {
+  it('informa la categoria desconocida sin descartar el resto del archivo', () => {
     const { filas, errores } = parsearCsvLugares(
       `${ENCABEZADO}\nTisipe,municipio,,\nShalagua,aldea,,`,
     );

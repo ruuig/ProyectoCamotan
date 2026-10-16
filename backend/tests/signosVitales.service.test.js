@@ -4,7 +4,7 @@ import { evaluarSignosVitales } from '../src/services/signosVitales.service.js';
 const campos = (hallazgos) => hallazgos.map((h) => h.campo);
 
 describe('evaluarSignosVitales', () => {
-  it('no reporta nada cuando todo esta dentro de rango', () => {
+  it('no informa nada cuando todo esta dentro de rango', () => {
     const hallazgos = evaluarSignosVitales(
       { temperatura: 36.8, frecCardiaca: 90, frecRespiratoria: 16, satOxigeno: 97, presionSis: 118, presionDia: 76 },
       { edadMeses: 360 },

@@ -2,7 +2,7 @@
  * Reglas de la bodega del centro, tal como trabaja hoy con sus Excel
  * (MD/Bodega.md): categorias con su color, semaforo con los rangos del
  * centro, el balance y el BRES con la formula del centro, la propuesta de
- * distribucion a los servicios y el reporte mensual de cada servicio.
+ * distribucion a los servicios y el informe mensual de cada servicio.
  *
  * Funciones puras: no tocan la base.
  */
@@ -134,7 +134,7 @@ function lotesPepe(lotes, cantidad, ahora = new Date()) {
  *   defecto), como la columna "Saldo Actual / 32" del inventario de cierre:
  *   cuanto le toca a cada lugar. Si hay menos servicios que lugares, lo de
  *   los lugares que sobran se queda en bodega.
- * consumo: en proporcion al promedio de entregas reportadas por cada uno.
+ * consumo: en proporcion al promedio de entregas informadas por cada uno.
  *
  * Por lugar se redondea al entero, como lo muestra el Excel; con empaque se
  * baja al multiplo del empaque: no se manda media caja. Nunca se reparte mas
@@ -157,7 +157,7 @@ function propuestaDistribucion({ cantidad, servicios, modo = 'iguales', empaque 
   if (modo === 'consumo' && totalConsumo > 0) {
     pesos = servicios.map((s) => (s.promedio ?? 0) / totalConsumo);
   } else {
-    if (modo === 'consumo') aviso = 'Ningún servicio tiene entregas reportadas: se reparte en partes iguales';
+    if (modo === 'consumo') aviso = 'Ningún servicio tiene entregas informadas: se reparte en partes iguales';
     const entre = Math.max(n, lugares ?? n);
     pesos = servicios.map(() => 1 / entre);
   }
@@ -176,13 +176,13 @@ function propuestaDistribucion({ cantidad, servicios, modo = 'iguales', empaque 
   return { modo: aviso ? 'iguales' : modo, filas, asignado, sobrante: cantidad - asignado, aviso };
 }
 
-// --- Reporte mensual de un servicio -------------------------------------------------
+// --- Informe mensual de un servicio -------------------------------------------------
 
 /**
- * Un renglon del reporte: saldo siguiente calculado y diferencias contra lo
- * que reporta el servicio (saldo y entradas).
+ * Un renglon del informe: saldo siguiente calculado y diferencias contra lo
+ * que informa el servicio (saldo y entradas).
  */
-function filaReporte({ saldoAnterior = 0, entradas = 0, entregado = 0, noEntregado = 0, saldoReportado = null, entradasReportadas = null }) {
+function filaInforme({ saldoAnterior = 0, entradas = 0, entregado = 0, noEntregado = 0, saldoInformado = null, entradasInformadas = null }) {
   const saldoSiguiente = saldoAnterior + entradas - entregado;
   const vacio = (v) => v === null || v === undefined || v === '';
   return {
@@ -191,10 +191,10 @@ function filaReporte({ saldoAnterior = 0, entradas = 0, entregado = 0, noEntrega
     entregado,
     noEntregado,
     saldoSiguiente,
-    saldoReportado: vacio(saldoReportado) ? null : saldoReportado,
-    entradasReportadas: vacio(entradasReportadas) ? null : entradasReportadas,
-    diferenciaSaldo: vacio(saldoReportado) ? null : saldoReportado - saldoSiguiente,
-    diferenciaEntradas: vacio(entradasReportadas) ? null : entradasReportadas - entradas,
+    saldoInformado: vacio(saldoInformado) ? null : saldoInformado,
+    entradasInformadas: vacio(entradasInformadas) ? null : entradasInformadas,
+    diferenciaSaldo: vacio(saldoInformado) ? null : saldoInformado - saldoSiguiente,
+    diferenciaEntradas: vacio(entradasInformadas) ? null : entradasInformadas - entradas,
     negativo: saldoSiguiente < 0,
   };
 }
@@ -222,7 +222,7 @@ function ultimosPeriodos(periodo, n) {
  *   C entradas a bodega.   D entregado (post-consulta + servicios).
  *   E no entregado.        F demanda = D + E.
  *   saldo x demanda = B + C - D: lo que deberia haber; si no coincide con H,
- *     algo no se reporto.
+ *     algo no se informo.
  *   H saldo siguiente = la suma de los saldos de cada servicio (post-consulta
  *     incluida) mas la existencia fisica en bodega (I): lo que hay.
  *   J promedio = la suma del promedio de cada servicio.
@@ -277,7 +277,7 @@ module.exports = {
   numeroTraslado,
   lotesPepe,
   propuestaDistribucion,
-  filaReporte,
+  filaInforme,
   periodoAnterior,
   ultimosPeriodos,
   filaBres,

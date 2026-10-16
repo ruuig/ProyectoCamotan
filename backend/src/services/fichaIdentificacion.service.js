@@ -337,7 +337,7 @@ function datosSigsa(claveFicha) {
 // --- Lo minimo que pide el SIGSA ----------------------------------------------
 
 /**
- * Los datos de identificacion sin los que la consulta no se puede reportar
+ * Los datos de identificacion sin los que la consulta no se puede informar
  * al SIGSA 3CS: lugar de residencia y los catalogos oficiales (pueblo,
  * comunidad linguistica, escolaridad, discapacidad).
  *

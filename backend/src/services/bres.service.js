@@ -6,7 +6,7 @@ const { balance } = require('./bodegaDatos.service');
 /**
  * BRES: Balance, Requisicion y Envio de Suministros.
  *
- * Es el informe mensual oficial con el que el servicio reporta lo que se
+ * Es el informe mensual oficial con el que el servicio informa lo que se
  * movio y pide lo que necesita. El sistema lo arma solo desde los
  * movimientos, asi que nadie tiene que sumar a mano y el numero que se envia
  * al area de salud es el mismo que el de la tarjeta de control.
@@ -74,7 +74,7 @@ function clasificar(movimientos) {
  *
  * Es la columna de totales del balance consolidado: la bodega mas los
  * servicios. B sale del BRES anterior cuando lo hay; si no coincide con lo
- * que dicen los movimientos y los reportes, se avisa antes de imprimir.
+ * que dicen los movimientos y los informes, se avisa antes de imprimir.
  */
 async function calcular(establecimientoId, periodo) {
   const { desde, hasta } = limitesDePeriodo(periodo);
@@ -169,11 +169,11 @@ async function calcular(establecimientoId, periodo) {
     renglones,
     descuadres,
     observacionesRecepcion,
-    serviciosSinReporte: consolidado.pendientesDeReporte,
-    // Casillas del formulario: servicios que deben reportar (post-consulta
-    // incluido) y cuantos reportaron. Post-consulta reporta por el sistema.
+    serviciosSinInforme: consolidado.pendientesDeInforme,
+    // Casillas del formulario: servicios que deben informar (post-consulta
+    // incluido) y cuantos informaron. Post-consulta informa por el sistema.
     serviciosTotal: consolidado.servicios.length + 1,
-    serviciosReportaron: consolidado.servicios.filter((s) => s.reportado).length + 1,
+    serviciosInformaron: consolidado.servicios.filter((s) => s.informado).length + 1,
     provisional: config.provisional,
     configuracion: consolidado.configuracion,
     firmas: consolidado.firmas,

@@ -21,19 +21,19 @@ async function hoy(req, res) {
   const lote = { insumo: { establecimientoId }, cantidadActual: { gt: 0 } };
   const kardexDesde = req.query.kardexDesde ? new Date(`${req.query.kardexDesde}T06:00:00Z`) : null;
 
-  const [sinNumero, faltantes, porVencer, vencidos, ubicaciones, reportes, bresAnterior, kardex] = await Promise.all([
+  const [sinNumero, faltantes, porVencer, vencidos, ubicaciones, informes, bresAnterior, kardex] = await Promise.all([
     prisma.requisicion.count({ where: { establecimientoId, numero: null, estado: { not: 'anulada' } } }),
     prisma.lote.findMany({ where: { insumo: { establecimientoId }, cantidadPorReponer: { gt: 0 } }, select: { insumoId: true, cantidadPorReponer: true } }),
     prisma.lote.count({ where: { ...lote, estado: 'disponible', fechaVence: { gte: ahora, lt: en3Meses } } }),
     prisma.lote.count({ where: { ...lote, fechaVence: { lt: ahora }, estado: { notIn: ['dado_de_baja', 'retirado'] } } }),
     datos.ubicaciones(establecimientoId),
-    prisma.reporteServicio.count({ where: { periodo, ubicacion: { establecimientoId } } }),
+    prisma.informeServicio.count({ where: { periodo, ubicacion: { establecimientoId } } }),
     prisma.bres.findFirst({ where: { establecimientoId, periodo: anterior }, select: { estado: true } }),
     kardexDesde
       ? prisma.movimientoInsumo.count({ where: { ubicacion: 'bodega', registradoEn: { gte: kardexDesde }, lote: { insumo: { establecimientoId } } } })
       : null,
   ]);
-  const servicios = ubicaciones.filter(datos.esServicioQueReporta).length;
+  const servicios = ubicaciones.filter(datos.esServicioQueInforma).length;
 
   const pendientes = [];
   if (bresAnterior?.estado !== 'cerrado') pendientes.push({ clave: 'cierre', cantidad: 1, periodo: anterior, a: '/inventario/bres' });
@@ -46,7 +46,7 @@ async function hoy(req, res) {
       a: '/inventario/recibir?ver=faltantes',
     });
   }
-  if (servicios - reportes > 0) pendientes.push({ clave: 'reportes', cantidad: servicios - reportes, de: servicios, periodo, a: '/inventario/reportes' });
+  if (servicios - informes > 0) pendientes.push({ clave: 'informes', cantidad: servicios - informes, de: servicios, periodo, a: '/inventario/informes' });
   if (vencidos) pendientes.push({ clave: 'vencidos', cantidad: vencidos, a: '/inventario/semaforo' });
   if (porVencer) pendientes.push({ clave: 'por_vencer', cantidad: porVencer, a: '/inventario/semaforo' });
   if (kardex) pendientes.push({ clave: 'kardex', cantidad: kardex, desde: req.query.kardexDesde, a: `/inventario/kardex?desde=${req.query.kardexDesde}` });
@@ -57,7 +57,7 @@ async function hoy(req, res) {
     pendientes,
     // Todas las cifras, aunque esten en cero, para la franja de resumen.
     resumen: {
-      reportes: { listos: reportes, de: servicios },
+      informes: { listos: informes, de: servicios },
       faltantes: { productos: new Set(faltantes.map((f) => f.insumoId)).size, unidades: faltantes.reduce((s, f) => s + f.cantidadPorReponer, 0) },
       sinNumero,
       vencidos,

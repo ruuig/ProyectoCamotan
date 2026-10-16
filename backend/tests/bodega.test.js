@@ -4,7 +4,7 @@ import app from '../src/app.js';
 import prisma from '../src/config/db.js';
 
 /**
- * Bodega: traslados a los servicios con su lote, reporte mensual de cada
+ * Bodega: traslados a los servicios con su lote, informe mensual de cada
  * servicio con entradas precargadas, y balance/BRES del municipio con la
  * fórmula del centro (MD/Bodega.md).
  */
@@ -53,7 +53,7 @@ beforeAll(async () => {
 describe('ubicaciones', () => {
   it('trae la bodega y los servicios del balance del centro', async () => {
     const r = await farm(request(app).get('/api/v1/bodega/ubicaciones'));
-    expect(r.body.ubicaciones.filter((x) => x.reporta).length).toBe(30);
+    expect(r.body.ubicaciones.filter((x) => x.informa).length).toBe(30);
     expect(bodega).toBeTruthy();
     expect(r.body.ubicaciones.some((x) => x.nombre === 'Post-consulta (Centro de Salud)')).toBe(true);
   });
@@ -102,7 +102,7 @@ describe('traslados', () => {
   });
 });
 
-describe('reporte mensual del servicio y balance', () => {
+describe('informe mensual del servicio y balance', () => {
   it('las entradas vienen precargadas desde los traslados y el balance cuadra', async () => {
     const { insumo, lotes } = await insumoConLotes([[100, 500]]);
     await farm(request(app).post('/api/v1/bodega/traslados')).send({
@@ -110,19 +110,19 @@ describe('reporte mensual del servicio y balance', () => {
     });
 
     const periodo = periodoActual();
-    const form = await farm(request(app).get(`/api/v1/bodega/reportes/${servicio.id}/${periodo}`));
+    const form = await farm(request(app).get(`/api/v1/bodega/informes/${servicio.id}/${periodo}`));
     const fila = form.body.renglones.find((x) => x.insumoId === insumo.id);
     expect(fila.entradas).toBe(30);
     expect(fila.maneja).toBe(true);
 
-    const guardado = await farm(request(app).put(`/api/v1/bodega/reportes/${servicio.id}/${periodo}`)).send({
-      renglones: [{ insumoId: insumo.id, entregado: 20, noEntregado: 5, saldoReportado: 9 }],
+    const guardado = await farm(request(app).put(`/api/v1/bodega/informes/${servicio.id}/${periodo}`)).send({
+      renglones: [{ insumoId: insumo.id, entregado: 20, noEntregado: 5, saldoInformado: 9 }],
     });
     expect(guardado.body.diferencias).toBe(1);
 
-    const estado = await farm(request(app).get(`/api/v1/bodega/reportes?periodo=${periodo}`));
+    const estado = await farm(request(app).get(`/api/v1/bodega/informes?periodo=${periodo}`));
     const anicillo = estado.body.servicios.find((s) => s.ubicacionId === servicio.id);
-    expect(anicillo.reportado).toBe(true);
+    expect(anicillo.informado).toBe(true);
     expect(anicillo.diferencias).toBeGreaterThanOrEqual(1);
 
     const b = await farm(request(app).get(`/api/v1/bodega/balance?periodo=${periodo}`));
@@ -149,9 +149,9 @@ describe('reporte mensual del servicio y balance', () => {
 
   it('se acepta una diferencia solo explicando por qué', async () => {
     const periodo = periodoActual();
-    const sinMotivo = await farm(request(app).post(`/api/v1/bodega/reportes/${servicio.id}/${periodo}/revisar`)).send({});
+    const sinMotivo = await farm(request(app).post(`/api/v1/bodega/informes/${servicio.id}/${periodo}/revisar`)).send({});
     expect(sinMotivo.status).toBe(400);
-    const ok = await farm(request(app).post(`/api/v1/bodega/reportes/${servicio.id}/${periodo}/revisar`)).send({ observacion: 'Se perdió una tableta en el traslado' });
+    const ok = await farm(request(app).post(`/api/v1/bodega/informes/${servicio.id}/${periodo}/revisar`)).send({ observacion: 'Se perdió una tableta en el traslado' });
     expect(ok.status).toBe(200);
   });
 });

@@ -79,7 +79,7 @@ describe('rango del mes', () => {
 });
 
 describe('GET /indicadores/consolidado', () => {
-  it('devuelve los cinco bloques que exige el reporte', async () => {
+  it('devuelve los cinco bloques que exige el informe', async () => {
     const r = await como('admin', request(app).get('/api/v1/indicadores/consolidado'));
 
     expect(r.status).toBe(200);

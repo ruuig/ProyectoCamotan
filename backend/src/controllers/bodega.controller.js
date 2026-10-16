@@ -1,6 +1,6 @@
 /**
  * Bodega del centro (MD/Bodega.md): ubicaciones, traslados a los servicios,
- * reporte mensual de los servicios, balance consolidado, semaforo,
+ * informe mensual de los servicios, balance consolidado, semaforo,
  * inventario de cierre y alias del catalogo.
  */
 
@@ -34,7 +34,7 @@ const periodoActual = () => {
 async function listarUbicaciones(req, res) {
   const lista = await datos.ubicaciones(req.usuario.establecimientoId, { soloActivas: req.query.todas !== 'true' });
   res.json({
-    ubicaciones: lista.map((u) => ({ ...u, tipoEtiqueta: ETIQUETA_TIPO_UBICACION[u.tipo], reporta: datos.esServicioQueReporta(u) })),
+    ubicaciones: lista.map((u) => ({ ...u, tipoEtiqueta: ETIQUETA_TIPO_UBICACION[u.tipo], informa: datos.esServicioQueInforma(u) })),
     tipos: Object.entries(ETIQUETA_TIPO_UBICACION).map(([valor, etiqueta]) => ({ valor, etiqueta })),
   });
 }
@@ -101,7 +101,7 @@ async function distribucion(req, res, next) {
   const cantidad = Math.min(req.query.cantidad ?? existencia, existencia);
 
   const config = await configuracion(establecimientoId);
-  const servicios = (await datos.ubicaciones(establecimientoId)).filter(datos.esServicioQueReporta)
+  const servicios = (await datos.ubicaciones(establecimientoId)).filter(datos.esServicioQueInforma)
     .filter((s) => !req.query.ubicaciones || req.query.ubicaciones.includes(s.id));
   const promedios = await datos.promedioPorServicio(establecimientoId, insumo.id, periodoActual(), config.mesesPromedio);
 
@@ -231,31 +231,31 @@ async function listarTraslados(req, res) {
   });
 }
 
-// --- Reportes de los servicios ------------------------------------------------------
+// --- Informes de los servicios ------------------------------------------------------
 
-async function estadoReportes(req, res) {
+async function estadoInformes(req, res) {
   const periodo = req.query.periodo ?? periodoActual();
-  const servicios = await datos.estadoReportes(req.usuario.establecimientoId, periodo);
+  const servicios = await datos.estadoInformes(req.usuario.establecimientoId, periodo);
   res.json({
     periodo,
     servicios,
-    reportados: servicios.filter((s) => s.reportado).length,
-    faltan: servicios.filter((s) => !s.reportado).length,
+    informados: servicios.filter((s) => s.informado).length,
+    faltan: servicios.filter((s) => !s.informado).length,
   });
 }
 
-async function obtenerReporte(req, res, next) {
-  const form = await datos.formularioReporte(req.usuario.establecimientoId, Number(req.params.ubicacionId), req.params.periodo);
+async function obtenerInforme(req, res, next) {
+  const form = await datos.formularioInforme(req.usuario.establecimientoId, Number(req.params.ubicacionId), req.params.periodo);
   if (!form) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Servicio no encontrado' });
-  if (!datos.esServicioQueReporta(form.ubicacion)) {
-    return next({ status: 400, codigo: 'no_reporta', mensaje: 'Esa ubicación no envía reporte mensual' });
+  if (!datos.esServicioQueInforma(form.ubicacion)) {
+    return next({ status: 400, codigo: 'no_informa', mensaje: 'Esa ubicación no envía informe mensual' });
   }
   res.json(form);
 }
 
-async function guardarReporte(req, res, next) {
+async function guardarInforme(req, res, next) {
   const ubicacionId = Number(req.params.ubicacionId);
-  const resultado = await datos.guardarReporte(
+  const resultado = await datos.guardarInforme(
     req.usuario.establecimientoId, ubicacionId, req.params.periodo, req.body, req.usuario.id,
   );
   if (!resultado) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Servicio no encontrado' });
@@ -264,19 +264,19 @@ async function guardarReporte(req, res, next) {
     accion: 'actualizar',
     entidad: 'reporte_servicio',
     entidadId: ubicacionId,
-    detalle: `Reporte de ${req.params.periodo}: ${resultado.renglones} insumo(s), ${resultado.diferencias} con diferencia`,
+    detalle: `Informe de ${req.params.periodo}: ${resultado.renglones} insumo(s), ${resultado.diferencias} con diferencia`,
   });
   res.json(resultado);
 }
 
-/** Aceptar las diferencias de un reporte despues de revisarlas. */
-async function revisarReporte(req, res, next) {
-  const reporte = await prisma.reporteServicio.findFirst({
+/** Aceptar las diferencias de un informe despues de revisarlas. */
+async function revisarInforme(req, res, next) {
+  const informe = await prisma.informeServicio.findFirst({
     where: { ubicacionId: Number(req.params.ubicacionId), periodo: req.params.periodo, ubicacion: { establecimientoId: req.usuario.establecimientoId } },
   });
-  if (!reporte) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Ese reporte no se ha capturado' });
-  await prisma.reporteServicio.update({ where: { id: reporte.id }, data: { revisado: true, observacion: req.body.observacion ?? reporte.observacion } });
-  await req.bitacora({ accion: 'actualizar', entidad: 'reporte_servicio', entidadId: reporte.id, detalle: `Diferencias revisadas y aceptadas: ${req.body.observacion ?? ''}` });
+  if (!informe) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Ese informe no se ha capturado' });
+  await prisma.informeServicio.update({ where: { id: informe.id }, data: { revisado: true, observacion: req.body.observacion ?? informe.observacion } });
+  await req.bitacora({ accion: 'actualizar', entidad: 'reporte_servicio', entidadId: informe.id, detalle: `Diferencias revisadas y aceptadas: ${req.body.observacion ?? ''}` });
   res.json({ revisado: true });
 }
 
@@ -696,10 +696,10 @@ module.exports = {
   crearTraslado,
   obtenerTraslado,
   listarTraslados,
-  estadoReportes,
-  obtenerReporte,
-  guardarReporte,
-  revisarReporte,
+  estadoInformes,
+  obtenerInforme,
+  guardarInforme,
+  revisarInforme,
   balance,
   semaforo,
   fichaInsumo,

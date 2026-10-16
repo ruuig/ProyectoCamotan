@@ -1,9 +1,9 @@
 /**
- * Revisa la continuidad de los reportes importados: el saldo anterior de un
+ * Revisa la continuidad de los informes importados: el saldo anterior de un
  * servicio en un mes debe ser el saldo siguiente del mes previo. Sirve para
  * detectar columnas del Excel que venian de libros vinculados desactualizados.
  *
- *   node scripts/continuidadReportes.js
+ *   node scripts/continuidadInformes.js
  */
 require('dotenv').config();
 const prisma = require('../src/config/db');
@@ -14,14 +14,14 @@ function previo(p) {
 }
 
 (async () => {
-  const reportes = await prisma.reporteServicio.findMany({
+  const informes = await prisma.informeServicio.findMany({
     include: { renglones: true, ubicacion: { select: { nombre: true } } },
   });
   const saldo = new Map();
-  for (const r of reportes) for (const x of r.renglones) saldo.set(`${r.ubicacionId}|${r.periodo}|${x.insumoId}`, x.saldoSiguiente);
+  for (const r of informes) for (const x of r.renglones) saldo.set(`${r.ubicacionId}|${r.periodo}|${x.insumoId}`, x.saldoSiguiente);
 
   const porServicio = new Map();
-  for (const r of reportes) {
+  for (const r of informes) {
     const fila = porServicio.get(r.ubicacion.nombre) ?? { revisados: 0, distintos: 0, meses: new Map() };
     for (const x of r.renglones) {
       const antes = saldo.get(`${r.ubicacionId}|${previo(r.periodo)}|${x.insumoId}`);

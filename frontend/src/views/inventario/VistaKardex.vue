@@ -92,7 +92,7 @@ onMounted(async () => {
       <div class="min-w-[18rem] flex-1">
         <span class="b-etiqueta">Producto</span>
         <div v-if="elegido" class="elegido">
-          <span class="min-w-0 flex-1 truncate font-semibold text-tinta">{{ elegido.nombreGenerico }} <span class="font-normal text-apagado">{{ elegido.concentracion }}</span></span>
+          <span class="min-w-0 flex-1 nombre-completo font-semibold text-tinta">{{ elegido.nombreGenerico }} <span class="font-normal text-apagado">{{ elegido.concentracion }}</span></span>
           <button type="button" class="quitar" aria-label="Cambiar producto" @click="elegido = null; tarjeta = null; ver()"><Icono nombre="cerrar" :tamano="16" /></button>
         </div>
         <BuscadorInsumo v-else :insumos="insumos" placeholder="Buscar producto" @elegir="elegir" />

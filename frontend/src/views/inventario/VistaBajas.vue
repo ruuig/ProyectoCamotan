@@ -165,7 +165,7 @@ onMounted(cargar);
           <div class="b-panel-cuerpo space-y-4">
             <div v-if="loteElegido" class="b-boleto vacio">
               <span class="min-w-0">
-                <span class="block truncate font-semibold text-tinta">{{ loteElegido.insumo }}</span>
+                <span class="block nombre-completo font-semibold text-tinta">{{ loteElegido.insumo }}</span>
                 <span class="codigo text-[13px]">{{ loteElegido.numeroLote }}</span>
               </span>
               <span class="cant">{{ miles(loteElegido.cantidadActual) }}</span>
@@ -208,7 +208,7 @@ onMounted(cargar);
             <li v-for="l in candidatos" :key="l.loteId" class="flex items-center gap-2">
               <div class="b-boleto flex-1">
                 <span class="min-w-0">
-                  <span class="block truncate font-semibold text-tinta">{{ l.insumo }}</span>
+                  <span class="block nombre-completo font-semibold text-tinta">{{ l.insumo }}</span>
                   <span class="mt-0.5 flex items-center gap-2">
                     <span class="codigo text-[13px]">{{ l.numeroLote }}</span>
                     <span v-if="l.estado !== 'vencido'" class="b-estado" :class="l.estado">{{ l.estado }}</span>

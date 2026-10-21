@@ -191,7 +191,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
               <span class="cat-mini"><Pictograma :categoria="l.insumo.categoria" :grosor="2" /></span>
               <span class="min-w-0 flex-1">
                 <span class="block font-mono font-semibold text-tinta">{{ l.numeroLote === 'SIN-LOTE' ? 'Sin lote' : l.numeroLote }}</span>
-                <span class="block truncate text-[13px] text-apagado">{{ l.insumo.nombreGenerico }}</span>
+                <span class="block nombre-completo text-[13px] text-apagado">{{ l.insumo.nombreGenerico }}</span>
               </span>
               <span class="text-right text-[13px] font-semibold tabular-nums text-apagado">
                 <span class="block">{{ miles(l.cantidadActual) }} de {{ miles(l.cantidadInicial) }}</span>

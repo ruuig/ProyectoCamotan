@@ -51,7 +51,7 @@
 .b-btn.chico svg { width: 16px; height: 16px; }
 
 /* --- Selector segmentado ------------------------------------------------------ */
-.b-segmentado { display: inline-flex; padding: 4px; background: #F1F5F9; border-radius: 12px; }
+.b-segmentado { display: inline-flex; max-width: 100%; overflow-x: auto; padding: 4px; background: #F1F5F9; border-radius: 12px; }
 .b-segmentado button, .b-segmentado a { padding: 8px 16px; border-radius: 9px; font-weight: 700; font-size: 14px; color: #475569; white-space: nowrap; }
 .b-segmentado button:hover, .b-segmentado a:hover { color: #14244A; }
 .b-segmentado .on { background: #fff; color: #172A5A; box-shadow: 0 1px 3px rgba(15,23,42,.18); }
@@ -219,3 +219,19 @@ a.b-boleto:hover, button.b-boleto:hover { border-color: #64748B; }
 .b-ayuda-error { margin-top: 4px; font-size: 13px; font-weight: 600; color: #B42318; }
 .b-campo.invalido { border-color: #D64545; }
 .b-opcional { font-weight: 600; text-transform: none; letter-spacing: 0; color: #94A3B8; }
+
+/* Nombre de un insumo en listas y paneles: siempre completo, partido en
+   renglones si no cabe (nunca con puntos suspensivos). */
+.nombre-completo { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+
+
+/* --- Pantallas bajas (1366×768, 1280×720 y menos) ----------------------------
+   En los equipos del centro la pantalla es chica: se recorta el aire de arriba
+   y de los lados para que la información empiece enseguida. */
+@media (max-height: 820px), (max-width: 1400px) {
+  .contenido-principal { padding-top: 12px !important; padding-bottom: 16px !important; }
+  .b-hoja { border-width: 1px; border-radius: 14px; }
+  .b-cuerpo { padding: 12px 16px 18px; }
+  .b-titulo { font-size: 25px; }
+  .b-cabecera { gap: 8px 12px; }
+}

@@ -147,7 +147,7 @@ onMounted(cargar);
             <li v-for="rl in retiro.lotes" :key="rl.id">
               <RouterLink :to="`/inventario/lotes/${rl.lote.id}`" class="b-boleto">
                 <span class="min-w-0">
-                  <span class="block truncate font-semibold text-tinta">{{ rl.lote.insumo.nombreGenerico }}</span>
+                  <span class="block nombre-completo font-semibold text-tinta">{{ rl.lote.insumo.nombreGenerico }}</span>
                   <span class="codigo text-[13px]">{{ rl.lote.numeroLote }}</span>
                 </span>
                 <span class="cant">{{ miles(rl.lote.cantidadActual) }}</span>

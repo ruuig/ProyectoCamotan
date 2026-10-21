@@ -65,7 +65,7 @@ function tecla(e) {
       <li v-for="(i, k) in coincidencias" :key="i.id" role="option" :aria-selected="k === activo">
         <button type="button" class="opcion" :class="k === activo ? 'on' : ''" :style="estiloCategoria(i.categoria)" @mousedown.prevent="elegir(i)" @mouseenter="activo = k">
           <span class="cat-mini"><Pictograma :categoria="i.categoria ?? 'medicamentos'" :grosor="2" /></span>
-          <span class="min-w-0 flex-1 truncate font-semibold text-tinta">{{ i.nombreGenerico }}</span>
+          <span class="min-w-0 flex-1 nombre-completo font-semibold text-tinta">{{ i.nombreGenerico }}</span>
           <span class="whitespace-nowrap text-[13px] font-semibold tabular-nums text-apagado">hay {{ miles(i.saldoTotal) }}</span>
         </button>
       </li>

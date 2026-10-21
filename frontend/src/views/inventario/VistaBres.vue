@@ -147,6 +147,7 @@ function celda(r, c) {
   <section>
     <PasosCierre :estado="{ bres: ESTADO[estado] }">
       <template #acciones>
+        <RouterLink :to="`/inventario/pedir-ddriss?periodo=${cierre.periodo}`" class="b-btn primario"><Icono nombre="trasladar" :tamano="20" /> Hacer requisición a la DDRISS</RouterLink>
         <RouterLink :to="vista === 'servicio' ? `/imprimir/balance/${cierre.periodo}` : `/imprimir/bres/${cierre.periodo}`" target="_blank" class="b-btn secundario"><Icono nombre="imprimir" :tamano="20" /> {{ vista === 'servicio' ? 'Imprimir balance' : 'Imprimir' }}</RouterLink>
         <button type="button" class="b-btn secundario" @click="excel"><Icono nombre="hojaCalculo" :tamano="20" /> Excel</button>
         <button v-if="!cerrado" type="button" class="b-btn primario" :disabled="enviando" @click="generar">{{ guardado ? 'Volver a generar' : 'Generar BRES' }}</button>
@@ -177,40 +178,24 @@ function celda(r, c) {
     <p v-if="cargando" class="b-vacio">Calculando el BRES…</p>
 
     <template v-else-if="datos">
-      <div class="b-franja mt-4">
-        <div class="b-cifra"><span class="n">{{ miles(totales.entradas) }}</span><span class="e">Entradas</span></div>
-        <div class="b-cifra"><span class="n">{{ miles(totales.entregado) }}</span><span class="e">Entregado</span></div>
-        <div class="b-cifra"><span class="n" :class="totales.noEntregado ? 'text-[#C03535]' : ''">{{ miles(totales.noEntregado) }}</span><span class="e">No entregado</span></div>
-        <button type="button" class="b-cifra" :class="soloPedir ? 'on' : ''" @click="soloPedir = !soloPedir">
-          <span class="n text-[#C2410C]">{{ totales.pedir }}</span><span class="e">Por pedir</span>
-        </button>
-      </div>
-
-      <div class="mt-4 flex flex-wrap items-center gap-2">
-        <label class="b-buscar w-full sm:w-[210px]">
+      <!-- Una barra: buscar, categoría, solo lo que hay que pedir y la vista -->
+      <div class="barra-bres mt-3">
+        <label class="b-buscar buscar">
           <Icono nombre="buscar" :tamano="20" />
           <input v-model="buscar" type="search" class="b-campo" placeholder="Buscar insumo" aria-label="Buscar insumo" />
         </label>
-        <button
-          v-for="(c, clave) in CATEGORIA"
-          :key="clave"
-          type="button"
-          class="b-ficha-cat"
-          :class="categoriaFiltro === clave ? 'on' : ''"
-          :style="estiloCategoria(clave)"
-          @click="categoriaFiltro = categoriaFiltro === clave ? '' : clave"
-        >
-          <span class="ic"><Pictograma :categoria="clave" :grosor="2" /></span>
-          {{ c.corto }}
+        <select v-model="categoriaFiltro" class="b-campo categoria" aria-label="Categoría">
+          <option value="">Todas las categorías</option>
+          <option v-for="(c, clave) in CATEGORIA" :key="clave" :value="clave">{{ c.nombre }}</option>
+        </select>
+        <button type="button" class="chip-pedir-filtro" :class="{ on: soloPedir }" :aria-pressed="soloPedir" @click="soloPedir = !soloPedir">
+          Solo lo que hay que pedir <b>{{ totales.pedir }}</b>
         </button>
-      </div>
-
-      <div class="mt-3 flex items-center justify-between gap-3">
-        <span class="text-sm font-bold text-apagado">{{ renglones.length }} insumos · {{ datos.serviciosInformaron }} de {{ datos.serviciosTotal }} servicios informaron</span>
         <div class="b-segmentado" role="radiogroup" aria-label="Vista">
-          <button v-for="v in [['bres', 'BRES'], ['servicio', 'Detalle por servicio']]" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="vista = v[0]">{{ v[1] }}</button>
+          <button v-for="v in [['bres', 'BRES'], ['servicio', 'Por servicio']]" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="vista = v[0]">{{ v[1] }}</button>
         </div>
       </div>
+      <p class="mt-1.5 text-sm font-bold text-apagado">{{ renglones.length }} insumos · {{ datos.serviciosInformaron }} de {{ datos.serviciosTotal }} servicios informaron</p>
 
       <template v-if="vista === 'servicio'">
         <DetallePorServicio v-if="balance" class="mt-2" :balance="balance" :filtro="filtroServicio" />
@@ -270,14 +255,22 @@ function celda(r, c) {
 </template>
 
 <style scoped>
-.alta { max-height: max(380px, calc(100vh - 520px)); }
+/* La tabla llena lo que queda de la pantalla; su encabezado queda fijo al bajar. */
+.alta { max-height: max(320px, calc(100vh - 300px)); }
+.barra-bres { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.barra-bres .buscar { flex: 1 1 220px; }
+.barra-bres .categoria { flex: 0 1 220px; height: 44px; }
+.chip-pedir-filtro { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border: 2px solid #F3C677; border-bottom-width: 4px; border-radius: 14px; background: #FFF8EB; font-size: 14.5px; font-weight: 800; color: #8A4B00; }
+.chip-pedir-filtro b { min-width: 24px; padding: 0 7px; border-radius: 9px; background: #E8930C; color: #fff; text-align: center; }
+.chip-pedir-filtro.on { background: #E8930C; border-color: #B4610A; color: #fff; }
+.chip-pedir-filtro.on b { background: #fff; color: #B4610A; }
 .b-tabla th { vertical-align: bottom; }
 .b-tabla th .letra { display: block; font-size: 11px; color: #94A3B8; letter-spacing: .1em; }
 .fija { position: sticky; left: 0; z-index: 2; background: #fff; min-width: 230px; max-width: 260px; border-right: 2px solid #E2E8F0; }
 .alta :deep(th), .alta :deep(td) { padding-left: 8px; padding-right: 8px; }
 .alta :deep(th.n) { white-space: normal; max-width: 86px; line-height: 1.2; }
 th.fija { z-index: 3; background: #F1F5F9; }
-.nombre { font-weight: 600; color: #14244A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nombre { font-weight: 600; color: #14244A; white-space: normal; overflow-wrap: anywhere; }
 .cat-mini { display: grid; place-items: center; flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px; background: var(--cat); color: #fff; }
 .cat-mini svg { width: 15px; height: 15px; }
 .k-bajo { color: #B7710A !important; font-weight: 700; }

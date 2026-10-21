@@ -85,53 +85,33 @@ const enlaceImprimir = computed(() => {
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
 
     <template v-if="datos">
-      <div class="semaforo mt-5" role="radiogroup" aria-label="Qué lotes ver">
-        <button type="button" role="radio" class="luz todos" :class="{ on: !color }" :aria-checked="!color" @click="color = ''">
-          <span class="foco"><Icono nombre="inventario" :tamano="22" /></span>
-          <span class="dato"><b>{{ datos.resumen.rojo + datos.resumen.amarillo + datos.resumen.verde + datos.resumen.vencido }}</b><small>Todos</small></span>
+      <!-- Una barra: los colores con su número, buscar y categoría -->
+      <div class="barra-sem mt-3" role="radiogroup" aria-label="Qué lotes ver">
+        <button type="button" role="radio" class="chip-sem" :class="{ on: !color }" :aria-checked="!color" @click="color = ''">
+          Todos <b>{{ datos.resumen.rojo + datos.resumen.amarillo + datos.resumen.verde + datos.resumen.vencido }}</b>
+        </button>
+        <button v-if="datos.resumen.vencido" type="button" role="radio" class="chip-sem" :class="{ on: color === 'vencido' }" :style="{ '--luz': '#111827' }" :aria-checked="color === 'vencido'" @click="color = 'vencido'">
+          <span class="punto" /> Vencidos <b>{{ datos.resumen.vencido }}</b>
         </button>
         <button
-          v-for="c in COLORES"
-          :key="c.clave"
-          type="button"
-          role="radio"
-          class="luz"
-          :class="{ on: color === c.clave }"
-          :style="{ '--luz': c.luz, '--tinta': c.tinta, '--fondo': c.fondo }"
-          :aria-checked="color === c.clave"
-          @click="color = c.clave"
+          v-for="c in COLORES" :key="c.clave" type="button" role="radio" class="chip-sem" :class="{ on: color === c.clave }"
+          :style="{ '--luz': c.luz }" :aria-checked="color === c.clave" :title="c.texto" @click="color = c.clave"
         >
-          <span class="foco" />
-          <span class="dato"><b>{{ datos.resumen[c.clave] }}</b><small><strong>{{ c.nombre }}</strong> · {{ c.texto }}</small></span>
-          <span v-if="color === c.clave" class="marca"><Icono nombre="correcto" :tamano="18" /></span>
+          <span class="punto" /> {{ c.nombre }} <small>{{ c.texto }}</small> <b>{{ datos.resumen[c.clave] }}</b>
+        </button>
+        <button v-if="datos.resumen.sinFecha" type="button" role="radio" class="chip-sem" :class="{ on: color === 'sin_fecha' }" :style="{ '--luz': '#94A3B8' }" :aria-checked="color === 'sin_fecha'" @click="color = 'sin_fecha'">
+          <span class="punto" /> Sin lote <b>{{ datos.resumen.sinFecha }}</b>
         </button>
       </div>
-      <div class="aparte mt-3">
-        <button v-if="datos.resumen.vencido" type="button" class="luz-chica vencido" :class="{ on: color === 'vencido' }" @click="color = 'vencido'">
-          <Icono nombre="alerta" :tamano="18" /> Vencidos <b>{{ datos.resumen.vencido }}</b>
-        </button>
-        <button v-if="datos.resumen.sinFecha" type="button" class="luz-chica gris" :class="{ on: color === 'sin_fecha' }" @click="color = 'sin_fecha'">
-          <Icono nombre="lapiz" :tamano="18" /> Sin lote <b>{{ datos.resumen.sinFecha }}</b>
-        </button>
-      </div>
-
-      <div class="mt-4 flex flex-wrap items-center gap-2">
-        <label class="b-buscar w-full sm:w-[230px]">
+      <div class="barra-sem mt-2">
+        <label class="b-buscar buscar">
           <Icono nombre="buscar" :tamano="20" />
           <input v-model="buscar" type="search" class="b-campo" placeholder="Insumo o lote" aria-label="Buscar insumo o lote" />
         </label>
-        <button
-          v-for="(c, clave) in CATEGORIA"
-          :key="clave"
-          type="button"
-          class="b-ficha-cat"
-          :class="categoriaFiltro === clave ? 'on' : ''"
-          :style="estiloCategoria(clave)"
-          @click="categoriaFiltro = categoriaFiltro === clave ? '' : clave"
-        >
-          <span class="ic"><Pictograma :categoria="clave" :grosor="2" /></span>
-          {{ c.corto }}
-        </button>
+        <select v-model="categoriaFiltro" class="b-campo categoria" aria-label="Categoría">
+          <option value="">Todas las categorías</option>
+          <option v-for="(c, clave) in CATEGORIA" :key="clave" :value="clave">{{ c.nombre }}</option>
+        </select>
       </div>
 
       <div class="grupos mt-4">
@@ -148,7 +128,7 @@ const enlaceImprimir = computed(() => {
               <RouterLink :to="`/inventario/lotes/${l.id}`" class="renglon" :style="estiloCategoria(l.insumo.categoria)">
                 <span class="cat-mini"><Pictograma :categoria="l.insumo.categoria" :grosor="2" /></span>
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate font-semibold text-tinta">{{ l.insumo.nombre }}</span>
+                  <span class="block nombre-completo font-semibold text-tinta">{{ l.insumo.nombre }}</span>
                   <span class="font-mono text-[13px] text-apagado">{{ l.numeroLote }}</span>
                 </span>
                 <span v-if="l.estado !== 'disponible' && l.semaforo !== 'vencido'" class="b-estado" :class="l.estado">{{ l.estado === 'cuarentena' ? 'Cuarentena' : l.estado === 'vencido' ? 'Vencido' : l.estado }}</span>
@@ -166,6 +146,15 @@ const enlaceImprimir = computed(() => {
 </template>
 
 <style scoped>
+.barra-sem { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.barra-sem .buscar { flex: 1 1 240px; }
+.barra-sem .categoria { flex: 0 1 240px; height: 44px; }
+.chip-sem { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 14px; background: #fff; font-size: 15px; font-weight: 800; color: #14244A; }
+.chip-sem small { font-size: 12.5px; font-weight: 600; color: #64748B; }
+.chip-sem b { min-width: 24px; padding: 0 7px; border-radius: 9px; background: #F1F5F9; text-align: center; }
+.chip-sem .punto { width: 14px; height: 14px; border-radius: 50%; background: var(--luz); }
+.chip-sem.on { border-color: #172A5A; background: #EAF3FB; }
+
 .semaforo { display: grid; grid-template-columns: 150px repeat(3, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 1000px) { .semaforo { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .luz { position: relative; display: flex; align-items: center; gap: 14px; min-height: 88px; padding: 14px 16px; border: 2px solid #E2E8F0; border-bottom-width: 5px; border-radius: 20px; background: #fff; text-align: left; cursor: pointer; transition: transform .06s, border-color .12s, background .12s; }

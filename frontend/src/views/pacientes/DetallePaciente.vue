@@ -403,7 +403,7 @@ const ESTADO_PUNTO = { atendido: 'p-bien', en_espera: 'p-atencion', en_atencion:
           <ul class="entregas">
             <li v-for="e in insumos.entregas" :key="e.movimientoId">
               <span class="min-w-0 flex-1">
-                <b class="block truncate text-tinta">{{ e.insumo.nombreGenerico }}</b>
+                <b class="block nombre-completo text-tinta">{{ e.insumo.nombreGenerico }}</b>
                 <small>
                   Lote <RouterLink :to="`/inventario/trazabilidad?lote=${e.lote.id}`" class="font-mono hover:underline">{{ e.lote.numeroLote }}</RouterLink>
                   · {{ fecha(e.fecha) }}<template v-if="e.entregadoPor"> · entregó {{ e.entregadoPor }}</template>

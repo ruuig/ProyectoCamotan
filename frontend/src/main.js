@@ -9,6 +9,7 @@ import './dominio/instalacion';
 import router from './router';
 import { registrarManejadorSesionExpirada } from './services/http';
 import { useAuthStore } from './stores/auth';
+import { iniciarAmpliar } from './dominio/ampliar';
 
 const app = createApp(App);
 
@@ -31,3 +32,6 @@ document.addEventListener('wheel', (e) => {
 }, { passive: true });
 
 app.mount('#app');
+
+// Botón «Ampliar» en los paneles y tamaño de letra elegido en este equipo.
+iniciarAmpliar();

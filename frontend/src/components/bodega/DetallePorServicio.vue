@@ -50,7 +50,7 @@ const conAjustes = computed(() => esBodega.value && filas.value.some((x) => x.aj
         :class="[lugarId === l.id ? 'on' : '', typeof l.id === 'string' ? 'propio' : '']"
         @click="lugarId = l.id"
       >
-        <span class="truncate">{{ l.nombre }}</span>
+        <span class="nombre-completo">{{ l.nombre }}</span>
         <span v-if="!l.informado" class="b-estado cuarentena">Sin informe</span>
       </button>
     </nav>

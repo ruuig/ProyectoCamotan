@@ -1,5 +1,5 @@
 /**
- * Requisicion Despacho de Almacen (FOR-ASE-01). Todo lo que sale de la
+ * Requisicion Despacho de Almacen (FOR-ASB-01). Todo lo que sale de la
  * bodega a un servicio, a la farmacia incluida, sale por una requisicion:
  * el servicio pide (cantidad solicitada), la bodega autoriza (cantidad
  * autorizada) y despacha (cantidad despachada). El despacho es un traslado,
@@ -14,6 +14,8 @@ const { lotesPepe, validarFechasLote } = require('../services/bodega.service');
 const { registrarIngreso } = require('../services/movimientos.service');
 const { enUbicacion } = require('../services/inventario.service');
 const { configuracion, limitesDePeriodo } = require('../services/abastecimiento.service');
+const { sugerenciaServicio, sugerenciaDdriss } = require('../services/bodegaDatos.service');
+const { numerosDe } = require('../services/hojasRequisicion');
 const { errorDestino, registrarTraslado } = require('../services/traslados.service');
 const {
   TIPOS_REQUISICION, descripcionInsumo, tiposSugeridos, cantidadADespachar, ESTADOS_EDITABLES,
@@ -24,9 +26,46 @@ const ALMACEN_SUPERIOR = 'Almacén DDRISS Chiquimula';
 const SOLO_SERVICIO = { status: 409, codigo: 'es_hacia_arriba', mensaje: 'Esta requisición se pidió a la DDRISS: lo que llega se recibe, no se despacha' };
 const NUMERO_REPETIDO = { status: 409, codigo: 'numero_repetido', mensaje: 'Ya hay una requisición registrada con ese número' };
 
+/**
+ * Cada hoja del formulario trae su número: una requisición de 4 hojas que
+ * empieza en 0156 usa 0156 a 0159. Si algún número ya lo usa otra
+ * requisición, se avisa con cuál, para no repetir hojas.
+ */
+async function choqueDeNumeros(establecimientoId, idPropio, numero, descripciones) {
+  if (!numero) return null;
+  const propios = numerosDe(numero, descripciones);
+  const otras = await prisma.requisicion.findMany({
+    where: { establecimientoId, numero: { not: null }, estado: { not: 'anulada' }, ...(idPropio ? { NOT: { id: idPropio } } : {}) },
+    select: { numero: true, unidadSeccion: true, renglones: { select: { descripcion: true }, orderBy: { orden: 'asc' } } },
+  });
+  for (const o of otras) {
+    const usados = numerosDe(o.numero, o.renglones.map((g) => g.descripcion));
+    const repetidos = propios.filter((n) => usados.includes(n));
+    if (repetidos.length) {
+      const rango = (l) => (l.length > 1 ? `${l[0]} a ${l[l.length - 1]}` : l[0]);
+      return {
+        status: 409,
+        codigo: 'numero_repetido',
+        mensaje: `${repetidos.length === 1 ? 'El número' : 'Los números'} ${rango(repetidos)} ya ${repetidos.length === 1 ? 'es' : 'son'} de la requisición de ${o.unidadSeccion} (${rango(usados)}). Esta ocupa ${propios.length} ${propios.length === 1 ? 'hoja' : 'hojas'}: ${rango(propios)}.`,
+      };
+    }
+  }
+  return null;
+}
+
 // Farmacia hace las requisiciones de la farmacia; la bodega, las de todos.
 const esFarmacia = (req) => req.usuario.rol === 'farmacia';
-const permitida = (req, ubicacion) => !esFarmacia(req) || ubicacion?.tipo === 'centro_salud';
+// El encargado de un centro o puesto solo ve y pide para su ubicación.
+const esServicio = (req) => req.usuario.rol === 'servicio';
+const permitida = (req, ubicacion) => {
+  if (esFarmacia(req)) return ubicacion?.tipo === 'centro_salud';
+  if (esServicio(req)) return Boolean(ubicacion) && ubicacion.id === req.usuario.ubicacionId;
+  return true;
+};
+/** Farmacia y los encargados solo manejan sus pedidos hacia la bodega. */
+const soloPedidos = (req) => esFarmacia(req) || esServicio(req);
+/** El encargado corrige o anula su requisición solo mientras bodega no la atiende. */
+const SIN_ATENDER = { status: 409, codigo: 'ya_atendida', mensaje: 'Bodega ya atendió esta requisición: pida el cambio a bodega' };
 
 const INCLUIR = {
   ubicacion: { select: { id: true, nombre: true, tipo: true } },
@@ -34,7 +73,7 @@ const INCLUIR = {
   usuarioAutoriza: { select: { nombre: true } },
   usuarioDespacha: { select: { nombre: true } },
   usuarioAnula: { select: { nombre: true } },
-  renglones: { orderBy: { orden: 'asc' }, include: { insumo: { select: { id: true, codigoInterno: true, categoria: true } } } },
+  renglones: { orderBy: { orden: 'asc' }, include: { insumo: { select: { id: true, codigoInterno: true, categoria: true, ubicacionFisica: true } } } },
   lotes: { orderBy: { id: 'asc' }, select: { id: true, insumoId: true, numeroLote: true, fechaVence: true, cantidadInicial: true } },
   traslado: {
     select: {
@@ -59,6 +98,8 @@ function vista(r) {
   return {
     id: r.id,
     numero: r.numero,
+    // Un número por hoja del formulario: 0156, 0157…
+    numeros: numerosDe(r.numero, r.renglones.map((g) => g.descripcion)),
     estado: r.estado,
     direccion: r.direccion,
     almacen: r.almacen,
@@ -87,6 +128,8 @@ function vista(r) {
       orden: g.orden,
       insumoId: g.insumoId,
       codigoInterno: g.insumo?.codigoInterno ?? null,
+      // Dónde buscarlo en la bodega al despachar.
+      ubicacionFisica: g.insumo?.ubicacionFisica ?? null,
       descripcion: g.descripcion,
       unidadMedida: g.unidadMedida,
       cantidadSolicitada: g.cantidadSolicitada,
@@ -131,6 +174,7 @@ async function listar(req, res) {
   if (req.query.ubicacionId) where.ubicacionId = req.query.ubicacionId;
   if (req.query.direccion) where.direccion = req.query.direccion;
   if (esFarmacia(req)) Object.assign(where, { ubicacion: { tipo: 'centro_salud' }, direccion: 'servicio' });
+  if (esServicio(req)) Object.assign(where, { ubicacionId: req.usuario.ubicacionId ?? 0, direccion: 'servicio' });
   if (req.query.periodo) {
     const { desde, hasta } = limitesDePeriodo(req.query.periodo);
     where.fechaSolicitud = { gte: desde, lt: hasta };
@@ -141,7 +185,7 @@ async function listar(req, res) {
     take: 300,
     include: {
       ubicacion: { select: { nombre: true } },
-      renglones: { select: { cantidadSolicitada: true, cantidadAutorizada: true, cantidadDespachada: true } },
+      renglones: { select: { descripcion: true, cantidadSolicitada: true, cantidadAutorizada: true, cantidadDespachada: true }, orderBy: { orden: 'asc' } },
     },
   });
   res.json({
@@ -149,6 +193,7 @@ async function listar(req, res) {
     requisiciones: lista.map((r) => ({
       id: r.id,
       numero: r.numero,
+      numeros: numerosDe(r.numero, r.renglones.map((g) => g.descripcion)),
       estado: r.estado,
       direccion: r.direccion,
       almacen: r.almacen,
@@ -168,7 +213,7 @@ async function listar(req, res) {
 
 async function obtener(req, res, next) {
   const r = await cargar(req);
-  if (!r || !permitida(req, r.ubicacion) || (esFarmacia(req) && r.direccion !== 'servicio')) return next(NO_ENCONTRADA);
+  if (!r || !permitida(req, r.ubicacion) || (soloPedidos(req) && r.direccion !== 'servicio')) return next(NO_ENCONTRADA);
   const ids = [...new Set(r.renglones.map((g) => g.insumoId).filter(Boolean))];
   res.json({
     requisicion: vista(r),
@@ -225,15 +270,18 @@ function datosCabecera(body, ubicacion) {
 async function solicitante(req) {
   const establecimientoId = req.usuario.establecimientoId;
   if (req.body.direccion === 'superior') {
-    if (esFarmacia(req)) return { error: { status: 403, codigo: 'sin_permiso', mensaje: 'Las requisiciones a la DDRISS las hace bodega' } };
+    if (soloPedidos(req)) return { error: { status: 403, codigo: 'sin_permiso', mensaje: 'Las requisiciones a la DDRISS las hace bodega' } };
     const bodega = await prisma.ubicacion.findFirst({ where: { establecimientoId, tipo: 'bodega' } });
     if (!bodega) return { error: { status: 409, codigo: 'sin_bodega', mensaje: 'El centro no tiene bodega registrada' } };
     return { ubicacion: bodega };
   }
-  const ubicacion = await prisma.ubicacion.findFirst({ where: { id: req.body.ubicacionId ?? 0, establecimientoId } });
+  const ubicacionId = esServicio(req) ? req.usuario.ubicacionId : req.body.ubicacionId;
+  const ubicacion = await prisma.ubicacion.findFirst({ where: { id: ubicacionId ?? 0, establecimientoId } });
   const falla = errorDestino(ubicacion);
   if (falla) return { error: { ...falla, mensaje: 'Las requisiciones son de la farmacia del centro, de los puestos de salud y de los centros comunitarios' } };
-  if (!permitida(req, ubicacion)) return { error: { status: 403, codigo: 'sin_permiso', mensaje: 'Farmacia solo registra las requisiciones de la farmacia' } };
+  if (!permitida(req, ubicacion)) {
+    return { error: { status: 403, codigo: 'sin_permiso', mensaje: esServicio(req) ? 'Solo puede pedir para su centro o puesto' : 'Farmacia solo registra las requisiciones de la farmacia' } };
+  }
   return { ubicacion };
 }
 
@@ -244,6 +292,8 @@ async function crear(req, res, next) {
 
   const { filas, insumos, error } = await prepararRenglones(establecimientoId, req.body.renglones);
   if (error) return next(error);
+  const choque = await choqueDeNumeros(establecimientoId, null, req.body.numero, filas.map((f) => f.descripcion));
+  if (choque) return next(choque);
 
   let creada;
   try {
@@ -276,6 +326,7 @@ async function actualizar(req, res, next) {
   if (!ESTADOS_EDITABLES.includes(r.estado)) {
     return next({ status: 409, codigo: 'no_editable', mensaje: `Una requisición ${r.estado} ya no se corrige` });
   }
+  if (esServicio(req) && r.estado !== 'solicitada') return next(SIN_ATENDER);
   const establecimientoId = req.usuario.establecimientoId;
   if ((req.body.direccion === 'superior') !== (r.direccion === 'superior')) {
     return next({ status: 409, codigo: 'otra_direccion', mensaje: 'No se cambia a quién se pide: anule esta y registre otra' });
@@ -284,6 +335,8 @@ async function actualizar(req, res, next) {
   if (fallaSolicitante) return next(fallaSolicitante);
   const { filas, insumos, error } = await prepararRenglones(establecimientoId, req.body.renglones);
   if (error) return next(error);
+  const choque = await choqueDeNumeros(establecimientoId, r.id, req.body.numero, filas.map((f) => f.descripcion));
+  if (choque) return next(choque);
 
   try {
     await prisma.$transaction([
@@ -354,6 +407,10 @@ async function despachar(req, res, next) {
   }
   if (!r.numero && !req.body.numero) {
     return next({ status: 400, codigo: 'sin_numero', mensaje: 'Anote el número del formulario de la requisición antes de despachar' });
+  }
+  if (req.body.numero && req.body.numero !== r.numero) {
+    const choque = await choqueDeNumeros(establecimientoId, r.id, req.body.numero, r.renglones.map((g) => g.descripcion));
+    if (choque) return next(choque);
   }
   const ubicacion = await prisma.ubicacion.findUnique({ where: { id: r.ubicacionId } });
   const fallaDestino = errorDestino(ubicacion);
@@ -455,12 +512,20 @@ async function recibir(req, res, next) {
   if (!['solicitada', 'autorizada', 'parcial'].includes(r.estado)) {
     return next({ status: 409, codigo: 'no_recibible', mensaje: `La requisición ya está ${r.estado}` });
   }
-  const porId = new Map(r.renglones.map((g) => [g.id, g]));
+  const porId = new Map(r.renglones.map((g) => ({ ...g })).map((g) => [g.id, g]));
   const entradas = req.body.renglones ?? [];
   const vistos = new Set();
+  const enlazados = [];
   for (const e of entradas) {
     const g = porId.get(e.id);
     if (!g) return next({ status: 404, codigo: 'renglon_no_encontrado', mensaje: 'Uno de los renglones no es de esta requisición' });
+    // Se pidió escrito a mano y al llegar bodega lo creó: entra con su lote.
+    if (!g.insumoId && e.insumoId) {
+      const insumo = await prisma.insumo.findFirst({ where: { id: e.insumoId, establecimientoId: req.usuario.establecimientoId } });
+      if (!insumo) return next({ status: 404, codigo: 'insumo_no_encontrado', mensaje: `${g.descripcion}: el producto no existe` });
+      g.insumoId = insumo.id;
+      enlazados.push(g);
+    }
     for (const l of e.lotes ?? []) {
       if (!g.insumoId) return next({ status: 400, codigo: 'sin_catalogo', mensaje: `${g.descripcion} no está en el catálogo: anote solo la cantidad` });
       const fechas = validarFechasLote(l);
@@ -474,6 +539,9 @@ async function recibir(req, res, next) {
 
   const recibido = new Map();
   await prisma.$transaction(async (tx) => {
+    for (const g of enlazados) {
+      await tx.requisicionRenglon.update({ where: { id: g.id }, data: { insumoId: g.insumoId } });
+    }
     for (const e of entradas) {
       const g = porId.get(e.id);
       let suma = 0;
@@ -532,6 +600,8 @@ async function entregar(req, res, next) {
   if (fallaSolicitante) return next(fallaSolicitante);
   const { filas, insumos, error } = await prepararRenglones(establecimientoId, req.body.renglones.map((g) => ({ ...g, cantidadSolicitada: g.cantidad })));
   if (error) return next(error);
+  const choque = await choqueDeNumeros(establecimientoId, null, req.body.numero, filas.map((f) => f.descripcion));
+  if (choque) return next(choque);
 
   const ids = [...new Set(filas.map((f) => f.insumoId).filter(Boolean))];
   const lotes = await prisma.lote.findMany({ where: { insumoId: { in: ids }, insumo: { establecimientoId } } });
@@ -609,6 +679,8 @@ async function entregar(req, res, next) {
 async function anotarNumero(req, res, next) {
   const r = await cargar(req);
   if (!r || !permitida(req, r.ubicacion)) return next(NO_ENCONTRADA);
+  const choque = await choqueDeNumeros(req.usuario.establecimientoId, r.id, req.body.numero, r.renglones.map((g) => g.descripcion));
+  if (choque) return next(choque);
   try {
     await prisma.requisicion.update({ where: { id: r.id }, data: { numero: req.body.numero } });
   } catch (e) {
@@ -622,7 +694,11 @@ async function anotarNumero(req, res, next) {
 /** Quien firmo la ultima requisicion de cada servicio: se propone en la siguiente. */
 async function solicitantes(req, res) {
   const ultimas = await prisma.requisicion.findMany({
-    where: { establecimientoId: req.usuario.establecimientoId, direccion: 'servicio' },
+    where: {
+      establecimientoId: req.usuario.establecimientoId,
+      direccion: 'servicio',
+      ...(esServicio(req) ? { ubicacionId: req.usuario.ubicacionId ?? 0 } : {}),
+    },
     orderBy: { registradaEn: 'desc' },
     distinct: ['ubicacionId'],
     select: { ubicacionId: true, solicitante: true, jefe: true, unidadSeccion: true },
@@ -630,9 +706,26 @@ async function solicitantes(req, res) {
   res.json({ solicitantes: Object.fromEntries(ultimas.map((u) => [u.ubicacionId, u])) });
 }
 
+/**
+ * La requisición ya llena para un centro o puesto: lo que le falta para llegar
+ * al nivel máximo según sus informes. El encargado solo pide para el suyo.
+ */
+async function sugerida(req, res, next) {
+  const ubicacionId = esServicio(req) ? req.usuario.ubicacionId : req.query.ubicacionId;
+  const s = await sugerenciaServicio(req.usuario.establecimientoId, ubicacionId ?? 0);
+  if (!s || !permitida(req, s.ubicacion)) return next(NO_ENCONTRADA);
+  res.json(s);
+}
+
+/** La requisición a la DDRISS ya llena con lo que el BRES dice que hay que pedir. */
+async function sugeridaDdriss(req, res) {
+  res.json(await sugerenciaDdriss(req.usuario.establecimientoId, req.query.periodo));
+}
+
 async function anular(req, res, next) {
   const r = await cargar(req);
   if (!r || !permitida(req, r.ubicacion)) return next(NO_ENCONTRADA);
+  if (esServicio(req) && r.estado !== 'solicitada') return next(SIN_ATENDER);
   if (!ESTADOS_EDITABLES.includes(r.estado)) {
     const motivos = {
       despachada: 'Ya se despachó: lo que regrese entra como devolución',
@@ -651,5 +744,5 @@ async function anular(req, res, next) {
 }
 
 module.exports = {
-  listar, obtener, crear, actualizar, autorizar, despachar, recibir, anular, entregar, anotarNumero, solicitantes, existencias, ALMACEN_SUPERIOR,
+  listar, obtener, crear, actualizar, autorizar, despachar, recibir, anular, entregar, anotarNumero, solicitantes, sugerida, sugeridaDdriss, existencias, ALMACEN_SUPERIOR,
 };

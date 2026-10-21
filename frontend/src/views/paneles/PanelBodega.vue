@@ -44,7 +44,7 @@ onMounted(async () => {
     intentar(inventario.insumos()),
   ]);
   hoy.value = h;
-  pedidos.value = (r?.requisiciones ?? []).filter((x) => ['solicitada', 'autorizada'].includes(x.estado))
+  pedidos.value = (r?.requisiciones ?? []).filter((x) => x.direccion !== 'superior' && ['solicitada', 'autorizada'].includes(x.estado))
     .sort((a, b) => new Date(a.fechaSolicitud) - new Date(b.fechaSolicitud));
   balance.value = b;
   semaforo.value = s?.resumen ?? null;
@@ -285,7 +285,7 @@ const lotes = computed(() => partesSemaforo.value.reduce((t, p) => t + p.valor, 
 .faltan { display: grid; gap: 8px; }
 .falta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: var(--t-fondo); border: 2px solid transparent; }
 .falta:hover { border-color: var(--t-borde); }
-.nombre { display: block; font-size: 15px; font-weight: 800; color: #14244A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nombre { display: block; font-size: 15px; font-weight: 800; color: #14244A; white-space: normal; overflow-wrap: anywhere; }
 .datos { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 2px; font-size: 13px; font-weight: 600; color: var(--t-tinta); }
 .datos b { font-weight: 900; }
 .estado { padding: 3px 10px; border-radius: 10px; background: var(--t); color: #fff; font-size: 13px; font-weight: 900; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .18); }

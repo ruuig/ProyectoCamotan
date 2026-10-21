@@ -19,7 +19,7 @@ export default {
   traslado: (id) => http.get(`/bodega/traslados/${id}`),
   trasladar: (datos, clave) => http.post('/bodega/traslados', datos, clave ? { 'Idempotency-Key': clave } : undefined),
 
-  // Requisición Despacho de Almacén (FOR-ASE-01).
+  // Requisición Despacho de Almacén (FOR-ASB-01).
   requisiciones: (parametros) => http.get(`/bodega/requisiciones?${consulta(parametros)}`),
   requisicion: (id) => http.get(`/bodega/requisiciones/${id}`),
   crearRequisicion: (datos, clave) => http.post('/bodega/requisiciones', datos, clave ? { 'Idempotency-Key': clave } : undefined),
@@ -32,6 +32,12 @@ export default {
   entregar: (datos, clave) => http.post('/bodega/requisiciones/entregar', datos, clave ? { 'Idempotency-Key': clave } : undefined),
   anotarNumero: (id, numero) => http.patch(`/bodega/requisiciones/${id}/numero`, { numero }),
   solicitantes: () => http.get('/bodega/requisiciones/solicitantes'),
+  // Dónde está el producto en la bodega (estante, repisa).
+  cambiarUbicacion: (insumoId, ubicacionFisica) => http.patch(`/bodega/insumos/${insumoId}/ubicacion`, { ubicacionFisica }),
+  // Requisición a la DDRISS ya llena con la cantidad a pedir del BRES.
+  sugeridaDdriss: (periodo) => http.get(`/bodega/requisiciones/sugerida-ddriss${periodo ? `?periodo=${periodo}` : ''}`),
+  // Requisición ya llena de un centro o puesto (el encargado: la suya).
+  sugerida: (ubicacionId) => http.get(`/bodega/requisiciones/sugerida${ubicacionId ? `?ubicacionId=${ubicacionId}` : ''}`),
 
   // Recepción: lo que llega con su documento.
   recepciones: () => http.get('/bodega/recepciones'),

@@ -552,6 +552,21 @@ async function cambiarPrescribible(req, res, next) {
   res.json({ insumo: { id: actualizado.id, prescribible: actualizado.prescribible } });
 }
 
+/** Dónde está el producto en la bodega (estante, repisa). Vacío lo quita. */
+async function cambiarUbicacionFisica(req, res, next) {
+  const insumo = await prisma.insumo.findFirst({
+    where: { id: Number(req.params.id), establecimientoId: req.usuario.establecimientoId },
+  });
+  if (!insumo) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Insumo no encontrado' });
+  const ubicacionFisica = req.body.ubicacionFisica || null;
+  await prisma.insumo.update({ where: { id: insumo.id }, data: { ubicacionFisica } });
+  await req.bitacora({
+    accion: 'actualizar', entidad: 'insumo', entidadId: insumo.id,
+    detalle: `${insumo.nombreGenerico}: ubicación ${ubicacionFisica ?? '(sin ubicación)'}`,
+  });
+  res.json({ insumo: { id: insumo.id, ubicacionFisica } });
+}
+
 async function listarAlias(req, res) {
   const alias = await prisma.insumoAlias.findMany({
     where: { insumoId: Number(req.params.id), insumo: { establecimientoId: req.usuario.establecimientoId } },
@@ -669,6 +684,8 @@ async function exportarBres(req, res) {
  */
 async function kardex(req, res) {
   const { periodo, insumoId, desde } = req.query;
+  // Farmacia solo ve su propia tarjeta (la existencia de su estante).
+  const ubicacion = req.usuario.rol === 'farmacia' ? 'farmacia' : (req.query.ubicacion ?? 'bodega');
   // "Desde" sirve para lo que falta pasar a las tarjetas: desde la ultima vez.
   const rango = desde ? { desde: new Date(`${desde}T06:00:00Z`) } : periodo ? limitesDePeriodo(periodo) : {};
   const tarjetas = await kardexDe(req.usuario.establecimientoId, {
@@ -676,18 +693,20 @@ async function kardex(req, res) {
     desde: rango.desde ?? null,
     hasta: rango.hasta ?? null,
     soloConMovimiento: !insumoId,
+    ubicacion,
   });
   await req.bitacora({
     accion: 'leer',
     entidad: 'kardex',
     entidadId: insumoId ?? null,
-    detalle: `Kardex${periodo ? ` ${periodo}` : ''}: ${tarjetas.length} producto(s)`,
+    detalle: `Kardex de ${ubicacion}${periodo ? ` ${periodo}` : ''}: ${tarjetas.length} producto(s)`,
   });
-  res.json({ periodo: periodo ?? null, encabezado: await encabezadoKardex(req.usuario.establecimientoId), tarjetas });
+  res.json({ periodo: periodo ?? null, ubicacion, encabezado: await encabezadoKardex(req.usuario.establecimientoId, ubicacion), tarjetas });
 }
 
 module.exports = {
   kardex,
+  cambiarUbicacionFisica,
   listarUbicaciones,
   crearUbicacion,
   actualizarUbicacion,

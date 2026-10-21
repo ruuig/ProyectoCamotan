@@ -61,7 +61,9 @@ model Usuario {
   passwordHash      String   @map("password_hash")
   nombre            String
   dpi               String?  @unique // solo identificador, NO es secreto
-  rol               String // admin | preconsulta | medico | farmacia | bodega
+  rol               String // admin | preconsulta | medico | farmacia | bodega | servicio
+  // Encargado de servicio: el centro o puesto que maneja. Solo ve esa ubicación.
+  ubicacionId       Int?     @map("ubicacion_id")
   esDirector        Boolean  @default(false) @map("es_director")
   // Cargo bajo su firma en los formularios impresos (SIGSA y demas).
   cargo             String?
@@ -70,6 +72,7 @@ model Usuario {
   creadoEn          DateTime @default(now()) @map("creado_en")
 
   establecimiento      Establecimiento          @relation(fields: [establecimientoId], references: [id])
+  ubicacion            Ubicacion?               @relation(fields: [ubicacionId], references: [id], onDelete: SetNull)
   bitacora             Bitacora[]
   dispensaciones       Dispensacion[]
   movimientos          MovimientoInsumo[]
@@ -111,6 +114,7 @@ model Usuario {
   configRespaldo       ConfiguracionRespaldo[]  @relation("ConfigRespaldoPor")
 
   @@index([establecimientoId, rol])
+  @@index([ubicacionId], map: "usuario_ubicacion")
   @@map("usuario")
 }
 
@@ -510,6 +514,8 @@ model Insumo {
   // quirurgico se usan en el servicio y no se entregan al paciente.
   prescribible       Boolean  @default(true)
   activo             Boolean  @default(true)
+  // Dónde está en la bodega (estante, repisa), cuando ya está etiquetado. Opcional.
+  ubicacionFisica    String?  @map("ubicacion_fisica")
 
   establecimiento           Establecimiento             @relation(fields: [establecimientoId], references: [id])
   lotes                     Lote[]
@@ -1091,6 +1097,7 @@ model Ubicacion {
   traslados       Traslado[]
   informes        InformeServicio[]
   requisiciones   Requisicion[]
+  encargados      Usuario[]
 
   @@unique([establecimientoId, nombre], map: "ubicacion_nombre_unico")
   @@map("ubicacion")

@@ -2,6 +2,7 @@
 import { CARGOS_SIGSA, CARGOS_OTROS } from '../../dominio/cargos';
 import { ref, reactive, computed, onMounted } from 'vue';
 import http from '../../services/http';
+import bodega from '../../services/bodega';
 import { useAuthStore } from '../../stores/auth';
 import { usarAutorizacion } from '../../dominio/autorizacion';
 import DialogoAutorizacion from '../comunes/DialogoAutorizacion.vue';
@@ -18,6 +19,8 @@ const ROLES = [
   { valor: 'medico', texto: 'Médico', color: '#1F7A4D', fondo: '#E3F4EA' },
   { valor: 'farmacia', texto: 'Farmacia', color: '#6B44A8', fondo: '#F0EAFA' },
   { valor: 'bodega', texto: 'Bodega', color: '#A6561A', fondo: '#FDEEE2' },
+  // Encargado de un puesto o centro comunitario: sus requisiciones y su informe.
+  { valor: 'servicio', texto: 'Encargado de servicio', color: '#0F766E', fondo: '#DFF5F2' },
 ];
 const ROL = Object.fromEntries(ROLES.map((r) => [r.valor, r]));
 const CARGOS = [...CARGOS_SIGSA.map((c) => c.nombre), ...CARGOS_OTROS];
@@ -33,8 +36,10 @@ const guardando = ref(false);
 const verClave = ref(false);
 
 const datos = reactive({ nombre: '', cargo: '', dpi: '' });
-const acceso = reactive({ rol: 'preconsulta', esDirector: false, password: '' });
-const nuevo = reactive({ usuario: '', nombre: '', cargo: '', dpi: '', rol: 'preconsulta', esDirector: false, password: '' });
+const acceso = reactive({ rol: 'preconsulta', esDirector: false, password: '', ubicacionId: null });
+// Centros y puestos que puede manejar un encargado de servicio (no la bodega).
+const lugares = ref([]);
+const nuevo = reactive({ usuario: '', nombre: '', cargo: '', dpi: '', rol: 'preconsulta', esDirector: false, password: '', ubicacionId: null });
 
 const iniciales = (n) => n.split(/\s+/).filter((p) => p && !p.endsWith('.')).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 
@@ -47,11 +52,14 @@ const lista = computed(() => {
 const conteo = computed(() => Object.fromEntries(ROLES.map((r) => [r.valor, usuarios.value.filter((u) => u.rol === r.valor && u.activo).length])));
 const elegido = computed(() => usuarios.value.find((u) => u.id === seleccion.value) ?? null);
 const accesoCambiado = computed(() => elegido.value && (
-  acceso.rol !== elegido.value.rol || acceso.esDirector !== elegido.value.esDirector || acceso.password.length > 0));
+  acceso.rol !== elegido.value.rol || acceso.esDirector !== elegido.value.esDirector || acceso.password.length > 0
+  || (acceso.rol === 'servicio' && acceso.ubicacionId !== elegido.value.ubicacionId)));
 
 async function cargar() {
   try {
-    usuarios.value = (await http.get('/admin/usuarios')).usuarios;
+    const [u, l] = await Promise.all([http.get('/admin/usuarios'), bodega.ubicaciones().catch(() => ({ ubicaciones: [] }))]);
+    usuarios.value = u.usuarios;
+    lugares.value = l.ubicaciones.filter((x) => x.tipo !== 'bodega');
   } catch (fallo) {
     error.value = fallo.message;
   }
@@ -60,7 +68,7 @@ async function cargar() {
 function elegir(u) {
   seleccion.value = u.id;
   Object.assign(datos, { nombre: u.nombre, cargo: u.cargo ?? '', dpi: u.dpi ?? '' });
-  Object.assign(acceso, { rol: u.rol, esDirector: u.esDirector, password: '' });
+  Object.assign(acceso, { rol: u.rol, esDirector: u.esDirector, password: '', ubicacionId: u.ubicacionId ?? null });
   verClave.value = false;
   error.value = '';
   aviso.value = '';
@@ -68,7 +76,7 @@ function elegir(u) {
 
 function abrirNuevo() {
   seleccion.value = 'nuevo';
-  Object.assign(nuevo, { usuario: '', nombre: '', cargo: '', dpi: '', rol: 'preconsulta', esDirector: false, password: '' });
+  Object.assign(nuevo, { usuario: '', nombre: '', cargo: '', dpi: '', rol: 'preconsulta', esDirector: false, password: '', ubicacionId: null });
   verClave.value = false;
   error.value = '';
   aviso.value = '';
@@ -91,6 +99,7 @@ async function crear() {
   try {
     const { usuario } = await http.post('/admin/usuarios', {
       ...nuevo,
+      ubicacionId: nuevo.rol === 'servicio' ? nuevo.ubicacionId : null,
       cargo: nuevo.cargo || null,
       dpi: nuevo.dpi || null,
     });
@@ -132,6 +141,7 @@ function cambiarAcceso() {
   const cuerpo = {};
   if (acceso.rol !== u.rol) cuerpo.rol = acceso.rol;
   if (acceso.esDirector !== u.esDirector) cuerpo.esDirector = acceso.esDirector;
+  if (acceso.rol === 'servicio' && acceso.ubicacionId !== u.ubicacionId) cuerpo.ubicacionId = acceso.ubicacionId;
   if (acceso.password) cuerpo.password = acceso.password;
   autorizacion.pedir(`cambiar el acceso de ${u.usuario}`, async (aut) => {
     await http.patch(`/admin/usuarios/${u.id}/acceso`, { ...cuerpo, autorizacion: aut });
@@ -177,7 +187,7 @@ onMounted(cargar);
               <b class="nombre">{{ u.nombre }}</b>
               <small class="detalle">
                 <span class="font-mono">{{ u.usuario }}</span>
-                <template v-if="u.cargo"> · {{ u.cargo }}</template>
+                <template v-if="u.cargo"> · {{ u.cargo }}</template><template v-if="u.ubicacion"> · {{ u.ubicacion.nombre }}</template>
                 <template v-else> · <i class="sin-cargo">sin cargo</i></template>
               </small>
             </span>
@@ -211,6 +221,13 @@ onMounted(cargar);
             <label for="n-rol" class="b-etiqueta">Rol</label>
             <select id="n-rol" v-model="nuevo.rol" class="b-campo">
               <option v-for="r in ROLES" :key="r.valor" :value="r.valor">{{ r.texto }}</option>
+            </select>
+          </div>
+          <div v-if="nuevo.rol === 'servicio'" class="c12">
+            <label for="n-lugar" class="b-etiqueta">Centro o puesto que maneja</label>
+            <select id="n-lugar" v-model="nuevo.ubicacionId" required class="b-campo">
+              <option :value="null" disabled>Elija…</option>
+              <option v-for="l in lugares" :key="l.id" :value="l.id">{{ l.nombre }}</option>
             </select>
           </div>
           <div class="c12">
@@ -284,6 +301,13 @@ onMounted(cargar);
               <label for="e-rol" class="b-etiqueta">Rol</label>
               <select id="e-rol" v-model="acceso.rol" class="b-campo">
                 <option v-for="r in ROLES" :key="r.valor" :value="r.valor">{{ r.texto }}</option>
+              </select>
+            </div>
+            <div v-if="acceso.rol === 'servicio'" class="c12">
+              <label for="e-lugar" class="b-etiqueta">Centro o puesto que maneja</label>
+              <select id="e-lugar" v-model="acceso.ubicacionId" class="b-campo">
+                <option :value="null" disabled>Elija…</option>
+                <option v-for="l in lugares" :key="l.id" :value="l.id">{{ l.nombre }}</option>
               </select>
             </div>
             <div class="c6">

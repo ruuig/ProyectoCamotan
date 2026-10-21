@@ -1,5 +1,8 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue';
+import { textoNumero } from '../../dominio/hojasRequisicion';
+import { usarBorrador } from '../../dominio/borrador';
+import AvisoBorrador from '../../components/comunes/AvisoBorrador.vue';
 import { RouterLink, useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import inventario from '../../services/inventario';
@@ -13,7 +16,7 @@ import { estiloTono } from '../../components/bodega/diseno/PiezasBodega';
 
 /**
  * Requisiciones: la bodega registra lo que entrega y el sistema genera la
- * requisición (FOR-ASE-01) lista para imprimir sobre el formulario.
+ * requisición (FOR-ASB-01) lista para imprimir sobre el formulario.
  * Sale de los lotes que vencen primero. El número del formulario se puede
  * anotar después.
  */
@@ -50,6 +53,8 @@ async function cargar() {
       bodega.requisiciones(), bodega.ubicaciones().catch(() => ({ ubicaciones: [] })), inventario.insumos(), bodega.solicitantes().catch(() => ({ solicitantes: {} })),
     ]);
     lista.value = r.requisiciones.filter((x) => x.direccion !== 'superior');
+    // Lo primero que bodega ve es lo que le piden, si hay algo esperando.
+    if (!route.query.ver && porAtender.value.length && vista.value === 'nueva' && !renglones.value.length) vista.value = 'pedidos';
     tipos.value = r.tipos;
     lugares.value = u.ubicaciones
       .filter((x) => x.activo !== false && (x.tipo === 'centro_salud' || (esBodega.value && (x.tipo === 'unidad_interna' || x.informa))))
@@ -65,6 +70,10 @@ async function cargar() {
 const VACIA = () => ({ numero: '', ubicacionId: '', unidadSeccion: '', fechaSolicitud: hoy(), solicitante: '', jefe: '', tipos: [], observaciones: '' });
 const nueva = reactive(VACIA());
 const renglones = ref([]);
+// Lo que se está armando no se pierde al ir a otra pantalla.
+const borrador = usarBorrador('entregar', { nueva, renglones }, { vacio: (d) => !d.renglones.length && !d.nueva.ubicacionId });
+let restaurando = false;
+function empezarDeNuevo() { Object.assign(nueva, VACIA()); renglones.value = []; borrador.limpiar(); }
 const elegido = ref(null);
 const cantidad = ref('');
 const libre = reactive({ descripcion: '', unidadMedida: 'Unidad', cantidad: '' });
@@ -72,6 +81,7 @@ const ultima = ref(null);
 
 // Al elegir el lugar se propone quien firmó la última vez.
 watch(() => nueva.ubicacionId, (id) => {
+  if (restaurando) return;
   const s = solicitantes.value[id];
   const lugar = lugares.value.find((l) => l.id === Number(id));
   nueva.solicitante = s?.solicitante ?? '';
@@ -148,6 +158,7 @@ async function entregar() {
     aviso.value = `Entregado a ${r.requisicion.unidadSeccion}.${r.requisicion.numero ? '' : ' Falta anotar el número del formulario.'}`;
     Object.assign(nueva, VACIA());
     renglones.value = [];
+    borrador.limpiar();
     await cargar();
     window.open(`/imprimir/requisicion/${r.requisicion.id}`, '_blank');
   } catch (fallo) {
@@ -215,15 +226,28 @@ async function guardarNumero() {
   }
 }
 
-onMounted(cargar);
+onMounted(() => {
+  restaurando = true;
+  if (borrador.recuperar()) vista.value = 'nueva';
+  nextTick(() => { restaurando = false; });
+  cargar();
+});
 </script>
 
 <template>
   <section>
     <header class="b-cabecera">
-      <div><p class="b-antetitulo">Requisiciones</p><h1 class="b-titulo">Pedidos de los servicios</h1></div>
+      <div class="flex flex-wrap items-end gap-4">
+        <div><p class="b-antetitulo">Requisiciones</p><h1 class="b-titulo">Salidas</h1></div>
+        <RouterLink to="/inventario/pedir-ddriss" class="b-btn secundario chico"><Icono nombre="trasladar" :tamano="16" /> Requisición</RouterLink>
+      </div>
       <div class="b-segmentado" role="radiogroup" aria-label="Vista">
-        <button v-for="m in [['nueva', 'Entregar'], ['pedidos', `Por atender (${porAtender.length})`], ['registradas', `Entregadas (${entregadas.length})`]]" :key="m[0]" type="button" role="radio" :aria-checked="vista === m[0]" :class="vista === m[0] ? 'on' : ''" @click="vista = m[0]">{{ m[1] }}</button>
+        <button type="button" role="radio" :aria-checked="vista === 'nueva'" :class="vista === 'nueva' ? 'on' : ''" @click="vista = 'nueva'">Entregar</button>
+        <!-- Con pedidos esperando, la pestaña se pinta de naranja con su número. -->
+        <button type="button" role="radio" :aria-checked="vista === 'pedidos'" class="pest-pedidos" :class="{ on: vista === 'pedidos', hay: porAtender.length }" @click="vista = 'pedidos'">
+          Por atender <span v-if="porAtender.length" class="cuenta-pedidos">{{ porAtender.length }}</span>
+        </button>
+        <button type="button" role="radio" :aria-checked="vista === 'registradas'" :class="vista === 'registradas' ? 'on' : ''" @click="vista = 'registradas'">Entregadas ({{ entregadas.length }})</button>
       </div>
     </header>
 
@@ -233,17 +257,26 @@ onMounted(cargar);
       <RouterLink v-if="ultima" :to="`/imprimir/requisicion/${ultima.id}`" target="_blank" class="b-btn secundario chico"><Icono nombre="imprimir" :tamano="16" /> Imprimir otra vez</RouterLink>
     </div>
 
+    <button v-if="vista !== 'pedidos' && porAtender.length" type="button" class="aviso-pedidos mt-4" @click="vista = 'pedidos'">
+      <span class="ic"><Icono nombre="trasladar" :tamano="24" /></span>
+      <span class="flex-1 text-left">
+        <b>{{ porAtender.length === 1 ? 'Hay 1 requisición por atender' : `Hay ${porAtender.length} requisiciones por atender` }}</b>
+        <small>{{ [...new Set(porAtender.map((p) => p.unidadSeccion))].slice(0, 3).join(' · ') }}</small>
+      </span>
+      <span class="ir">Atender</span>
+    </button>
+
     <!-- Por atender: lo que pidieron y espera respuesta -->
     <div v-if="vista === 'pedidos'" class="bandeja mt-5">
       <ul class="pedidos">
         <li v-for="p in porAtender" :key="p.id">
-          <button type="button" class="pedido" :class="{ on: atendiendo === p.id }" :style="estiloTono(p.estado === 'autorizada' ? 'atencion' : 'accion')" @click="atendiendo = p.id">
+          <button type="button" class="pedido" :class="{ on: atendiendo === p.id }" :style="estiloTono(p.estado === 'autorizada' ? 'accion' : 'atencion')" @click="atendiendo = p.id">
             <span class="min-w-0">
               <b>{{ p.unidadSeccion }}</b>
               <small>{{ p.renglones }} {{ p.renglones === 1 ? 'producto' : 'productos' }} · {{ miles(p.solicitado) }} unidades · {{ p.solicitante }}</small>
             </span>
             <span class="espera">
-              <span class="chip">{{ p.estado === 'autorizada' ? 'Falta despachar' : 'Nuevo' }}</span>
+              <span class="chip">{{ p.estado === 'autorizada' ? 'Falta despachar' : 'Nuevo · atender' }}</span>
               <small>{{ diasDesde(p.fechaSolicitud) === 0 ? 'Hoy' : `Hace ${diasDesde(p.fechaSolicitud)} ${diasDesde(p.fechaSolicitud) === 1 ? 'día' : 'días'}` }}</small>
             </span>
           </button>
@@ -269,6 +302,7 @@ onMounted(cargar);
     <!-- Entregar sin pedido -->
     <div v-if="vista === 'nueva'" class="rejilla mt-5">
       <form class="space-y-4" @submit.prevent="entregar">
+        <AvisoBorrador v-if="borrador.recuperado.value && renglones.length" texto="Se recuperó la entrega que dejó a medias." @descartar="empezarDeNuevo" />
         <div class="grid gap-3 sm:grid-cols-12">
           <div class="sm:col-span-5">
             <label for="lugar" class="b-etiqueta">Se entrega a</label>
@@ -307,7 +341,7 @@ onMounted(cargar);
           <div class="min-w-0 flex-1">
             <span class="b-etiqueta">Producto</span>
             <div v-if="elegido" class="elegido">
-              <span class="min-w-0 flex-1 truncate font-semibold text-tinta">{{ elegido.nombreGenerico }}</span>
+              <span class="min-w-0 flex-1 nombre-completo font-semibold text-tinta">{{ elegido.nombreGenerico }}</span>
               <span class="text-[13px] font-semibold text-apagado">hay {{ miles(elegido.saldoTotal) }}</span>
               <button type="button" class="quitar" aria-label="Cambiar" @click="elegido = null"><Icono nombre="cerrar" :tamano="16" /></button>
             </div>
@@ -375,7 +409,7 @@ onMounted(cargar);
         <header class="b-panel-cabeza"><h2 class="b-panel-titulo">Repartir un producto</h2></header>
         <div class="b-panel-cuerpo space-y-3">
           <div v-if="reparto.insumo" class="elegido">
-            <span class="min-w-0 flex-1 truncate font-semibold text-tinta">{{ reparto.insumo.nombreGenerico }}</span>
+            <span class="min-w-0 flex-1 nombre-completo font-semibold text-tinta">{{ reparto.insumo.nombreGenerico }}</span>
             <button type="button" class="quitar" aria-label="Cambiar producto" @click="reparto.insumo = null; propuesta = null"><Icono nombre="cerrar" :tamano="16" /></button>
           </div>
           <BuscadorInsumo v-else :insumos="insumos" placeholder="Producto a repartir" @elegir="(i) => (reparto.insumo = i)" />
@@ -392,7 +426,7 @@ onMounted(cargar);
             </p>
             <ul class="reparto">
               <li v-for="f in propuesta.filas" :key="f.ubicacionId">
-                <span class="min-w-0 flex-1 truncate text-sm font-semibold text-tinta">{{ f.nombre }}</span>
+                <span class="min-w-0 flex-1 nombre-completo text-sm font-semibold text-tinta">{{ f.nombre }}</span>
                 <strong class="tabular-nums text-tinta">{{ miles(f.cantidad) }}</strong>
                 <button v-if="f.cantidad > 0" type="button" class="b-btn secundario chico" @click="usarFila(f)">Usar</button>
               </li>
@@ -411,7 +445,7 @@ onMounted(cargar);
             <thead><tr><th>No.</th><th>Fecha</th><th>Se entregó a</th><th>Solicitante</th><th class="n">Renglones</th><th class="n">Unidades</th><th /></tr></thead>
             <tbody>
               <tr v-for="r in mostradas" :key="r.id" class="cursor-pointer" :class="abierta?.id === r.id ? 'activa' : ''" @click="abrir(r.id)">
-                <td class="whitespace-nowrap font-mono font-semibold" :class="r.numero ? 'text-[#172A5A]' : 'falta'">{{ r.numero ?? 'sin número' }}</td>
+                <td class="whitespace-nowrap font-mono font-semibold" :class="r.numero ? 'text-[#172A5A]' : 'falta'">{{ r.numero ? textoNumero(r) : 'sin número' }}</td>
                 <td class="whitespace-nowrap">{{ fecha(r.fechaSolicitud) }}</td>
                 <td class="font-semibold text-tinta">{{ r.unidadSeccion }}</td>
                 <td>{{ r.solicitante }}</td>
@@ -455,6 +489,16 @@ onMounted(cargar);
 </template>
 
 <style scoped>
+.pest-pedidos.hay { background: #FFF1DC; color: #8A4B00; }
+.pest-pedidos.hay.on { background: #E8930C; color: #fff; }
+.cuenta-pedidos { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin-left: 4px; padding: 0 6px; border-radius: 11px; background: #D64545; color: #fff; font-size: 12.5px; font-weight: 900; }
+.pest-pedidos.hay.on .cuenta-pedidos { background: #fff; color: #B4610A; }
+.aviso-pedidos { display: flex; width: 100%; align-items: center; gap: 14px; padding: 14px 18px; border: 2px solid #F3C677; border-bottom-width: 4px; border-radius: 18px; background: #FFF6E6; color: #6B3D00; }
+.aviso-pedidos:hover { border-color: #E8930C; }
+.aviso-pedidos .ic { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: #E8930C; color: #fff; }
+.aviso-pedidos b { display: block; font-size: 17px; font-weight: 900; }
+.aviso-pedidos small { display: block; font-size: 14px; font-weight: 600; }
+.aviso-pedidos .ir { padding: 8px 16px; border-radius: 12px; background: #E8930C; color: #fff; font-weight: 900; }
 .bandeja { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 1000px) { .bandeja { grid-template-columns: 1fr; } }
 .pedidos { display: grid; gap: 8px; }

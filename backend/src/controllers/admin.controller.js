@@ -93,6 +93,8 @@ async function listarUsuarios(req, res) {
       nombre: true,
       dpi: true,
       rol: true,
+      ubicacionId: true,
+      ubicacion: { select: { nombre: true } },
       cargo: true,
       esDirector: true,
       activo: true,
@@ -125,6 +127,13 @@ async function crearUsuario(req, res, next) {
     if (dpiRepetido) {
       return next({ status: 409, codigo: 'dpi_duplicado', mensaje: 'Ese DPI ya esta registrado' });
     }
+  }
+
+  // Solo el encargado de servicio queda ligado a un centro o puesto.
+  if (datos.rol === 'servicio') {
+    if (!(await ubicacionDeEncargado(establecimientoId, datos.ubicacionId))) return next(SIN_UBICACION);
+  } else {
+    datos.ubicacionId = null;
   }
 
   const usuario = await prisma.usuario.create({
@@ -180,7 +189,14 @@ async function cambiarEstadoUsuario(req, res, next) {
 
 // --- Establecimiento -------------------------------------------------------
 
-const ROL_TEXTO = { admin: 'dirección', preconsulta: 'preconsulta', medico: 'médico', farmacia: 'farmacia', bodega: 'bodega' };
+const ROL_TEXTO = { admin: 'dirección', preconsulta: 'preconsulta', medico: 'médico', farmacia: 'farmacia', bodega: 'bodega', servicio: 'encargado de servicio' };
+
+/** El centro o puesto de un encargado de servicio: del mismo establecimiento y que no sea la bodega. */
+async function ubicacionDeEncargado(establecimientoId, ubicacionId) {
+  if (!ubicacionId) return null;
+  return prisma.ubicacion.findFirst({ where: { id: ubicacionId, establecimientoId, activo: true, tipo: { not: 'bodega' } } });
+}
+const SIN_UBICACION = { status: 400, codigo: 'ubicacion_invalida', mensaje: 'Elija el centro o puesto que maneja el encargado' };
 
 async function buscarUsuario(req, next) {
   const usuario = await prisma.usuario.findFirst({
@@ -223,7 +239,7 @@ async function cambiarAccesoUsuario(req, res, next) {
   const usuario = await buscarUsuario(req, next);
   if (!usuario) return undefined;
 
-  const { rol, esDirector, password } = req.body;
+  const { rol, esDirector, password, ubicacionId } = req.body;
 
   // El director no se quita a sí mismo la dirección: nadie podría autorizar.
   if (usuario.id === req.director.id && esDirector === false) {
@@ -236,6 +252,14 @@ async function cambiarAccesoUsuario(req, res, next) {
 
   const data = {};
   if (rol !== undefined) data.rol = rol;
+  const rolFinal = rol ?? usuario.rol;
+  if (rolFinal === 'servicio') {
+    const u = await ubicacionDeEncargado(usuario.establecimientoId, ubicacionId ?? usuario.ubicacionId);
+    if (!u) return next(SIN_UBICACION);
+    data.ubicacionId = u.id;
+  } else if (usuario.ubicacionId) {
+    data.ubicacionId = null;
+  }
   if (esDirector !== undefined) data.esDirector = esDirector;
   if (password !== undefined) data.passwordHash = await hashearPassword(password);
 

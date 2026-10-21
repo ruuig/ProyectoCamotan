@@ -1,4 +1,4 @@
-const ROLES = ['admin', 'preconsulta', 'medico', 'farmacia', 'bodega'];
+const ROLES = ['admin', 'preconsulta', 'medico', 'farmacia', 'bodega', 'servicio'];
 
 // Se usa despues de autenticar. Recibe los roles con permiso sobre el endpoint.
 function autorizar(...rolesPermitidos) {

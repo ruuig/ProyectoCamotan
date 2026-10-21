@@ -45,6 +45,8 @@ const HojaInventarioFarmacia = () => import('../views/impresion/HojaInventarioFa
 const VistaRequisiciones = () => import('../views/inventario/VistaRequisiciones.vue');
 const VistaKardex = () => import('../views/inventario/VistaKardex.vue');
 const VistaRecibir = () => import('../views/inventario/VistaRecibir.vue');
+const VistaPedirDdriss = () => import('../views/inventario/VistaPedirDdriss.vue');
+const VistaServicio = () => import('../views/servicio/VistaServicio.vue');
 
 import FormularioPreconsulta from '../views/preconsulta/FormularioPreconsulta.vue';
 import VistaCola from '../views/cola/VistaCola.vue';
@@ -141,6 +143,7 @@ const router = createRouter({
             // El inicio reemplaza a "Hoy": el enlace viejo lleva a él.
             { path: 'hoy', redirect: '/inventario' },
             { path: 'recibir', name: 'recibir', component: VistaRecibir, meta: { roles: BODEGA } },
+            { path: 'pedir-ddriss', name: 'pedir-ddriss', component: VistaPedirDdriss, meta: { roles: BODEGA } },
             { path: 'trazabilidad', name: 'trazabilidad', component: VistaTrazabilidad, meta: { roles: BODEGA } },
             { path: 'informes', name: 'informes-servicios', component: VistaInformes, meta: { roles: BODEGA } },
             // El balance quedo dentro del BRES como "Detalle por servicio".
@@ -171,6 +174,12 @@ const router = createRouter({
         { path: '', name: 'dispensacion', component: VistaDispensacion, meta: { roles: FARMACIA } },
         { path: 'control', name: 'control-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA } },
       ],
+    },
+    {
+      // Encargado de un centro o puesto: sus requisiciones y su informe del mes.
+      path: '/servicio',
+      component: LayoutPrincipal,
+      children: [{ path: '', name: 'servicio', component: VistaServicio, meta: { roles: ['servicio'] } }],
     },
     {
       path: '/consolidado',
@@ -236,7 +245,8 @@ const router = createRouter({
           path: 'bres/:periodo',
           name: 'imprimir-bres',
           component: HojaBres,
-          meta: { roles: BODEGA },
+          // Farmacia imprime el suyo con ?ubicacion=farmacia.
+          meta: { roles: [...BODEGA, 'farmacia'] },
         },
         {
           path: 'oficio-baja/:id',
@@ -252,8 +262,8 @@ const router = createRouter({
         { path: 'traslado/:id', name: 'imprimir-traslado', component: ComprobanteTraslado, meta: { roles: BODEGA } },
         { path: 'requisicion/recepcion/:id', name: 'imprimir-requisicion-recepcion', component: HojaRequisicion, meta: { roles: BODEGA } },
         { path: 'receta/:id', name: 'imprimir-receta', component: RecetaPaciente, meta: { roles: FARMACIA } },
-        { path: 'requisicion/:id', name: 'imprimir-requisicion', component: HojaRequisicion, meta: { roles: [...BODEGA, 'farmacia'] } },
-        { path: 'kardex', name: 'imprimir-kardex', component: HojaKardex, meta: { roles: BODEGA } },
+        { path: 'requisicion/:id', name: 'imprimir-requisicion', component: HojaRequisicion, meta: { roles: [...BODEGA, 'farmacia', 'servicio'] } },
+        { path: 'kardex', name: 'imprimir-kardex', component: HojaKardex, meta: { roles: [...BODEGA, 'farmacia'] } },
         { path: 'inventario-farmacia', name: 'imprimir-inventario-farmacia', component: HojaInventarioFarmacia, meta: { roles: FARMACIA } },
       ],
     },

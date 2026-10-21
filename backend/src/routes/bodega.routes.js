@@ -32,7 +32,7 @@ const ubicacion = z.object({
 
 // --- Ubicaciones ---------------------------------------------------------------
 // Farmacia la usa para elegirse en sus requisiciones.
-router.get('/ubicaciones', autorizar('admin', 'bodega', 'farmacia'), asincrono(bodega.listarUbicaciones));
+router.get('/ubicaciones', autorizar('admin', 'bodega', 'farmacia', 'servicio'), asincrono(bodega.listarUbicaciones));
 router.post('/ubicaciones', soloAdmin, validar(ubicacion), asincrono(bodega.crearUbicacion));
 router.patch(
   '/ubicaciones/:id',
@@ -81,9 +81,12 @@ router.post(
   asincrono(bodega.crearTraslado),
 );
 
-// --- Requisiciones (FOR-ASE-01) ----------------------------------------------------
+// --- Requisiciones (FOR-ASB-01) ----------------------------------------------------
 // Farmacia registra y consulta las de la farmacia; la bodega autoriza y despacha.
 const conFarmacia = autorizar('admin', 'bodega', 'farmacia');
+// Los pedidos a la bodega también los hace el encargado de cada centro o puesto
+// (solo los de su ubicación; el controlador lo revisa).
+const conServicio = autorizar('admin', 'bodega', 'farmacia', 'servicio');
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha no válida');
 const requisicion = z.object({
   direccion: z.enum(['servicio', 'superior']).default('servicio'),
@@ -104,11 +107,11 @@ const requisicion = z.object({
     unidadMedida: z.string().trim().max(60).optional().nullable(),
     cantidadSolicitada: z.coerce.number().int().positive('La cantidad solicitada debe ser mayor que cero'),
     cantidadAutorizada: z.coerce.number().int().min(0).optional().nullable(),
-  })).min(1, 'La requisición no tiene renglones').max(60),
+  })).min(1, 'La requisición no tiene renglones').max(500, 'La requisición tiene más de 500 renglones'),
 });
 router.get(
   '/requisiciones',
-  conFarmacia,
+  conServicio,
   validar(z.object({
     estado: z.enum(['solicitada', 'autorizada', 'despachada', 'parcial', 'recibida', 'anulada']).optional(),
     direccion: z.enum(['servicio', 'superior']).optional(),
@@ -117,7 +120,9 @@ router.get(
   }), 'query'),
   asincrono(requisiciones.listar),
 );
-router.get('/requisiciones/solicitantes', conFarmacia, asincrono(requisiciones.solicitantes));
+router.get('/requisiciones/solicitantes', conServicio, asincrono(requisiciones.solicitantes));
+router.get('/requisiciones/sugerida-ddriss', deBodega, validar(z.object({ periodo: periodo.optional() }), 'query'), asincrono(requisiciones.sugeridaDdriss));
+router.get('/requisiciones/sugerida', conServicio, validar(z.object({ ubicacionId: id.optional() }), 'query'), asincrono(requisiciones.sugerida));
 // Entregar en un paso: registra la entrega y genera la requisicion.
 router.post(
   '/requisiciones/entregar',
@@ -140,7 +145,7 @@ router.post(
       cantidad: z.coerce.number().int().positive('La cantidad debe ser mayor que cero'),
       // Lote elegido a mano; sin él, sale el que vence primero.
       lotes: z.array(z.object({ loteId: id, cantidad: z.coerce.number().int().positive() })).max(20).optional(),
-    })).min(1, 'Agregue lo que se entrega').max(60),
+    })).min(1, 'Agregue lo que se entrega').max(500, 'La entrega tiene más de 500 renglones'),
   })),
   asincrono(requisiciones.entregar),
 );
@@ -151,9 +156,9 @@ router.patch(
   validar(z.object({ numero: z.string().trim().min(1, 'Escriba el número').max(20) })),
   asincrono(requisiciones.anotarNumero),
 );
-router.get('/requisiciones/:id', conFarmacia, validar(z.object({ id }), 'params'), asincrono(requisiciones.obtener));
-router.post('/requisiciones', conFarmacia, idempotencia, validar(requisicion), asincrono(requisiciones.crear));
-router.put('/requisiciones/:id', conFarmacia, validar(z.object({ id }), 'params'), validar(requisicion), asincrono(requisiciones.actualizar));
+router.get('/requisiciones/:id', conServicio, validar(z.object({ id }), 'params'), asincrono(requisiciones.obtener));
+router.post('/requisiciones', conServicio, idempotencia, validar(requisicion), asincrono(requisiciones.crear));
+router.put('/requisiciones/:id', conServicio, validar(z.object({ id }), 'params'), validar(requisicion), asincrono(requisiciones.actualizar));
 router.post(
   '/requisiciones/:id/autorizar',
   deBodega,
@@ -194,6 +199,8 @@ router.post(
     renglones: z.array(z.object({
       id,
       cantidad: z.coerce.number().int().min(0).optional(),
+      // Lo pedido a mano que al llegar se creó como producto: se enlaza.
+      insumoId: id.optional(),
       lotes: z.array(z.object({
         numeroLote: z.string().trim().min(1, 'Falta el número de lote').max(60),
         fechaVence: fecha,
@@ -201,13 +208,13 @@ router.post(
         costoUnitario: z.coerce.number().min(0).optional().nullable(),
         fabricante: z.string().trim().max(160).optional().nullable(),
       })).max(20).optional(),
-    })).min(1, 'Indique lo que se recibió').max(60),
+    })).min(1, 'Indique lo que se recibió').max(500, 'La recepción tiene más de 500 renglones'),
   })),
   asincrono(requisiciones.recibir),
 );
 router.post(
   '/requisiciones/:id/anular',
-  conFarmacia,
+  conServicio,
   validar(z.object({ id }), 'params'),
   validar(z.object({ motivo: z.string().trim().min(5, 'Explique por qué se anula').max(300) })),
   asincrono(requisiciones.anular),
@@ -216,8 +223,9 @@ router.post(
 // --- Kardex ------------------------------------------------------------------------
 router.get(
   '/kardex',
-  deBodega,
-  validar(z.object({ periodo: periodo.optional(), insumoId: id.optional(), desde: fecha.optional() }), 'query'),
+  // Farmacia (post-consulta) lleva su propia tarjeta: el controlador le da la suya.
+  conFarmacia,
+  validar(z.object({ periodo: periodo.optional(), insumoId: id.optional(), desde: fecha.optional(), ubicacion: z.enum(['bodega', 'farmacia']).optional() }), 'query'),
   asincrono(bodega.kardex),
 );
 
@@ -263,10 +271,16 @@ router.get('/hoy', deBodega, validar(z.object({ kardexDesde: fecha.optional() })
 // --- Informes de los servicios ---------------------------------------------------
 router.get('/informes', deBodega, validar(z.object({ periodo: periodo.optional() }), 'query'), asincrono(bodega.estadoInformes));
 const parametrosInforme = z.object({ ubicacionId: id, periodo });
-router.get('/informes/:ubicacionId/:periodo', deBodega, validar(parametrosInforme, 'params'), asincrono(bodega.obtenerInforme));
+// El encargado de un centro o puesto ve y sube el informe de su ubicación.
+const informePropio = [
+  autorizar('admin', 'bodega', 'servicio'),
+  (req, _res, next) => (req.usuario.rol !== 'servicio' || Number(req.params.ubicacionId) === req.usuario.ubicacionId
+    ? next() : next({ status: 403, codigo: 'sin_permiso', mensaje: 'Solo puede ver el informe de su centro o puesto' })),
+];
+router.get('/informes/:ubicacionId/:periodo', informePropio, validar(parametrosInforme, 'params'), asincrono(bodega.obtenerInforme));
 router.put(
   '/informes/:ubicacionId/:periodo',
-  deBodega,
+  informePropio,
   validar(parametrosInforme, 'params'),
   validar(z.object({
     observacion: z.string().trim().max(500).optional().nullable(),
@@ -305,6 +319,13 @@ router.patch(
   validar(z.object({ id }), 'params'),
   validar(z.object({ prescribible: z.boolean() })),
   asincrono(bodega.cambiarPrescribible),
+);
+router.patch(
+  '/insumos/:id/ubicacion',
+  deBodega,
+  validar(z.object({ id }), 'params'),
+  validar(z.object({ ubicacionFisica: z.string().trim().max(80).optional().nullable() })),
+  asincrono(bodega.cambiarUbicacionFisica),
 );
 router.get('/insumos/:id/alias', deBodega, validar(z.object({ id }), 'params'), asincrono(bodega.listarAlias));
 router.post(

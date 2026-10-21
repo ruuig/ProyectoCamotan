@@ -90,7 +90,7 @@ router.patch(
 // sigue siendo solo del administrador, con autorizacion del director.
 router.get(
   '/establecimiento',
-  autorizar('admin', 'preconsulta', 'medico', 'farmacia', 'bodega'),
+  autorizar('admin', 'preconsulta', 'medico', 'farmacia', 'bodega', 'servicio'),
   asincrono(admin.obtenerEstablecimiento),
 );
 

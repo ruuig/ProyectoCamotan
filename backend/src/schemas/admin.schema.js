@@ -98,10 +98,12 @@ const crearUsuario = z.object({
   password: z.string().min(10, 'La contrasena debe tener al menos 10 caracteres').max(200),
   nombre: z.string().trim().min(3, 'El nombre es obligatorio').max(120),
   dpi: z.string().trim().regex(/^[0-9]{13}$/, 'DPI invalido').optional().nullable(),
-  rol: z.enum(['admin', 'preconsulta', 'medico', 'farmacia', 'bodega']),
+  rol: z.enum(['admin', 'preconsulta', 'medico', 'farmacia', 'bodega', 'servicio']),
   esDirector: z.boolean().default(false),
   cargo: z.string().trim().max(120).optional().nullable(),
-});
+  // Solo el encargado de servicio: el centro o puesto que maneja.
+  ubicacionId: z.coerce.number().int().positive().optional().nullable(),
+}).refine((d) => d.rol !== 'servicio' || d.ubicacionId, { message: 'Elija el centro o puesto que maneja el encargado', path: ['ubicacionId'] });
 
 // Datos que se ven en las hojas impresas: no cambian lo que el usuario puede
 // hacer, por eso no piden al director.
@@ -116,13 +118,14 @@ const actualizarUsuario = z
 // Rol, director y contrasena cambian el acceso: piden al director.
 const cambiarAccesoUsuario = z
   .object({
-    rol: z.enum(['admin', 'preconsulta', 'medico', 'farmacia', 'bodega']).optional(),
+    rol: z.enum(['admin', 'preconsulta', 'medico', 'farmacia', 'bodega', 'servicio']).optional(),
+    ubicacionId: z.coerce.number().int().positive().optional().nullable(),
     esDirector: z.boolean().optional(),
     password: z.string().min(10, 'La contrasena debe tener al menos 10 caracteres').max(200).optional(),
     autorizacion,
   })
   .refine(
-    (d) => d.rol !== undefined || d.esDirector !== undefined || d.password !== undefined,
+    (d) => d.rol !== undefined || d.esDirector !== undefined || d.password !== undefined || d.ubicacionId !== undefined,
     'No se envio ningun cambio de acceso',
   );
 

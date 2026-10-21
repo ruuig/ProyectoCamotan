@@ -46,6 +46,7 @@ function usuarioPublico(usuario) {
     esDirector: usuario.esDirector,
     activo: usuario.activo,
     establecimientoId: usuario.establecimientoId,
+    ubicacionId: usuario.ubicacionId ?? null,
   };
 }
 

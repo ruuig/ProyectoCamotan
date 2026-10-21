@@ -7,6 +7,7 @@ import { useLogoStore } from '../stores/logo';
 import BarraConexion from '../components/comunes/BarraConexion.vue';
 import LogoInstitucional from '../components/comunes/LogoInstitucional.vue';
 import BotonInstalar from '../components/comunes/BotonInstalar.vue';
+import { TAMANOS, tamanoActual, aplicarTamano, completa, alternarPantallaCompleta } from '../dominio/ampliar';
 import Icono from '../components/comunes/Icono.vue';
 import bodega from '../services/bodega';
 
@@ -31,13 +32,23 @@ async function contar() {
   if (auth.rol !== 'bodega') return;
   try {
     const { requisiciones } = await bodega.requisiciones();
-    contadores.value = { pedidos: requisiciones.filter((r) => ['solicitada', 'autorizada'].includes(r.estado)).length };
+    contadores.value = { pedidos: requisiciones.filter((r) => r.direccion !== 'superior' && ['solicitada', 'autorizada'].includes(r.estado)).length };
   } catch {
     // El menú no se detiene por un contador.
   }
 }
-onMounted(contar);
+let relojContador = null;
+onMounted(() => {
+  contar();
+  relojContador = setInterval(contar, 30000);
+});
+onBeforeUnmount(() => clearInterval(relojContador));
 watch(() => route.fullPath, contar);
+// Con pedidos esperando, el título de la pestaña lo dice aunque se esté en otra ventana.
+watch(() => contadores.value.pedidos, (n) => {
+  const limpio = document.title.replace(/^\(\d+\) /, '');
+  document.title = n ? `(${n}) ${limpio}` : limpio;
+});
 
 /**
  * Los módulos se agrupan por lo que la persona hace, no por cómo está hecho
@@ -69,7 +80,8 @@ const GRUPOS = [
   {
     titulo: 'Bodega',
     enlaces: [
-      { ruta: '/inventario/requisiciones?ver=pedidos', etiqueta: 'Pedidos', icono: 'trasladar', roles: ['bodega'], contador: 'pedidos' },
+      { ruta: '/inventario/requisiciones?ver=pedidos', etiqueta: 'Salidas', icono: 'trasladar', roles: ['bodega'], contador: 'pedidos' },
+      { ruta: '/inventario/pedir-ddriss', etiqueta: 'Requisición', icono: 'trasladar', roles: ['bodega'] },
       { ruta: '/inventario/recibir', etiqueta: 'Recibir', icono: 'recibir', roles: ['bodega'] },
       { ruta: '/inventario/productos', etiqueta: 'Existencias', icono: 'inventario', roles: ['bodega'] },
       { ruta: '/inventario/semaforo', etiqueta: 'Semáforo', icono: 'vencimiento', roles: ['bodega'] },
@@ -89,6 +101,14 @@ const GRUPOS = [
       { ruta: '/inventario/kardex', etiqueta: 'Kardex', icono: 'hojaCalculo', roles: ['bodega'] },
       { ruta: '/inventario/trazabilidad', etiqueta: 'Trazabilidad', icono: 'trazabilidad', roles: ['bodega'] },
       { ruta: '/inventario/bajas', etiqueta: 'Bajas y retiros', icono: 'quitar', roles: ['bodega'] },
+    ],
+  },
+  {
+    titulo: 'Mi centro',
+    enlaces: [
+      { ruta: '/servicio', etiqueta: 'Inicio', icono: 'panel', roles: ['servicio'], exacto: true },
+      { ruta: '/servicio?ver=pedido', etiqueta: 'Hacer requisición', icono: 'trasladar', roles: ['servicio'] },
+      { ruta: '/servicio?ver=informe', etiqueta: 'Informe del mes', icono: 'hojaCalculo', roles: ['servicio'] },
     ],
   },
   {
@@ -116,6 +136,7 @@ const ETIQUETA_ROL = {
   medico: 'Médico',
   farmacia: 'Farmacia',
   bodega: 'Bodega',
+  servicio: 'Encargado de servicio',
 };
 
 const iniciales = computed(() =>
@@ -145,6 +166,13 @@ async function salir() {
 }
 
 onMounted(() => establecimiento.cargar());
+
+const tamano = ref(tamanoActual());
+function cambiarTamano(paso) {
+  const i = Math.min(TAMANOS.length - 1, Math.max(0, TAMANOS.indexOf(tamano.value) + paso));
+  tamano.value = TAMANOS[i];
+  aplicarTamano(tamano.value);
+}
 </script>
 
 <template>
@@ -154,7 +182,7 @@ onMounted(() => establecimiento.cargar());
       debajo la navegación, agrupada y separada con líneas.
     -->
     <aside
-      v-if="!sinMenu"
+      v-if="!sinMenu && !completa"
       class="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r border-linea
              bg-superficie panel:flex"
       aria-label="Módulos del sistema"
@@ -240,7 +268,7 @@ onMounted(() => establecimiento.cargar());
       <BotonInstalar />
     </aside>
 
-    <div :class="sinMenu ? '' : 'panel:pl-[248px]'">
+    <div :class="sinMenu || completa ? '' : 'panel:pl-[248px]'">
       <!-- Barra superior: la fecha de hoy y quién está operando -->
       <header
         class="sticky top-0 z-30 flex h-[72px] items-center justify-between gap-4
@@ -267,6 +295,24 @@ onMounted(() => establecimiento.cargar());
         </div>
 
         <div class="flex shrink-0 items-center gap-3">
+          <!-- Tamaño de la letra de todo el sistema, recordado en este equipo -->
+          <div class="tamano-letra hidden sm:inline-flex" role="group" aria-label="Tamaño de la letra">
+            <button type="button" title="Letra más pequeña" aria-label="Letra más pequeña" :disabled="tamano === TAMANOS[0]" @click="cambiarTamano(-1)">A−</button>
+            <span class="pct">{{ Math.round(tamano * 100) }}%</span>
+            <button type="button" title="Letra más grande" aria-label="Letra más grande" :disabled="tamano === TAMANOS[TAMANOS.length - 1]" @click="cambiarTamano(1)">A+</button>
+          </div>
+          <button
+            type="button"
+            class="boton-completa hidden sm:inline-flex"
+            :title="completa ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa: más espacio para trabajar'"
+            @click="alternarPantallaCompleta"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path v-if="!completa" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+              <path v-else d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+            </svg>
+            <span class="hidden xl:inline">{{ completa ? 'Salir' : 'Pantalla completa' }}</span>
+          </button>
           <div class="hidden text-right sm:block">
             <p class="font-bold leading-tight text-tinta">{{ auth.usuario?.nombre }}</p>
             <p class="text-sm text-apagado">{{ ETIQUETA_ROL[auth.rol] ?? auth.rol }}</p>
@@ -292,7 +338,7 @@ onMounted(() => establecimiento.cargar());
 
       <BarraConexion />
 
-      <main class="px-5 py-bloque lg:px-8">
+      <main class="contenido-principal px-5 py-bloque lg:px-8">
         <RouterView :key="route.path" />
       </main>
     </div>
@@ -300,6 +346,14 @@ onMounted(() => establecimiento.cargar());
 </template>
 
 <style scoped>
+/* Tamaño de la letra y pantalla completa: mismo alto y borde que el botón de salir. */
+.tamano-letra { align-items: center; height: 44px; border: 1px solid #D5DCE6; border-radius: 12px; overflow: hidden; }
+.tamano-letra button { height: 100%; padding: 0 12px; font-size: 15px; font-weight: 800; color: #172A5A; }
+.tamano-letra button:hover:not(:disabled) { background: #EEF3F9; }
+.tamano-letra button:disabled { color: #B8C2D0; }
+.tamano-letra .pct { min-width: 48px; text-align: center; font-size: 13px; font-weight: 700; line-height: 44px; color: #64748B; border-inline: 1px solid #E2E8F0; }
+.boton-completa { align-items: center; gap: 8px; height: 44px; padding: 0 13px; border: 1px solid #D5DCE6; border-radius: 12px; font-size: 14px; font-weight: 700; color: #172A5A; }
+.boton-completa:hover { background: #EEF3F9; }
 /* Marca de la barra lateral: el logo del Ministerio completo y, debajo, el
    centro con su ubicación. */
 .marca-lateral { display: block; padding: 18px 16px 14px; border-bottom: 2px solid #E2E8F0; }

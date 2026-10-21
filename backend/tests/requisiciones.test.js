@@ -6,7 +6,7 @@ import { filasKardex } from '../src/services/kardex.service.js';
 import { cantidadADespachar, tiposSugeridos } from '../src/services/requisiciones.service.js';
 
 /**
- * Requisición Despacho de Almacén (FOR-ASE-01): el servicio pide, la bodega
+ * Requisición Despacho de Almacén (FOR-ASB-01): el servicio pide, la bodega
  * autoriza y despacha por PEPE; el despacho queda en el kardex del producto
  * con el número de la requisición.
  */

@@ -607,6 +607,7 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
       unidadEntrega: i.unidadEntrega,
       categoria: i.categoria,
       activo: i.activo,
+      ubicacionFisica: i.ubicacionFisica ?? null,
       bodega,
       postConsulta,
       servicios: columnas,
@@ -639,6 +640,92 @@ function mesAbierto(periodo, diaCorte, ahora = new Date()) {
   return periodo === actual && local.getUTCDate() < diaCorte;
 }
 
+/**
+ * El BRES con que se pide a la DDRISS: el del mes en curso si ya llegó al día
+ * de corte; si no, el del mes anterior, que es el último cerrado.
+ */
+function periodoDelPedido(diaCorte, ahora = new Date()) {
+  const local = new Date(ahora.getTime() - 6 * 3600000);
+  const actual = `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}`;
+  return local.getUTCDate() < diaCorte ? periodoAnterior(actual) : actual;
+}
+
+/**
+ * Requisición sugerida de un centro o puesto: lo que necesita para quedar en el
+ * nivel máximo. La demanda mensual es el promedio de sus informes de los
+ * últimos meses (lo entregado más lo que no hubo); lo que tiene es su saldo al
+ * cierre del último informe más lo que la bodega le trasladó después. Sirve
+ * para llenar la requisición: el encargado corrige cantidades o quita renglones.
+ */
+async function sugerenciaServicio(establecimientoId, ubicacionId, ahora = new Date()) {
+  const ubicacion = await prisma.ubicacion.findFirst({ where: { id: ubicacionId, establecimientoId } });
+  if (!ubicacion) return null;
+  const params = parametrosBres(await configuracion(establecimientoId));
+  const actual = periodoDe(ahora);
+  const periodos = ultimosPeriodos(periodoAnterior(actual), params.mesesPromedio);
+  const [form, filas] = await Promise.all([
+    formularioInforme(establecimientoId, ubicacionId, actual),
+    prisma.informeServicioRenglon.findMany({
+      where: { informe: { ubicacionId, periodo: { in: periodos } } },
+      select: { insumoId: true, entregado: true, noEntregado: true },
+    }),
+  ]);
+  const demanda = new Map();
+  for (const f of filas) sumar(demanda, f.insumoId, f.entregado + f.noEntregado);
+  const renglones = form.renglones
+    .map((r) => {
+      const mensual = (demanda.get(r.insumoId) ?? 0) / params.mesesPromedio;
+      // Lo que tiene ahora: saldo al cierre del mes pasado más lo recibido este mes.
+      const tiene = r.saldoAnterior + r.entradas;
+      const sugerido = Math.max(0, Math.ceil(mensual * params.nivelMaximoMeses - tiene));
+      return {
+        insumoId: r.insumoId,
+        nombre: [r.nombre, r.concentracion].filter(Boolean).join(' '),
+        unidad: r.unidadEntrega,
+        categoria: r.categoria,
+        demandaMensual: Math.round(mensual * 10) / 10,
+        tiene,
+        sugerido,
+        maneja: r.maneja || mensual > 0,
+      };
+    })
+    .filter((r) => r.maneja);
+  // Todo el catálogo, para agregar algo que el centro no ha manejado.
+  const catalogo = form.renglones.map((r) => ({ insumoId: r.insumoId, nombre: [r.nombre, r.concentracion].filter(Boolean).join(' '), unidad: r.unidadEntrega }));
+  return { ubicacion, periodos, nivelMaximoMeses: params.nivelMaximoMeses, renglones, catalogo };
+}
+
+/**
+ * Requisición sugerida de la bodega a la DDRISS: la columna M (cantidad a
+ * pedir) del BRES del período. Bodega corrige, quita o agrega antes de enviarla.
+ */
+async function sugerenciaDdriss(establecimientoId, pedido) {
+  const config = await configuracion(establecimientoId);
+  // Sin periodo pedido, el que corresponde por la fecha: no se elige a mano.
+  const periodo = pedido ?? periodoDelPedido(config.diaCorteBres);
+  const b = await balance(establecimientoId, periodo);
+  const nombre = (f) => [f.nombre, f.concentracion].filter(Boolean).join(' ');
+  const renglones = b.filas
+    .filter((f) => f.activo !== false && f.bres?.M > 0)
+    .map((f) => ({
+      insumoId: f.insumoId,
+      nombre: nombre(f),
+      unidad: f.unidadEntrega,
+      categoria: f.categoria,
+      existencia: f.bres.I,
+      promedio: Math.round((f.bres.J ?? 0) * 10) / 10,
+      meses: f.bres.K == null ? null : Math.round(f.bres.K * 10) / 10,
+      sugerido: Math.ceil(f.bres.M),
+    }));
+  const catalogo = b.filas.filter((f) => f.activo !== false).map((f) => ({
+    insumoId: f.insumoId, nombre: nombre(f), unidad: f.unidadEntrega, existencia: f.bres?.I ?? 0,
+    promedio: Math.round((f.bres?.J ?? 0) * 10) / 10,
+  }));
+  // Las firmas del formulario ya están en la configuración, como en el BRES.
+  const firmas = { solicita: config.encargadoBodega ?? null, vistoBueno: config.coordinadorMunicipal ?? null };
+  return { periodo, nivelMaximoMeses: b.configuracion.nivelMaximoMeses, renglones, catalogo, firmas };
+}
+
 /** Promedio mensual de entregas informadas por cada servicio, para distribuir. */
 async function promedioPorServicio(establecimientoId, insumoId, periodo, meses) {
   const periodos = ultimosPeriodos(periodoAnterior(periodo), meses);
@@ -652,8 +739,11 @@ async function promedioPorServicio(establecimientoId, insumoId, periodo, meses) 
 }
 
 module.exports = {
+  sugerenciaServicio,
+  sugerenciaDdriss,
   bresGuardado,
   mesAbierto,
+  periodoDelPedido,
   ubicaciones,
   esServicioQueInforma,
   parametrosBres,

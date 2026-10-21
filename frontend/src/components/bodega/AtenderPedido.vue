@@ -1,12 +1,15 @@
 <script setup>
 import { ref, reactive, computed, watch } from 'vue';
+import { textoNumero, numerosDe } from '../../dominio/hojasRequisicion';
+import { usarBorrador } from '../../dominio/borrador';
+import AvisoBorrador from '../comunes/AvisoBorrador.vue';
 import bodega from '../../services/bodega';
 import { nuevaClaveIdempotencia } from '../../services/almacenLocal';
 import Icono from '../comunes/Icono.vue';
 import { miles, estiloTono } from './diseno/PiezasBodega';
 
 /**
- * Atender un pedido (Requisición FOR-ASE-01), como lo pide el formato:
+ * Atender un pedido (Requisición FOR-ASB-01), como lo pide el formato:
  * cantidad solicitada, autorizada y despachada.
  *
  *  1. Autorizar: por renglón, cuánto se da. Si es menos de lo pedido se dice
@@ -49,7 +52,9 @@ async function cargar() {
     error.value = fallo.message;
   }
 }
-watch(() => props.id, cargar, { immediate: true });
+// Lo que se cambió en el pedido no se pierde al ir a otra pantalla.
+const borrador = usarBorrador(() => `atender-${props.id}`, { autorizar, motivos, despacho });
+watch(() => props.id, async () => { await cargar(); borrador.recuperar(); }, { immediate: true });
 
 const enBodega = (g) => (g.insumoId ? existencias.value[g.insumoId]?.enBodega ?? 0 : null);
 const menos = (g) => entero(autorizar[g.id]) < g.cantidadSolicitada;
@@ -68,6 +73,7 @@ async function soloAutorizar() {
   error.value = '';
   try {
     await bodega.autorizarRequisicion(r.value.id, renglonesAutorizados());
+    borrador.limpiar();
     emit('listo', `Pedido de ${r.value.unidadSeccion} autorizado. Falta despacharlo.`);
     await cargar();
   } catch (fallo) {
@@ -88,6 +94,7 @@ async function despachar() {
       renglones: r.value.renglones.map((g) => ({ id: g.id, cantidadDespachada: entero(autorizar[g.id]) })),
     }, nuevaClaveIdempotencia());
     window.open(`/imprimir/requisicion/${r.value.id}`, '_blank');
+    borrador.limpiar();
     emit('listo', `Despachado a ${r.value.unidadSeccion}: ${miles(totalAutorizado.value)} unidades. Ya está en su existencia.`);
   } catch (fallo) {
     error.value = fallo.message;
@@ -108,6 +115,7 @@ async function rechazar() {
   error.value = '';
   try {
     await bodega.anularRequisicion(r.value.id, motivoRechazo.value.trim());
+    borrador.limpiar();
     emit('listo', `Pedido de ${r.value.unidadSeccion} rechazado. Lo verá con el motivo.`);
   } catch (fallo) {
     error.value = fallo.message;
@@ -133,7 +141,7 @@ const ESTADO = {
         <div class="min-w-0">
           <span class="estado" :style="estiloTono(ESTADO[r.estado]?.tono ?? 'neutro')">{{ ESTADO[r.estado]?.texto ?? r.estado }}</span>
           <h2>{{ r.unidadSeccion }}</h2>
-          <p>Pidió <b>{{ r.solicitante }}</b> el {{ fecha(r.fechaSolicitud) }}<template v-if="r.numero"> · Formulario {{ r.numero }}</template></p>
+          <p>Pidió <b>{{ r.solicitante }}</b> el {{ fecha(r.fechaSolicitud) }}<template v-if="r.numero"> · Formulario {{ textoNumero(r) }}</template></p>
           <p v-if="r.observaciones" class="obs">{{ r.observaciones }}</p>
         </div>
         <button type="button" class="cerrar" aria-label="Cerrar" @click="emit('cerrar')"><Icono nombre="cerrar" :tamano="22" :grosor="2.4" /></button>
@@ -146,6 +154,7 @@ const ESTADO = {
           <li v-for="g in r.renglones" :key="g.id" class="renglon" :style="estiloTono(excede(g) ? 'critico' : menos(g) ? 'atencion' : 'bien')">
             <div class="min-w-0">
               <b class="nombre">{{ g.descripcion }}</b>
+              <small v-if="g.ubicacionFisica" class="donde"><Icono nombre="ubicacion" :tamano="14" /> {{ g.ubicacionFisica }}</small>
               <p class="datos">
                 Pidió <b>{{ miles(g.cantidadSolicitada) }}</b>
                 <template v-if="g.insumoId"> · en bodega hay <b :class="{ rojo: enBodega(g) < g.cantidadSolicitada }">{{ miles(enBodega(g)) }}</b></template>
@@ -172,7 +181,10 @@ const ESTADO = {
         <div class="grid gap-3 sm:grid-cols-2">
           <div>
             <label for="num-form" class="b-etiqueta">No. del formulario</label>
-            <input id="num-form" v-model="despacho.numero" class="b-campo grande font-mono" placeholder="El número impreso de la requisición" />
+            <input id="num-form" v-model="despacho.numero" class="b-campo grande font-mono" placeholder="El número impreso de la primera hoja" />
+            <small v-if="r && numerosDe(despacho.numero, r.renglones.map((g) => g.descripcion)).length > 1" class="pista-hojas">
+              Ocupa {{ numerosDe(despacho.numero, r.renglones.map((g) => g.descripcion)).length }} hojas: {{ numerosDe(despacho.numero, r.renglones.map((g) => g.descripcion)).join(', ') }}
+            </small>
           </div>
           <div>
             <label for="recibe" class="b-etiqueta">Quién recibe</label>
@@ -208,6 +220,8 @@ const ESTADO = {
 </template>
 
 <style scoped>
+.donde { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 1px 8px; border-radius: 8px; background: #EEF2F7; font-size: 13px; font-weight: 800; color: #334155; }
+.pista-hojas { display: block; margin-top: 4px; font-size: 13px; font-weight: 800; color: #174E80; }
 .atender { display: grid; gap: 14px; padding: 18px; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 22px; background: #fff; }
 .cabeza { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .cabeza h2 { margin-top: 6px; font-size: 22px; font-weight: 900; color: #14244A; }

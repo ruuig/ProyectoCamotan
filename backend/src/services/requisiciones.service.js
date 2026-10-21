@@ -1,5 +1,5 @@
 /**
- * Requisicion Despacho de Almacen (FOR-ASE-01): reglas que no tocan la base.
+ * Requisicion Despacho de Almacen (FOR-ASB-01): reglas que no tocan la base.
  *
  * Funciones puras.
  */

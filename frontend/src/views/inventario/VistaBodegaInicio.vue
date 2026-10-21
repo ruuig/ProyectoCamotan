@@ -35,7 +35,7 @@ onMounted(async () => {
     estado.value = conteo;
   }
   if (i.status === 'fulfilled') insumos.value = i.value.insumos ?? i.value;
-  if (r.status === 'fulfilled') pedidos.value = r.value.requisiciones.filter((x) => ['solicitada', 'autorizada'].includes(x.estado)).length;
+  if (r.status === 'fulfilled') pedidos.value = r.value.requisiciones.filter((x) => x.direccion !== 'superior' && ['solicitada', 'autorizada'].includes(x.estado)).length;
 });
 
 const r = computed(() => resumen.value?.resumen ?? null);

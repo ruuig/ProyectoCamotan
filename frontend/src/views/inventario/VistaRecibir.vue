@@ -1,10 +1,13 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
+import { usarBorrador } from '../../dominio/borrador';
+import AvisoBorrador from '../../components/comunes/AvisoBorrador.vue';
 import { RouterLink, useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import inventario from '../../services/inventario';
 import Icono from '../../components/comunes/Icono.vue';
 import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
+import RecibirRequisicion from '../../components/bodega/RecibirRequisicion.vue';
 import { miles } from '../../components/bodega/diseno/PiezasBodega';
 import { fecha } from '../../dominio/bodega';
 
@@ -18,6 +21,8 @@ import { fecha } from '../../dominio/bodega';
 const route = useRoute();
 
 const vista = ref(route.query.ver === 'faltantes' ? 'faltantes' : 'nueva');
+// Todo entra por requisición; sin ella solo en un caso especial (inventario inicial y similares).
+const sinRequisicion = ref(false);
 const insumos = ref([]);
 const recibidas = ref([]);
 const faltantes = ref([]);
@@ -29,8 +34,19 @@ const hoy = () => new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
 const VACIO = () => ({ numeroDocumento: '', procedencia: 'despacho', remitente: 'Almacén DDRISS Chiquimula', acta: '', fecha: hoy(), observaciones: '' });
 const doc = reactive(VACIO());
 const renglones = ref([]);
+const borrador = usarBorrador('recibir-sin-requisicion', { doc, renglones }, { vacio: (d) => !d.renglones.length });
 
 const PROCEDENCIAS = [['despacho', 'Despacho'], ['donacion', 'Donación'], ['prestamo', 'Préstamo'], ['traslado', 'Traslado']];
+// Casi todo llega por despacho: los otros orígenes se abren solo cuando hace falta.
+const otroOrigen = computed(() => doc.procedencia !== 'despacho');
+function elegirOtroOrigen() {
+  doc.procedencia = 'donacion';
+  doc.remitente = '';
+}
+function volverADespacho() {
+  doc.procedencia = 'despacho';
+  doc.remitente = VACIO().remitente;
+}
 const entero = (v) => Number(String(v ?? '').replace(/[^\d]/g, '')) || 0;
 
 function agregar(insumo) {
@@ -81,6 +97,7 @@ async function registrar() {
     aviso.value = `Recepción registrada: ${r.recepcion.renglones.length} producto(s)${r.faltantes ? `, ${r.faltantes} con faltante por reclamar` : ''}.`;
     Object.assign(doc, VACIO());
     renglones.value = [];
+    borrador.limpiar();
     await cargar();
   } catch (fallo) {
     error.value = fallo.message;
@@ -128,7 +145,7 @@ async function abrir(id) {
 const recibido = (x) => x.cantidadDocumento - (x.porReponer ?? 0);
 const dinero = (v) => (v == null ? '' : `Q ${Number(v).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
-onMounted(cargar);
+onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(); });
 </script>
 
 <template>
@@ -143,13 +160,24 @@ onMounted(cargar);
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
     <p v-if="aviso" class="b-aviso ok mt-4" aria-live="polite">{{ aviso }}</p>
 
-    <!-- Nueva recepción -->
-    <form v-if="vista === 'nueva'" class="mt-5 space-y-4" @submit.prevent="registrar">
+    <!-- Nueva recepción: contra la requisición que llegó -->
+    <div v-if="vista === 'nueva' && !sinRequisicion" class="mt-5 space-y-4">
+      <RecibirRequisicion :inicial="route.query.requisicion ?? null" @aviso="(t) => { aviso = t; error = ''; }" @error="(t) => (error = t)" @listo="cargar" />
+      <button type="button" class="enlace-origen" @click="sinRequisicion = true">Registrar sin requisición (inventario inicial u otro caso especial)</button>
+    </div>
+
+    <!-- Caso especial: sin requisición -->
+    <form v-if="vista === 'nueva' && sinRequisicion" class="mt-5 space-y-4" @submit.prevent="registrar">
+      <button type="button" class="enlace-origen" @click="sinRequisicion = false">← Volver a recibir por requisición</button>
       <div class="documento">
-        <fieldset class="col-llega">
+        <!-- Todo llega por despacho de la DDRISS; otro origen solo en un caso concreto. -->
+        <fieldset v-if="otroOrigen" class="col-llega">
           <legend class="b-etiqueta">Llega por</legend>
-          <div class="b-segmentado w-full" role="radiogroup">
-            <button v-for="p in PROCEDENCIAS" :key="p[0]" type="button" role="radio" class="flex-1" :aria-checked="doc.procedencia === p[0]" :class="doc.procedencia === p[0] ? 'on' : ''" @click="doc.procedencia = p[0]">{{ p[1] }}</button>
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="b-segmentado" role="radiogroup">
+              <button v-for="p in PROCEDENCIAS.slice(1)" :key="p[0]" type="button" role="radio" :aria-checked="doc.procedencia === p[0]" :class="doc.procedencia === p[0] ? 'on' : ''" @click="doc.procedencia = p[0]">{{ p[1] }}</button>
+            </div>
+            <button type="button" class="enlace-origen" @click="volverADespacho">Volver a despacho</button>
           </div>
         </fieldset>
         <div class="col-rem">
@@ -169,6 +197,7 @@ onMounted(cargar);
           <input id="fec" v-model="doc.fecha" type="date" required class="b-campo" />
         </div>
       </div>
+      <button v-if="!otroOrigen" type="button" class="enlace-origen" @click="elegirOtroOrigen">¿No viene por despacho? Donación, préstamo o traslado</button>
 
       <div class="agregar">
         <span class="b-etiqueta">Agregar producto</span>
@@ -179,7 +208,7 @@ onMounted(cargar);
         <table class="b-tabla">
           <thead>
             <tr>
-              <th>Producto</th><th>Lote</th><th>Vence</th><th class="n">Dice el documento</th><th class="n">Llegó</th><th class="n">Precio u. Q</th><th>Buen estado</th><th />
+              <th>Producto</th><th>Lote</th><th>Vence</th><th class="n">Dice el documento</th><th class="n">Llegó</th><th>Buen estado</th><th />
             </tr>
           </thead>
           <tbody>
@@ -192,11 +221,10 @@ onMounted(cargar);
                 <input v-model="r.cantidadRecibida" inputmode="numeric" :placeholder="r.cantidadDocumento || 'igual'" class="celda" :aria-label="`Cantidad que llegó de ${r.nombre}`" />
                 <small v-if="faltan(r)" class="falta">faltan {{ faltan(r) }}</small>
               </td>
-              <td class="n"><input v-model="r.costoUnitario" inputmode="decimal" class="celda" :aria-label="`Precio de ${r.nombre}`" /></td>
               <td><label class="flex items-center gap-1.5 text-sm"><input v-model="r.conforme" type="checkbox" /> {{ r.conforme ? 'Sí' : 'No: cuarentena' }}</label></td>
               <td class="n"><button type="button" class="quitar" aria-label="Quitar" @click="renglones.splice(i, 1)"><Icono nombre="cerrar" :tamano="16" /></button></td>
             </tr>
-            <tr v-if="!renglones.length"><td colspan="8" class="b-vacio">Agregue los productos del documento.</td></tr>
+            <tr v-if="!renglones.length"><td colspan="7" class="b-vacio">Agregue los productos del documento.</td></tr>
           </tbody>
         </table>
       </div>
@@ -225,13 +253,13 @@ onMounted(cargar);
               <td class="n">{{ miles(r.unidades) }}</td>
               <td class="n" :class="r.porReponer ? 'rojo' : ''">{{ r.porReponer ? miles(r.porReponer) : '' }}</td>
               <td class="n">
-                <RouterLink :to="`/imprimir/requisicion/recepcion/${r.id}`" target="_blank" class="b-btn secundario chico" title="Imprimir en el formulario de requisición (FOR-ASE-01)" @click.stop>
+                <RouterLink :to="`/imprimir/requisicion/recepcion/${r.id}`" target="_blank" class="b-btn secundario chico" title="Imprimir en el formulario de requisición (FOR-ASB-01)" @click.stop>
                   <Icono nombre="imprimir" :tamano="16" /> Imprimir
                 </RouterLink>
               </td>
             </tr>
             <tr v-if="abierta === r.id" class="detalle-fila">
-              <td colspan="9">
+              <td colspan="8">
                 <div v-if="detalles[r.id]" class="detalle">
                   <dl class="datos">
                     <div><dt>{{ detalles[r.id].procedencia === 'donacion' ? 'Acta' : 'Documento' }}</dt><dd class="font-mono">{{ (detalles[r.id].procedencia === 'donacion' ? detalles[r.id].acta : detalles[r.id].numeroDocumento) ?? 'Sin número' }}</dd></div>
@@ -240,7 +268,7 @@ onMounted(cargar);
                   </dl>
                   <table class="b-tabla interna">
                     <thead>
-                      <tr><th>Producto</th><th>Lote</th><th>Vence</th><th class="n">Según documento</th><th class="n">Recibido</th><th class="n">Por reclamar</th><th class="n">Precio u.</th><th>Estado</th></tr>
+                      <tr><th>Producto</th><th>Lote</th><th>Vence</th><th class="n">Según documento</th><th class="n">Recibido</th><th class="n">Por reclamar</th><th>Estado</th></tr>
                     </thead>
                     <tbody>
                       <tr v-for="x in detalles[r.id].renglones" :key="x.loteId">
@@ -253,7 +281,6 @@ onMounted(cargar);
                         <td class="n">{{ miles(x.cantidadDocumento) }}</td>
                         <td class="n fuerte">{{ miles(recibido(x)) }}</td>
                         <td class="n" :class="x.porReponer ? 'rojo' : ''">{{ x.porReponer ? miles(x.porReponer) : '' }}</td>
-                        <td class="n">{{ dinero(x.costoUnitario) }}</td>
                         <td><span class="b-estado" :class="x.estado">{{ x.estado === 'cuarentena' ? 'Cuarentena' : x.estado === 'disponible' ? 'Disponible' : x.estado }}</span></td>
                       </tr>
                     </tbody>
@@ -263,7 +290,7 @@ onMounted(cargar);
               </td>
             </tr>
           </template>
-          <tr v-if="!recibidas.length"><td colspan="9" class="b-vacio">Todavía no hay recepciones.</td></tr>
+          <tr v-if="!recibidas.length"><td colspan="8" class="b-vacio">Todavía no hay recepciones.</td></tr>
         </tbody>
       </table>
     </div>
@@ -321,8 +348,11 @@ onMounted(cargar);
 .llego-cancelar { justify-self: center; padding: 6px 12px; font-weight: 800; color: #64748B; }
 .llego-cancelar:hover { color: #14244A; }
 .celda.fecha-vence { width: 160px; text-align: left; }
-.documento { display: grid; grid-template-columns: minmax(330px, 1.3fr) minmax(200px, 1.2fr) minmax(140px, .8fr) minmax(150px, .8fr); gap: 12px; align-items: end; }
-@media (max-width: 1099px) { .documento { grid-template-columns: 1fr 1fr; } }
+.documento { display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(150px, .8fr) minmax(150px, .8fr); gap: 12px; align-items: end; }
+.enlace-origen { font-size: 14px; font-weight: 700; color: #2F6FA8; text-decoration: underline; text-underline-offset: 3px; }
+/* «Llega por» va solo en su renglón: sus cuatro opciones no caben junto a los campos. */
+.documento .col-llega { grid-column: 1 / -1; }
+@media (max-width: 900px) { .documento { grid-template-columns: 1fr 1fr; } }
 .agregar { display: grid; gap: 6px; padding: 12px; border: 2px dashed #CBD5E1; border-radius: 14px; background: #F8FAFC; }
 .celda { width: 96px; height: 38px; padding: 0 10px; border: 2px solid #CBD5E1; border-radius: 8px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .celda.texto { width: 130px; text-align: left; font-family: ui-monospace, monospace; }

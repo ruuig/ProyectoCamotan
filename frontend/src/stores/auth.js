@@ -8,6 +8,7 @@ export const PANEL_POR_ROL = {
   medico: '/panel/medico',
   farmacia: '/panel/farmacia',
   bodega: '/panel/bodega',
+  servicio: '/servicio',
 };
 
 function leerUsuarioGuardado() {

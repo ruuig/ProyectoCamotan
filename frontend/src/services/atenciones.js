@@ -25,6 +25,8 @@ export default {
   insumos: () => http.get('/insumos?prescribible=true'),
   // Lo que el centro no tiene: el paciente lo consigue fuera.
   recetarFuera: (id, datos) => http.post(`/atenciones/${id}/receta-externa`, datos),
+  quitarPrescripcion: (id, recetaId) => http.request('DELETE', `/atenciones/${id}/prescripcion/${recetaId}`),
+  quitarRecetaExterna: (id, recetaId) => http.request('DELETE', `/atenciones/${id}/receta-externa/${recetaId}`),
   sugerenciaTipo: (id, { cie, descripcion }) =>
     http.get(`/atenciones/${id}/sugerencia-tipo?${new URLSearchParams(
       Object.entries({ cie, descripcion }).filter(([, v]) => v),

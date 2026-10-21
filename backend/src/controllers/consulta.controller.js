@@ -625,4 +625,41 @@ async function hoja(req, res, next) {
   });
 }
 
-module.exports = { hoja, sugerenciaTipo, obtener, registrarConsulta, codificar, crearPrescripcion, crearRecetaExterna, alertasPaciente, corregirConsulta, correccionesDe, corregirSignosVitales };
+/**
+ * Quitar un medicamento de la receta (por ejemplo, una cantidad mal escrita).
+ * Solo mientras farmacia no lo haya atendido: lo entregado ya es un movimiento.
+ */
+async function quitarPrescripcion(req, res, next) {
+  const { atencion, error } = await atencionParaRecetar(req);
+  if (error) return next(error);
+  const p = await prisma.prescripcion.findFirst({
+    where: { id: req.params.recetaId, atencionId: atencion.id },
+    include: { insumo: { select: { nombreGenerico: true } }, _count: { select: { dispensaciones: true, demandaNoAtendida: true } } },
+  });
+  if (!p) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Ese medicamento no está en la receta' });
+  if (p._count.dispensaciones || p._count.demandaNoAtendida) {
+    return next({ status: 409, codigo: 'ya_entregado', mensaje: 'Farmacia ya atendió este medicamento: no se puede quitar' });
+  }
+  await prisma.prescripcion.delete({ where: { id: p.id } });
+  await req.bitacora({
+    accion: 'eliminar', entidad: 'prescripcion', entidadId: p.id,
+    detalle: `Quitado de la receta de la atención ${atencion.id}: ${p.insumo.nombreGenerico} x${p.cantidad}`,
+  });
+  res.json({ ok: true });
+}
+
+/** Quitar un medicamento recetado para conseguir fuera del centro. */
+async function quitarRecetaExterna(req, res, next) {
+  const { atencion, error } = await atencionParaRecetar(req);
+  if (error) return next(error);
+  const r = await prisma.recetaExterna.findFirst({ where: { id: req.params.recetaId, atencionId: atencion.id } });
+  if (!r) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Ese medicamento no está en la receta' });
+  await prisma.recetaExterna.delete({ where: { id: r.id } });
+  await req.bitacora({
+    accion: 'eliminar', entidad: 'receta_externa', entidadId: r.id,
+    detalle: `Quitado de la receta de la atención ${atencion.id}: ${r.medicamento}`,
+  });
+  res.json({ ok: true });
+}
+
+module.exports = { hoja, sugerenciaTipo, obtener, registrarConsulta, codificar, crearPrescripcion, crearRecetaExterna, quitarPrescripcion, quitarRecetaExterna, alertasPaciente, corregirConsulta, correccionesDe, corregirSignosVitales };

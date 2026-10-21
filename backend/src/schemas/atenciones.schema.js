@@ -72,6 +72,11 @@ const parametroId = z.object({
   id: z.coerce.number().int().positive('Identificador de atención invalido'),
 });
 
+const parametroReceta = z.object({
+  id: z.coerce.number().int().positive('Identificador de atención invalido'),
+  recetaId: z.coerce.number().int().positive('Identificador de receta invalido'),
+});
+
 // Transiciones que el personal puede pedir. El controlador valida que la
 // transicion sea legal desde el estado actual.
 const cambiarEstado = z.object({
@@ -242,6 +247,7 @@ module.exports = {
   crearAtencion,
   preconsulta,
   parametroId,
+  parametroReceta,
   cambiarEstado,
   consulta,
   codificacion,

@@ -147,6 +147,20 @@ router.post(
   asincrono(consulta.crearPrescripcion),
 );
 
+router.delete(
+  '/:id/prescripcion/:recetaId',
+  medicos,
+  validar(esquemas.parametroReceta, 'params'),
+  asincrono(consulta.quitarPrescripcion),
+);
+
+router.delete(
+  '/:id/receta-externa/:recetaId',
+  medicos,
+  validar(esquemas.parametroReceta, 'params'),
+  asincrono(consulta.quitarRecetaExterna),
+);
+
 router.post(
   '/:id/receta-externa',
   medicos,

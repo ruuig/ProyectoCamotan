@@ -351,15 +351,39 @@ function cambiarMedicamento() {
   receta.externo = '';
 }
 
+// La cantidad se lee con su unidad («2 frascos») y se avisa si es demasiado para un paciente.
+const unidadReceta = computed(() => (receta.insumo?.unidadEntrega || receta.insumo?.unidadMedida || '').toLowerCase());
+const plural = (u, n) => (!u || n === 1 ? u : /[aeiouáéíóú]$/i.test(u) ? `${u}s` : `${u.replace('ó', 'o').replace('á', 'a')}es`);
+const TOPE_POR_PACIENTE = { frasco: 5, tubo: 3, bote: 3, 'galón': 2, litro: 3, vial: 10, ampolla: 10, sobre: 30, tableta: 120, 'cápsula': 120, perla: 10, 'óvulo': 14 };
+const cantidadAlta = computed(() => {
+  const tope = TOPE_POR_PACIENTE[unidadReceta.value];
+  return Boolean(tope) && Number(receta.cantidad) > tope;
+});
+const masDeLoQueHay = computed(() => Boolean(receta.insumo) && receta.insumo.saldoFarmacia > 0 && Number(receta.cantidad) > receta.insumo.saldoFarmacia);
+let altaConfirmada = '';
+watch(() => [receta.insumo, receta.cantidad], () => { altaConfirmada = ''; });
+
 const recetaLista = computed(() => {
   if (receta.insumo) return Number(receta.cantidad) > 0;
   // Para lo que se consigue fuera la cantidad es opcional.
   return receta.externo.trim().length >= 2;
 });
 
-async function agregarReceta() {
+let agregandoReceta = null;
+function agregarReceta() {
+  if (!agregandoReceta) agregandoReceta = guardarReceta().finally(() => { agregandoReceta = null; });
+  return agregandoReceta;
+}
+async function guardarReceta() {
   error.value = '';
   avisosReceta.value = [];
+  // Una cantidad fuera de lo normal se confirma con un segundo toque.
+  const clave = `${receta.insumo?.id}-${receta.cantidad}`;
+  if (cantidadAlta.value && altaConfirmada !== clave) {
+    altaConfirmada = clave;
+    error.value = `¿${receta.cantidad} ${plural(unidadReceta.value, Number(receta.cantidad))} de ${receta.insumo.nombreGenerico}? Corrija la cantidad o presione de nuevo para confirmarla.`;
+    return;
+  }
   try {
     if (receta.insumo) {
       const r = await servicio.prescribir(route.params.id, {
@@ -386,6 +410,31 @@ async function agregarReceta() {
   }
 }
 
+async function quitarDeReceta(r, externa = false) {
+  error.value = '';
+  try {
+    if (externa) {
+      await servicio.quitarRecetaExterna(route.params.id, r.id);
+      recetasExternas.value = recetasExternas.value.filter((x) => x.id !== r.id);
+    } else {
+      await servicio.quitarPrescripcion(route.params.id, r.id);
+      prescripciones.value = prescripciones.value.filter((x) => x.id !== r.id);
+    }
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
+
+// Al tocar fuera del renglón de la receta, lo completo se agrega solo.
+function salirDeReceta(evento) {
+  if (evento.currentTarget.contains(evento.relatedTarget)) return;
+  if (recetaLista.value && !cantidadAlta.value) agregarReceta();
+}
+const unidadDe = (insumoId) => {
+  const i = insumos.value.find((x) => x.id === insumoId);
+  return (i?.unidadEntrega || i?.unidadMedida || '').toLowerCase();
+};
+
 const vacioANulo = (v) => (typeof v === 'string' && v.trim() === '' ? null : v);
 
 async function cerrar() {
@@ -397,6 +446,21 @@ async function cerrar() {
   if (diagnosticos.length === 0) {
     error.value = 'Registre al menos un diagnóstico en la impresión clínica.';
     document.getElementById('dx-1')?.focus();
+    return;
+  }
+  if (agregandoReceta) await agregandoReceta;
+  // Un medicamento elegido y sin «Agregar» no se pierde al terminar: se agrega
+  // solo si está completo; si le falta la cantidad, se pide antes de cerrar.
+  if (receta.insumo || receta.externo) {
+    if (!recetaLista.value) {
+      error.value = `Falta la cantidad de ${receta.insumo?.nombreGenerico ?? receta.externo} en la receta.`;
+      document.querySelector('[placeholder="Cantidad"], [placeholder="Cantidad (opc.)"]')?.focus();
+      return;
+    }
+    await agregarReceta();
+    if (error.value) return;
+  } else if (busquedaReceta.value.trim()) {
+    error.value = `«${busquedaReceta.value.trim()}» quedó escrito en la receta sin elegirlo: elíjalo de la lista o bórrelo.`;
     return;
   }
 
@@ -720,8 +784,11 @@ onMounted(() => {
                     :key="p.id"
                     class="flex flex-wrap items-center justify-between gap-3 rounded-control bg-superficie px-4 py-2.5"
                   >
-                    <span class="font-bold text-tinta">{{ p.insumo.nombreGenerico }} <span class="font-normal text-apagado">{{ p.insumo.presentacion }}</span></span>
-                    <span class="text-tinta-2"><strong class="tabular-nums">{{ p.cantidad }}</strong><span v-if="p.indicaciones"> · {{ p.indicaciones }}</span></span>
+                    <span class="font-bold text-tinta">{{ p.insumo.nombreGenerico }}</span>
+                    <span class="flex items-center gap-3 text-tinta-2">
+                      <span><strong class="tabular-nums">{{ p.cantidad }} {{ plural(unidadDe(p.insumo.id ?? p.insumoId), p.cantidad) }}</strong><span v-if="p.indicaciones"> · {{ p.indicaciones }}</span></span>
+                      <button type="button" class="boton-quitar" :aria-label="`Quitar ${p.insumo.nombreGenerico} de la receta`" @click="quitarDeReceta(p)"><Icono nombre="cerrar" :tamano="16" /> Quitar</button>
+                    </span>
                   </li>
                   <li
                     v-for="r in recetasExternas"
@@ -729,7 +796,10 @@ onMounted(() => {
                     class="flex flex-wrap items-center justify-between gap-3 rounded-control border border-dashed border-linea bg-superficie px-4 py-2.5"
                   >
                     <span class="font-bold text-tinta">{{ r.medicamento }} <span class="ml-1 text-sm font-normal text-advertencia">Conseguir fuera del centro</span></span>
-                    <span class="text-tinta-2"><strong v-if="r.cantidad" class="tabular-nums">{{ r.cantidad }}</strong><span v-if="r.indicaciones"><template v-if="r.cantidad"> · </template>{{ r.indicaciones }}</span></span>
+                    <span class="flex items-center gap-3 text-tinta-2">
+                      <span><strong v-if="r.cantidad" class="tabular-nums">{{ r.cantidad }}</strong><span v-if="r.indicaciones"><template v-if="r.cantidad"> · </template>{{ r.indicaciones }}</span></span>
+                      <button type="button" class="boton-quitar" :aria-label="`Quitar ${r.medicamento} de la receta`" @click="quitarDeReceta(r, true)"><Icono nombre="cerrar" :tamano="16" /> Quitar</button>
+                    </span>
                   </li>
                 </ul>
                 <p v-for="a in avisosReceta" :key="a" role="alert" class="mt-2 flex items-start gap-2 text-sm text-advertencia">
@@ -770,7 +840,7 @@ onMounted(() => {
                 </div>
 
                 <!-- 2. Cantidad e indicaciones del elegido -->
-                <div v-else class="mt-3 space-y-3">
+                <div v-else class="mt-3 space-y-3" @focusout="salirDeReceta">
                   <div class="flex flex-wrap items-center gap-3 rounded-control bg-superficie px-4 py-2.5">
                     <span class="min-w-0 flex-1">
                       <template v-if="receta.insumo">
@@ -786,19 +856,25 @@ onMounted(() => {
                     </span>
                     <button type="button" class="enlace text-sm" @click="cambiarMedicamento">Cambiar</button>
                   </div>
-                  <div class="grid gap-3 sm:grid-cols-[8rem,1fr,auto]">
-                    <input
-                      v-model="receta.cantidad"
-                      type="number" min="1"
-                      aria-label="Cantidad recetada"
-                      :placeholder="receta.insumo ? 'Cantidad' : 'Cantidad (opc.)'"
-                      class="campo tabular-nums"
-                    />
-                    <input v-model="receta.indicaciones" aria-label="Indicaciones" placeholder="Indicaciones" class="campo" />
-                    <button type="button" class="boton-secundario" :disabled="!recetaLista" @click="agregarReceta">
-                      <Icono nombre="agregar" :tamano="18" /> Agregar
+                  <div class="grid gap-3 sm:grid-cols-[11rem,1fr,auto]">
+                    <label class="cantidad-receta" :class="{ alta: cantidadAlta }">
+                      <input
+                        v-model="receta.cantidad"
+                        type="number" min="1"
+                        aria-label="Cantidad recetada"
+                        :placeholder="receta.insumo ? 'Cantidad' : 'Cantidad (opc.)'"
+                        class="campo tabular-nums"
+                        @keydown.enter.prevent="recetaLista && agregarReceta()"
+                      />
+                      <span v-if="unidadReceta" class="sufijo">{{ plural(unidadReceta, Number(receta.cantidad) || 2) }}</span>
+                    </label>
+                    <input v-model="receta.indicaciones" aria-label="Indicaciones" placeholder="Indicaciones" class="campo" @keydown.enter.prevent="recetaLista && agregarReceta()" />
+                    <button type="button" :class="recetaLista ? 'boton-primario' : 'boton-secundario'" :disabled="!recetaLista" @click="agregarReceta">
+                      <Icono nombre="agregar" :tamano="18" /> Agregar a la receta
                     </button>
                   </div>
+                  <p v-if="cantidadAlta" class="aviso-cantidad">{{ receta.cantidad }} {{ plural(unidadReceta, Number(receta.cantidad)) }} es mucho para un paciente</p>
+                  <p v-else-if="masDeLoQueHay" class="aviso-cantidad">En farmacia hay {{ receta.insumo.saldoFarmacia }}: lo que falte quedará como no entregado</p>
                 </div>
               </div>
 
@@ -1026,14 +1102,6 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-if="datos.ficha && !datos.ficha.completa" class="aviso aviso-atencion">
-          <Icono nombre="alerta" :tamano="20" class="mt-0.5 shrink-0 text-advertencia" />
-          <div>
-            <p class="font-bold text-tinta">Faltan {{ datos.ficha.faltantes.length }} datos mínimos para el SIGSA</p>
-            <p class="text-sm text-tinta-2">{{ datos.ficha.faltantes.map((f) => f.etiqueta).join(' · ') }}</p>
-          </div>
-        </div>
-
         <div v-if="correcciones.length" class="panel">
           <header class="panel-encabezado"><h2 class="panel-titulo">Correcciones ({{ correcciones.length }})</h2></header>
           <ul class="lista">
@@ -1081,6 +1149,13 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.boton-quitar { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border: 2px solid #F1C6C6; border-bottom-width: 3px; border-radius: 10px; background: #fff; color: #A83232; font-size: 14px; font-weight: 800; }
+.boton-quitar:hover { background: #FFF5F5; }
+.cantidad-receta { position: relative; display: block; }
+.cantidad-receta input { width: 100%; padding-right: 5.5rem; }
+.cantidad-receta .sufijo { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 15px; font-weight: 800; color: #475569; pointer-events: none; }
+.cantidad-receta.alta input { border-color: #D97706; background: #FFFBEB; }
+.aviso-cantidad { display: inline-block; padding: 6px 12px; border-radius: 10px; background: #FEF3C7; color: #8A4B00; font-size: 14px; font-weight: 800; }
 .franja-triaje { display: flex; align-items: stretch; gap: 16px; overflow: hidden; border: 2px solid #F3BDBD; border-radius: 14px; background: #fff; }
 .franja-triaje.nivel-moderado { border-color: #F5D58A; }
 .franja-triaje.nivel-leve { border-color: #B5E2CB; }

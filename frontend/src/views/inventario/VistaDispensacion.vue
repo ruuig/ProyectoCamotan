@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { RouterLink } from 'vue-router';
 import servicio from '../../services/inventario';
 import { nuevaClaveIdempotencia } from '../../services/almacenLocal';
@@ -35,6 +35,8 @@ const periodo = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 7);
 let clave = null;
 // Post-consulta: lo que se puso aquí y si se le explicó al paciente.
 const aplicadas = reactive({});
+// No alcanza y no se quiere entregar incompleto: todo queda como no entregado.
+const noEntregar = reactive({});
 const orientado = ref(false);
 const orientacion = computed(() => (hoja.value
   ? orientacionPara([hoja.value.diagnosticoCie, ...hoja.value.diagnosticos.map((d) => d.cie)])
@@ -77,6 +79,7 @@ async function abrir(atencionId, verSolo = false) {
     for (const k of Object.keys(cantidades)) delete cantidades[k];
     for (const r of hoja.value.renglones) cantidades[r.prescripcionId] = String(r.aEntregar);
     for (const k of Object.keys(aplicadas)) delete aplicadas[k];
+    for (const k of Object.keys(noEntregar)) delete noEntregar[k];
     orientado.value = false;
     // Una clave por entrega: si se reintenta, no se registra dos veces.
     clave = nuevaClaveIdempotencia();
@@ -105,7 +108,7 @@ function lotesPara(r) {
 
 const porEntregar = computed(() => (hoja.value?.renglones ?? []).filter((r) => r.pendiente > 0));
 // Se puede terminar si algo sale, o si hay que dejar constancia de lo que no había.
-const algoQueEntregar = computed(() => porEntregar.value.some((r) => entero(cantidades[r.prescripcionId]) > 0 || r.aEntregar === 0));
+const algoQueEntregar = computed(() => porEntregar.value.some((r) => entero(cantidades[r.prescripcionId]) > 0 || r.aEntregar === 0 || noEntregar[r.prescripcionId]));
 
 /** No se entrega más de lo que hay: el campo no pasa de lo disponible. */
 function limitar(r) {
@@ -133,7 +136,9 @@ async function terminar() {
   enviando.value = true;
   try {
     const r = await servicio.dispensarAtencion(hoja.value.atencionId, {
-      renglones: porEntregar.value.map((x) => ({ prescripcionId: x.prescripcionId, cantidad: aSolicitar(x), aplicada: Boolean(aplicadas[x.prescripcionId]) })),
+      renglones: porEntregar.value.map((x) => (noEntregar[x.prescripcionId]
+        ? { prescripcionId: x.prescripcionId, cantidad: 0, noEntregar: true }
+        : { prescripcionId: x.prescripcionId, cantidad: aSolicitar(x), aplicada: Boolean(aplicadas[x.prescripcionId]) })),
       orientado: orientado.value,
     }, clave);
     const faltaron = r.renglones.some((x) => x.noEntregado > 0);
@@ -185,7 +190,23 @@ async function constanciaGuardada() {
   await cargarCola();
 }
 
-onMounted(() => { cargarCola(); cargarAtendidas(); });
+// La lista de quién espera se refresca sola: la receta que el médico guarda
+// mientras farmacia tiene la pantalla abierta debe aparecer sin recargar.
+let reloj;
+function alVolver() { if (document.visibilityState === 'visible') cargarCola(); }
+onMounted(() => {
+  cargarCola();
+  cargarAtendidas();
+  reloj = setInterval(() => { if (document.visibilityState === 'visible') cargarCola(); }, 5000);
+  document.addEventListener('visibilitychange', alVolver);
+  // Al volver a esta ventana (aunque estuviera visible al lado de otra) se revisa en el momento.
+  window.addEventListener('focus', alVolver);
+});
+onBeforeUnmount(() => {
+  clearInterval(reloj);
+  document.removeEventListener('visibilitychange', alVolver);
+  window.removeEventListener('focus', alVolver);
+});
 </script>
 
 <template>
@@ -340,7 +361,7 @@ onMounted(() => { cargarCola(); cargarAtendidas(); });
                     <span v-if="r.noHabia" class="lote-chip rojo">No había {{ r.noHabia }}</span>
                   </template>
                   <template v-else>
-                    <span v-for="l in lotesPara(r)" :key="l.loteId" class="lote-chip"><b>{{ l.numeroLote }}</b> vence {{ venceCorto(l.fechaVence) }}<template v-if="lotesPara(r).length > 1"> · {{ l.cantidad }}</template></span>
+                    <span v-for="l in lotesPara(r)" :key="l.loteId" class="lote-chip"><b>{{ l.numeroLote }}</b> vence {{ venceCorto(l.fechaVence) }}<template v-if="lotesPara(r).length > 1"> · se toman {{ l.cantidad }}</template><template v-if="l.hay != null"> · hay {{ l.hay.toLocaleString('es-GT') }}</template></span>
                     <span v-if="r.noAlcanza" class="lote-chip rojo">
                       No había {{ r.noAlcanza }}<template v-if="r.enBodega"> · en bodega hay {{ r.enBodega }}</template>
                     </span>
@@ -356,6 +377,11 @@ onMounted(() => { cargarCola(); cargarAtendidas(); });
                 <template v-if="!soloVer && r.pendiente">
                   <!-- Sin existencia no hay nada que escribir: queda como "no había". -->
                   <span v-if="r.aEntregar === 0" class="no-hay">No hay</span>
+                  <template v-else-if="noEntregar[r.prescripcionId]">
+                    <span class="no-hay">No se entrega</span>
+                    <small class="hay">{{ r.pendiente }} quedan como no entregado</small>
+                    <button type="button" class="incompleto" @click="noEntregar[r.prescripcionId] = false">Entregar lo que hay</button>
+                  </template>
                   <template v-else>
                     <input
                       v-model="cantidades[r.prescripcionId]"
@@ -366,6 +392,7 @@ onMounted(() => { cargarCola(); cargarAtendidas(); });
                       @input="limitar(r)"
                     />
                     <small v-if="r.noAlcanza" class="hay">hay {{ r.aEntregar }}</small>
+                    <button v-if="r.noAlcanza" type="button" class="incompleto" @click="noEntregar[r.prescripcionId] = true">No entregar incompleto</button>
                   </template>
                 </template>
                 <b v-else class="entregado" :class="{ rojo: r.entregado < r.recetado }">{{ r.entregado }}</b>
@@ -429,6 +456,8 @@ onMounted(() => { cargarCola(); cargarAtendidas(); });
 </template>
 
 <style scoped>
+.incompleto { margin-top: 4px; padding: 4px 10px; border: 2px solid #E8930C; border-radius: 10px; background: #FFF7E6; color: #8A4B00; font-size: 12.5px; font-weight: 900; white-space: nowrap; }
+.incompleto:hover { background: #FFEBC7; }
 /* --- Post-consulta: aplicar, orientar, cita --- */
 .aplicar, .explique { display: inline-flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 14px; font-weight: 800; color: #334155; cursor: pointer; }
 .aplicar input, .explique input { position: absolute; opacity: 0; width: 0; height: 0; }

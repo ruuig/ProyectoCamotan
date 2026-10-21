@@ -154,8 +154,12 @@ const INCLUIR_ATENCION = {
 /** Pacientes que esperan en farmacia: atenciones con algo por entregar. */
 async function porAtender(req, res) {
   const atenciones = await prisma.atencion.findMany({
-    // Una receta de hace más de 7 días ya no se espera: queda como no recogida.
-    where: { establecimientoId: req.usuario.establecimientoId, prescripciones: { some: {} }, registradaEn: { gte: new Date(Date.now() - 7 * 86400000) } },
+    // Una receta de hace más de 7 días ya no se espera: queda como no recogida. Cuenta desde la
+    // receta, no desde la llegada: una atención abierta hace días puede recetarse hoy.
+    where: {
+      establecimientoId: req.usuario.establecimientoId,
+      prescripciones: { some: { creadaEn: { gte: new Date(Date.now() - 7 * 86400000) } } },
+    },
     orderBy: { registradaEn: 'desc' },
     take: 150,
     include: {
@@ -229,7 +233,8 @@ async function hojaDeEntrega(req, res, next) {
       enBodega: enBodega(r.insumo.lotes, ahora),
       aEntregar: plan?.aEntregar ?? 0,
       noAlcanza: plan?.noAtendido ?? 0,
-      lotes: plan?.reparto ?? [],
+      // Cada lote propuesto con lo que queda de él en farmacia.
+      lotes: (plan?.reparto ?? []).map((l) => ({ ...l, hay: lotesFarmacia.find((x) => x.id === l.loteId)?.cantidadActual ?? null })),
       // Lo que de verdad se llevó, sin contar lo que quedó como "no había".
       entregado: r.dispensaciones.filter((d) => !d.anulada).reduce((t, d) => t + d.cantidad, 0),
       noHabia: r.demandaNoAtendida.reduce((t, d) => t + d.cantidad, 0),
@@ -288,6 +293,12 @@ async function dispensarAtencion(req, res, next) {
     const pendiente = pendienteDe(p);
     if (pendiente <= 0) continue;
     const pedido = pedidas.get(p.id);
+    // No se entrega incompleto: todo lo recetado queda como no entregado
+    // (cuenta en la demanda real del BRES) y la receta se cierra.
+    if (pedido?.noEntregar) {
+      planes.push({ prescripcion: p, plan: { aEntregar: 0, noAtendido: pendiente, reparto: [], avisoFefo: null } });
+      continue;
+    }
     // Lo que no se manda se entrega completo; con cantidad 0 se deja pendiente.
     const cantidad = pedido ? pedido.cantidad : pendiente;
     if (cantidad === 0) continue;

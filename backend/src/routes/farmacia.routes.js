@@ -15,6 +15,13 @@ const deFarmacia = autorizar('admin', 'farmacia');
 const consultar = autorizar('admin', 'farmacia', 'bodega');
 
 router.get('/existencias', consultar, asincrono(farmacia.existencias));
+// BRES de la farmacia: post-consulta lo imprime en el formulario, como la bodega el suyo.
+router.get(
+  '/bres/:periodo',
+  consultar,
+  validar(z.object({ periodo: z.string().regex(/^\d{4}-\d{2}$/, 'El período debe tener el formato AAAA-MM') }), 'params'),
+  asincrono(farmacia.bres),
+);
 router.get(
   '/dia',
   consultar,

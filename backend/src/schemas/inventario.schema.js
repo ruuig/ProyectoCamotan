@@ -40,6 +40,8 @@ const crearInsumo = z.object({
   unidadesPorEmpaque: z.coerce.number().int().min(1).max(10000).default(1),
   // Si no se indica, se decide por la categoria.
   prescribible: z.boolean().optional(),
+  // Dónde está en la bodega (estante, repisa). Opcional.
+  ubicacionFisica: z.string().trim().max(80).optional().nullable(),
 });
 
 /**

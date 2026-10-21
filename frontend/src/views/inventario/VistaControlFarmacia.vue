@@ -1,58 +1,33 @@
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import farmacia from '../../services/farmacia';
-import { nuevaClaveIdempotencia } from '../../services/almacenLocal';
 import Icono from '../../components/comunes/Icono.vue';
-import { miles } from '../../components/bodega/diseno/PiezasBodega';
 import EstanteFarmacia from '../../components/farmacia/EstanteFarmacia.vue';
 import PedidoFarmacia from '../../components/farmacia/PedidoFarmacia.vue';
-import HoyFarmacia from '../../components/farmacia/HoyFarmacia.vue';
+import CierreDiaFarmacia from '../../components/farmacia/CierreDiaFarmacia.vue';
 
 /**
- * Control diario de la farmacia.
- *
- * El día: con cuánto abrió cada medicamento, lo que llegó de bodega, lo que
- * se entregó a los pacientes y lo que no se pudo entregar, y con cuánto
- * cierra. Al final del día se cuenta lo que hay en el estante; si no
- * coincide, se explica por qué y el sistema ajusta la existencia.
- *
- * La existencia: lo que hay en farmacia, lote por lote, con su vencimiento.
- * Lo que va a vencer se devuelve a bodega.
+ * Estante y pedidos de la farmacia (post-consulta): pedir a bodega lo que
+ * falta y ver lo que hay, lote por lote, con su vencimiento. Lo vencido se
+ * devuelve a bodega. El informe del día (lo que entró y salió) se imprime.
  */
 const hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
-// Cuatro preguntas: ¿qué tengo? (estante), ¿qué me falta? (pedir),
-// ¿qué entró y salió? (hoy) y ¿cuadra? (contar).
+// Tres tareas: pedir lo que falta, ver lo que hay y, al final del día,
+// contar el estante (el cuaderno en línea) y copiar el resumen al SIGSA.
 const PESTANAS = [
-  { clave: 'existencias', texto: 'Estante', pregunta: '¿Qué tengo?', icono: 'inventario' },
-  { clave: 'pedir', texto: 'Pedir a bodega', pregunta: '¿Qué me falta?', icono: 'trasladar' },
-  { clave: 'hoy', texto: 'Hoy', pregunta: '¿Qué entró y qué salió?', icono: 'recibir' },
-  { clave: 'contar', texto: 'Contar', pregunta: '¿Cuadra lo que hay?', icono: 'correcto' },
+  { clave: 'pedir', texto: 'Pedir a bodega', icono: 'trasladar' },
+  { clave: 'existencias', texto: 'Mi estante', icono: 'inventario' },
+  { clave: 'contar', texto: 'Cerrar el día', icono: 'correcto' },
 ];
 const route = useRoute();
 const router = useRouter();
-const pestana = ref(PESTANAS.some((p) => p.clave === route.query.pestana) ? route.query.pestana : 'existencias');
-const fecha = ref(hoy);
-const dia = ref(null);
+const pedida = route.query.pestana;
+const pestana = ref(PESTANAS.some((p) => p.clave === pedida) ? pedida : 'existencias');
 const existencias = ref([]);
 const buscar = ref('');
 const error = ref('');
 const aviso = ref('');
-const enviando = ref(false);
-const contando = ref(false);
-const conteo = reactive({});
-const motivos = reactive({});
-const observacion = ref('');
-
-async function cargarDia() {
-  error.value = '';
-  try {
-    dia.value = await farmacia.dia(fecha.value);
-  } catch (fallo) {
-    error.value = fallo.message;
-  }
-}
-
 async function cargarExistencias() {
   error.value = '';
   try {
@@ -62,64 +37,12 @@ async function cargarExistencias() {
   }
 }
 
-watch(fecha, cargarDia);
 watch(pestana, (p) => {
   router.replace({ query: { pestana: p } });
-  if (p === 'existencias' || p === 'pedir') cargarExistencias();
-  else cargarDia();
+  cargarExistencias();
 });
 const porPedir = computed(() => existencias.value.filter((x) => x.pedir > 0).length);
 
-
-
-const entero = (v) => (String(v ?? '').trim() === '' ? null : Number(String(v).replace(/[^0-9]/g, '')));
-const sinTildes = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-
-const filasDia = computed(() => (dia.value?.filas ?? []).filter((f) => !buscar.value || sinTildes(f.nombre).includes(sinTildes(buscar.value))));
-
-// --- Cierre del día --------------------------------------------------------------
-
-function empezarConteo() {
-  for (const k of Object.keys(conteo)) delete conteo[k];
-  for (const k of Object.keys(motivos)) delete motivos[k];
-  contando.value = true;
-  aviso.value = '';
-}
-
-const diferencia = (f) => {
-  const c = entero(conteo[f.insumoId]);
-  return c === null ? null : c - f.saldoFinal;
-};
-const contados = computed(() => (dia.value?.filas ?? []).filter((f) => entero(conteo[f.insumoId]) !== null));
-const faltaMotivo = computed(() => contados.value.some((f) => diferencia(f) !== 0 && !String(motivos[f.insumoId] ?? '').trim()));
-
-async function cerrarDia() {
-  error.value = '';
-  enviando.value = true;
-  try {
-    const r = await farmacia.cerrarDia({
-      conteos: contados.value.map((f) => ({
-        insumoId: f.insumoId,
-        contado: entero(conteo[f.insumoId]),
-        ...(diferencia(f) !== 0 ? { motivo: motivos[f.insumoId].trim() } : {}),
-      })),
-      observacion: observacion.value.trim() || null,
-    }, nuevaClaveIdempotencia());
-    aviso.value = r.ajustes.length
-      ? `Día cerrado. Se ajustaron ${r.ajustes.length} ${r.ajustes.length === 1 ? 'lote' : 'lotes'} por las diferencias del conteo.`
-      : 'Día cerrado. Lo contado coincide con el sistema.';
-    contando.value = false;
-    await cargarDia();
-  } catch (fallo) {
-    error.value = fallo.message;
-  } finally {
-    enviando.value = false;
-  }
-}
-
-const SEMAFORO = { vencido: 'Vencido', rojo: 'Menos de 12 meses', amarillo: '12 a 18 meses', verde: 'Más de 18 meses', sin_fecha: 'Sin fecha' };
-const fechaCorta = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
-const hora = (v) => (v ? new Date(v).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '');
 // Imprimir: el informe del inventario de un día (por defecto hoy), en su propia hoja.
 const fechaInforme = ref(hoy);
 const eligiendoFecha = ref(false);
@@ -128,7 +51,7 @@ function imprimir() {
   eligiendoFecha.value = false;
 }
 
-onMounted(() => { cargarDia(); cargarExistencias(); });
+onMounted(cargarExistencias);
 
 
 </script>
@@ -154,8 +77,9 @@ onMounted(() => { cargarDia(); cargarExistencias(); });
 
     <nav class="pestanas-grandes mt-5 no-imprimir" aria-label="Estante y pedidos">
       <button v-for="p in PESTANAS" :key="p.clave" type="button" :class="{ on: pestana === p.clave }" :aria-current="pestana === p.clave ? 'page' : undefined" @click="pestana = p.clave">
-        <Icono :nombre="p.icono" :tamano="24" />
-        <span><b>{{ p.texto }}<span v-if="p.clave === 'pedir' && porPedir" class="globo">{{ porPedir }}</span></b><small>{{ p.pregunta }}</small></span>
+        <span class="ic"><Icono :nombre="p.icono" :tamano="26" /></span>
+        <b>{{ p.texto }}</b>
+        <span v-if="p.clave === 'pedir' && porPedir" class="globo">{{ porPedir }}</span>
       </button>
     </nav>
 
@@ -163,74 +87,14 @@ onMounted(() => { cargarDia(); cargarExistencias(); });
     <p v-if="error" role="alert" class="b-aviso error mt-4 no-imprimir">{{ error }}</p>
 
     <div class="mt-5 flex flex-wrap items-end gap-3 no-imprimir">
-      <label v-if="pestana === 'existencias' || pestana === 'contar'" class="buscador">
+      <label v-if="pestana === 'existencias'" class="buscador">
         <Icono nombre="buscar" :tamano="24" :grosor="2.4" />
         <input v-model="buscar" type="search" autocomplete="off" placeholder="Buscar medicamento" aria-label="Buscar medicamento" />
       </label>
     </div>
 
-    <!-- ===== El día ===== -->
-    <template v-if="(pestana === 'contar' || pestana === 'hoy') && dia">
-      <template v-if="pestana === 'contar'">
-
-      <div v-if="dia.cierre" class="b-aviso ok mt-4">
-        <Icono nombre="correcto" :tamano="20" />
-        <span>Día cerrado por {{ dia.cierre.cerradoPor }} a las {{ hora(dia.cierre.cerradoEn) }}.
-          {{ dia.cierre.conteos.filter((c) => c.diferencia).length ? `${dia.cierre.conteos.filter((c) => c.diferencia).length} medicamento(s) con diferencia.` : 'Lo contado coincidió con el sistema.' }}</span>
-      </div>
-      <div v-else-if="dia.esHoy && !contando" class="mt-4 flex justify-end no-imprimir">
-        <button type="button" class="b-btn primario grande" @click="empezarConteo"><Icono nombre="lapiz" :tamano="22" /> Empezar a contar</button>
-      </div>
-
-      <div class="b-tabla-marco mt-4">
-        <table class="b-tabla">
-          <thead>
-            <tr>
-              <th>Medicamento</th>
-              <th class="text-right">Debe haber</th>
-              <th v-if="contando" class="text-right">Contado</th>
-              <th v-if="contando" class="text-right">Diferencia</th>
-              <th v-if="contando">Por qué</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="f in filasDia" :key="f.insumoId">
-              <td class="font-semibold text-tinta">{{ f.nombre }}</td>
-              <td class="text-right"><b class="debe">{{ miles(f.saldoFinal) }}</b></td>
-              <td v-if="contando" class="text-right">
-                <input v-model="conteo[f.insumoId]" inputmode="numeric" :aria-label="`Contado de ${f.nombre}`" class="b-campo num contado" />
-              </td>
-              <td v-if="contando" class="text-right">
-                <span v-if="diferencia(f) !== null" class="dif" :class="diferencia(f) === 0 ? 'ok' : diferencia(f) < 0 ? 'menos' : 'mas'">
-                  {{ diferencia(f) === 0 ? 'Cuadra' : `${diferencia(f) > 0 ? '+' : ''}${diferencia(f)}` }}
-                </span>
-              </td>
-              <td v-if="contando">
-                <input v-if="diferencia(f)" v-model="motivos[f.insumoId]" :aria-label="`Motivo de la diferencia de ${f.nombre}`" placeholder="Ej.: frasco quebrado" class="b-campo" />
-              </td>
-            </tr>
-            <tr v-if="!filasDia.length"><td :colspan="contando ? 5 : 2" class="b-vacio">Sin existencia.</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div v-if="contando" class="b-panel mt-4 p-4 no-imprimir">
-        <label for="obs-cierre" class="b-etiqueta">Observación del día <span class="b-opcional">opcional</span></label>
-        <input id="obs-cierre" v-model="observacion" class="b-campo" />
-        <div class="mt-3 flex justify-end gap-2">
-          <button type="button" class="b-btn secundario" @click="contando = false">Cancelar</button>
-          <button type="button" class="b-btn exito grande" :disabled="enviando || !contados.length || faltaMotivo" @click="cerrarDia">
-            {{ enviando ? 'Cerrando…' : `Cerrar el día (${contados.length} contados)` }}
-          </button>
-        </div>
-      </div>
-
-      </template>
-
-      <template v-else>
-        <HoyFarmacia v-model:fecha="fecha" class="mt-4" :dia="dia" :hoy="hoy" />
-      </template>
-    </template>
+    <!-- ===== Cerrar el día ===== -->
+    <CierreDiaFarmacia v-if="pestana === 'contar'" class="mt-4" @aviso="(t) => (aviso = t)" @error="(t) => (error = t)" />
 
     <!-- ===== Estante ===== -->
     <EstanteFarmacia
@@ -244,19 +108,19 @@ onMounted(() => { cargarDia(); cargarExistencias(); });
 </template>
 
 <style scoped>
-.pestanas-grandes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.globo { margin-left: 8px; padding: 1px 9px; border-radius: 9px; background: #D64545; color: #fff; font-size: 13px; vertical-align: 2px; }
+.pestanas-grandes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.globo { margin-left: auto; padding: 2px 11px; border-radius: 10px; background: #D64545; color: #fff; font-size: 15px; font-weight: 900; }
 .solo-imprimir { display: none; }
 .elegir-informe { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; display: grid; gap: 8px; width: 260px; padding: 16px;
   background: #fff; border: 2px solid #172A5A; border-bottom-width: 4px; border-radius: 16px; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, .35); }
 .elegir-informe b { color: #14244A; font-size: 16px; }
-.pestanas-grandes button { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border: 2px solid #E2E8F0; border-bottom-width: 5px; border-radius: 18px; background: #fff; text-align: left; color: #475569; transition: transform .06s; }
+.pestanas-grandes button { display: flex; align-items: center; gap: 14px; min-height: 84px; padding: 14px 18px; border: 2px solid #E2E8F0; border-bottom-width: 5px; border-radius: 18px; background: #fff; text-align: left; color: #475569; transition: transform .06s; }
 .pestanas-grandes button:active { transform: translateY(2px); border-bottom-width: 3px; }
-.pestanas-grandes button svg { flex-shrink: 0; color: #2F83C4; }
-.pestanas-grandes b { display: block; font-size: 18px; font-weight: 900; color: #14244A; }
-.pestanas-grandes small { display: block; font-size: 13px; font-weight: 700; color: #64748B; }
+.pestanas-grandes .ic { display: grid; place-items: center; flex-shrink: 0; width: 52px; height: 52px; border-radius: 16px; background: #EAF3FB; color: #2F83C4; }
+.pestanas-grandes button.on .ic { background: #2F83C4; color: #fff; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .2); }
+.pestanas-grandes b { font-size: 20px; font-weight: 900; color: #14244A; }
 .pestanas-grandes button.on { background: #EAF3FB; border-color: #4A9BD6; border-bottom-color: #2F83C4; }
-@media (max-width: 1000px) { .pestanas-grandes { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 800px) { .pestanas-grandes { grid-template-columns: 1fr; } }
 .b-btn.grande { height: 56px; padding: 0 26px; border-radius: 16px; font-size: 17px; }
 .debe { font-size: 17px; font-weight: 900; color: #14244A; }
 .dif { display: inline-block; min-width: 64px; padding: 3px 10px; border-radius: 9px; font-weight: 900; text-align: center; }

@@ -63,6 +63,8 @@ export default {
 
   // --- BRES ----------------------------------------------------------------
   vistaPreviaBres: (periodo) => http.get(`/inventario/bres/${periodo}/vista-previa`),
+  // BRES de la farmacia (post-consulta), con sus propios movimientos.
+  bresFarmacia: (periodo) => http.get(`/farmacia/bres/${periodo}`),
   bresDe: (periodo) => http.get(`/inventario/bres/${periodo}`),
   generarBres: (datos) => http.post('/inventario/bres', datos),
   cerrarBres: (periodo, password) => http.post(`/inventario/bres/${periodo}/cerrar`, { password }),

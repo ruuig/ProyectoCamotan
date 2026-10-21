@@ -8,10 +8,12 @@ import { leerAnotarReclamar, guardarAnotarReclamar, observacionKardex } from '..
 /**
  * Tarjeta de Control de Suministro (kardex) impresa sobre la tarjeta.
  *
- * Como el BRES: sin líneas ni títulos, solo los datos en su lugar. Las medidas
- * son las de la plantilla del centro (documentacion/Plantillas/KARDEX1):
- * papel oficio horizontal al 95 %, 21 renglones en el frente y 27 en el
- * reverso. Se puede empezar en el renglón libre de una tarjeta ya usada.
+ * Como el BRES: sin líneas ni títulos, solo los datos en su lugar. El frente
+ * se midió con regla sobre la tarjeta (oficio horizontal, 21 renglones), en
+ * milímetros desde la esquina superior izquierda. El reverso (27 renglones)
+ * sigue con las medidas de la plantilla del centro
+ * (documentacion/Plantillas/KARDEX1) al 95 %. Se puede empezar en el renglón
+ * libre de una tarjeta ya usada.
  *
  * ?insumoId=... un producto; sin él, todos los que se movieron en ?periodo=.
  */
@@ -20,16 +22,10 @@ const route = useRoute();
 const datos = ref(null);
 const error = ref('');
 
-// --- Medidas de la plantilla -----------------------------------------------------
-const pulgadas = (ancho) => Math.round(ancho * 7 + 5) / 96;
-function columnas(anchos) {
-  const res = {};
-  let x = 0;
-  for (const [letra, ancho] of Object.entries(anchos)) {
-    res[letra] = { left: x, width: pulgadas(ancho) };
-    x += pulgadas(ancho);
-  }
-  return res;
+// --- Medidas (todo en milímetros) ------------------------------------------------
+/** Columnas a partir de sus bordes: { A: { left, width }, B: ... }. */
+function columnas(bordes) {
+  return Object.fromEntries(bordes.slice(0, -1).map((x, i) => [String.fromCharCode(65 + i), { left: x, width: bordes[i + 1] - x }]));
 }
 function filas(altos) {
   const res = {};
@@ -40,26 +36,48 @@ function filas(altos) {
   }
   return res;
 }
+// Reverso: anchos de columna de Excel (caracteres) y altos de fila (puntos).
+const excelMm = (ancho) => (Math.round(ancho * 7 + 5) / 96) * 25.4;
+const ptMm = (pt) => (pt * 25.4) / 72;
+function bordesExcel(anchos) {
+  const res = [0];
+  for (const a of anchos) res.push(res[res.length - 1] + excelMm(a));
+  return res;
+}
+const ALTO_FRENTE = (209.1 - 71.0) / 21;
 const LADO = {
   frente: {
-    margen: { left: 1.52, top: 0.75 },
-    col: columnas({ A: 8.71, B: 12.43, C: 26.86, D: 10.71, E: 9.43, F: 8.86, G: 15.43, H: 11.43, I: 9.29, J: 9.29, K: 9.29, L: 9.29, M: 9.29, N: 9.29, O: 9.71 }),
-    fila: filas({ 1: 5.25, 2: 36, 3: 26.25, 4: 28.5, 5: 15, 6: 15.75, 7: 18.95, ...Object.fromEntries(Array.from({ length: 21 }, (_, i) => [8 + i, 20.1])) }),
+    margen: { left: 0, top: 0 },
+    escala: 1,
+    // Fecha, referencia, remitente, entrada (cant, precio, valor), vence, lote, salida, reajuste, saldo (cant, precio), observaciones
+    col: columnas([11.6, 31.9, 52.1, 102.9, 121.5, 142.1, 161.5, 184.7, 204.9, 224.7, 243.7, 263.8, 283.8, 317.0]),
+    fila: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [8 + i, { top: 71.0 + i * ALTO_FRENTE, height: ALTO_FRENTE }])),
     primera: 8,
     renglones: 21,
-    // Fecha, referencia, remitente, entrada (cant, precio, valor), vence, lote, salida, reajuste, saldo (cant, precio), observaciones
     campos: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'],
-    obsHasta: 'O',
+    obsHasta: 'M',
   },
   reverso: {
-    margen: { left: 1.28, top: 0.75 },
-    col: columnas({ A: 4.86, B: 8.71, C: 11.43, D: 26.86, E: 10.71, F: 8.86, G: 10, H: 13.29, I: 11.43, J: 10.14, K: 9.29, L: 9.29, M: 9.29, N: 9.29, O: 9.29, P: 9.71 }),
-    fila: filas({ 1: 27, ...Object.fromEntries(Array.from({ length: 27 }, (_, i) => [2 + i, 20.1])) }),
+    margen: { left: 1.28 * 25.4, top: 0.75 * 25.4 },
+    escala: 0.95,
+    col: columnas(bordesExcel([4.86, 8.71, 11.43, 26.86, 10.71, 8.86, 10, 13.29, 11.43, 10.14, 9.29, 9.29, 9.29, 9.29, 9.29, 9.71])),
+    fila: Object.fromEntries(Object.entries(filas({ 1: 27, ...Object.fromEntries(Array.from({ length: 27 }, (_, i) => [2 + i, 20.1])) }))
+      .map(([n, f]) => [n, { top: ptMm(f.top), height: ptMm(f.height) }])),
     primera: 2,
     renglones: 27,
     campos: ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'],
     obsHasta: 'P',
   },
+};
+// Encabezado del frente: texto sobre las líneas de producto, distrito y
+// servicio, y dentro de las casillas de niveles mínimo y máximo.
+const sobreLinea = (x1, x2, linea) => ({ left: `${x1}mm`, width: `${x2 - x1}mm`, top: `${linea - 6}mm`, height: `${5.6}mm` });
+const ENC = {
+  producto: sobreLinea(55, 235, 39.3),
+  distrito: sobreLinea(52, 137, 51.4),
+  servicio: sobreLinea(155, 235, 51.4),
+  minimo: { left: '242.8mm', width: '17.9mm', top: '43mm', height: '8.4mm' },
+  maximo: { left: '260.7mm', width: '17.6mm', top: '43mm', height: '8.4mm' },
 };
 const POR_TARJETA = LADO.frente.renglones + LADO.reverso.renglones;
 
@@ -126,10 +144,10 @@ const paginas = computed(() => {
 const posicion = (lado, letra, fila, hasta = letra) => {
   const L = LADO[lado];
   return {
-    left: `${L.col[letra].left}in`,
-    width: `${L.col[hasta].left + L.col[hasta].width - L.col[letra].left}in`,
-    top: `${L.fila[fila].top}pt`,
-    height: `${L.fila[fila].height}pt`,
+    left: `${L.col[letra].left}mm`,
+    width: `${L.col[hasta].left + L.col[hasta].width - L.col[letra].left}mm`,
+    top: `${L.fila[fila].top}mm`,
+    height: `${L.fila[fila].height}mm`,
   };
 };
 const producto = (i) => [i.nombreGenerico, i.concentracion, i.presentacion].filter(Boolean).join(', ');
@@ -140,6 +158,7 @@ onMounted(async () => {
     if (route.query.periodo) q.periodo = route.query.periodo;
     if (route.query.desde) q.desde = route.query.desde;
     if (route.query.insumoId) q.insumoId = route.query.insumoId;
+    if (route.query.ubicacion) q.ubicacion = route.query.ubicacion;
     datos.value = await bodega.kardex(q);
     registrarImpresion('kardex', `${route.query.periodo ?? 'historia'}${route.query.insumoId ? ` insumo ${route.query.insumoId}` : ''}`);
   } catch (fallo) {
@@ -151,7 +170,7 @@ onMounted(async () => {
 <template>
   <p v-if="error" role="alert" class="no-imprimir p-6 text-red-700">{{ error }}</p>
 
-  <div v-if="datos" class="no-imprimir mx-auto flex max-w-[14in] flex-wrap items-center gap-2 p-4 text-sm">
+  <div v-if="datos" class="no-imprimir mx-auto flex max-w-[13in] flex-wrap items-center gap-2 p-4 text-sm">
     <span class="font-bold">{{ datos.tarjetas.length }} producto(s) · {{ paginas.length }} cara(s)</span>
     <label class="ml-3 flex items-center gap-1">Empezar en el renglón
       <input v-model.number="inicio" type="number" min="1" :max="POR_TARJETA" class="w-16 rounded border px-2 py-1" />
@@ -177,45 +196,49 @@ onMounted(async () => {
   </div>
   <p v-if="datos && !paginas.length" class="no-imprimir p-6 text-center">No hay movimientos para imprimir.</p>
 
-  <div v-for="(p, i) in paginas" :key="i" class="pagina" :class="guias ? 'con-guias' : ''">
-    <div
-      class="forma"
-      :style="{ left: `${LADO[p.lado].margen.left}in`, top: `${LADO[p.lado].margen.top}in`, transform: `translate(${ajuste.x}mm, ${ajuste.y}mm) scale(0.95)` }"
-    >
-      <template v-if="p.lado === 'frente' && p.conEncabezado">
-        <div class="celda centro" :style="posicion('frente', 'C', 2, 'H')">{{ producto(p.t.insumo) }}</div>
-        <div class="celda centro" :style="posicion('frente', 'C', 3)">{{ p.enc.distrito }}</div>
-        <div class="celda centro arial" :style="posicion('frente', 'G', 3)">{{ p.enc.servicio }}</div>
-        <div class="celda centro arial" :style="posicion('frente', 'J', 3)">{{ numero(p.enc.nivelMinimo) }}</div>
-        <div class="celda der arial" :style="posicion('frente', 'K', 3)">{{ numero(p.enc.nivelMaximo) }}</div>
-      </template>
-      <template v-for="(f, n) in p.renglones" :key="n">
-        <template v-if="f">
-          <div
-            v-for="(v, c) in valores(f)"
-            :key="c"
-            class="celda"
-            :class="ALINEAR[c]"
-            :style="posicion(p.lado, LADO[p.lado].campos[c], LADO[p.lado].primera + n, c === 12 ? LADO[p.lado].obsHasta : LADO[p.lado].campos[c])"
-          >{{ v }}</div>
+  <!-- hoja-propia: lo único que sale en el papel (style-impresion.css oculta lo demás). -->
+  <div class="hoja-propia">
+    <div v-for="(p, i) in paginas" :key="i" class="pagina" :class="guias ? 'con-guias' : ''">
+      <div
+        class="forma"
+        :style="{ left: `${LADO[p.lado].margen.left}mm`, top: `${LADO[p.lado].margen.top}mm`, transform: `translate(${ajuste.x}mm, ${ajuste.y}mm) scale(${LADO[p.lado].escala})` }"
+      >
+        <template v-if="p.lado === 'frente' && p.conEncabezado">
+          <div class="celda centro abajo" :style="ENC.producto">{{ producto(p.t.insumo) }}</div>
+          <div class="celda centro abajo" :style="ENC.distrito">{{ p.enc.distrito }}</div>
+          <div class="celda centro abajo arial" :style="ENC.servicio">{{ p.enc.servicio }}</div>
+          <div class="celda centro arial" :style="ENC.minimo">{{ numero(p.enc.nivelMinimo) }}</div>
+          <div class="celda centro arial" :style="ENC.maximo">{{ numero(p.enc.nivelMaximo) }}</div>
         </template>
-      </template>
+        <template v-for="(f, n) in p.renglones" :key="n">
+          <template v-if="f">
+            <div
+              v-for="(v, c) in valores(f)"
+              :key="c"
+              class="celda"
+              :class="ALINEAR[c]"
+              :style="posicion(p.lado, LADO[p.lado].campos[c], LADO[p.lado].primera + n, c === 12 ? LADO[p.lado].obsHasta : LADO[p.lado].campos[c])"
+            >{{ v }}</div>
+          </template>
+        </template>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.pagina { position: relative; width: 14in; height: 8.5in; margin: 0 auto 16px; background: #fff; color: #000; overflow: hidden; box-shadow: 0 1px 6px rgba(0, 0, 0, .15); }
-.forma { position: absolute; transform-origin: 0 0; font-family: Calibri, Carlito, Arial, sans-serif; font-size: 11pt; width: 12in; height: 7.5in; }
+.pagina { position: relative; width: 13in; height: 8.5in; margin: 0 auto 16px; background: #fff; color: #000; overflow: hidden; box-shadow: 0 1px 6px rgba(0, 0, 0, .15); }
+.forma { position: absolute; transform-origin: 0 0; font-family: Calibri, Carlito, Arial, sans-serif; font-size: 11pt; width: 13in; height: 8.5in; }
 .celda { position: absolute; display: flex; align-items: center; padding: 0 2px; white-space: nowrap; overflow: hidden; line-height: 1.1; }
 .centro { justify-content: center; }
 .der { justify-content: flex-end; }
 .izq { justify-content: flex-start; }
+.abajo { align-items: flex-end; padding-bottom: 0.5mm; }
 .chica { font-size: 8pt; }
 .arial { font-family: Arial, sans-serif; font-size: 10pt; }
 .con-guias .celda { outline: 1px dashed #CBD5E1; outline-offset: -1px; }
 @media print {
-  @page { size: 14in 8.5in; margin: 0; }
+  @page { size: 13in 8.5in; margin: 0; }
   .pagina { margin: 0; box-shadow: none; page-break-after: always; }
   .pagina:last-child { page-break-after: auto; }
   .con-guias .celda { outline: none; }

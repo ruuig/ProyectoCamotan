@@ -15,7 +15,8 @@ const DOCUMENTOS = {
   tarjeta_control: 'Tarjeta de control de apoyo',
   oficio_baja: 'Oficio de baja',
   requisicion: 'Requisición despacho de almacén',
-  kardex: 'Kardex de bodega',
+  kardex: 'Kardex (tarjeta de control de suministro)',
+  inventario_farmacia: 'Informe diario del inventario de farmacia',
   sigsa4: 'SIGSA-4, registro diario de post-consulta',
   sigsa3cs: 'SIGSA-3CS, registro diario de consulta',
   receta_paciente: 'Receta e indicaciones para el paciente',
@@ -46,9 +47,15 @@ async function registrar(req, res, next) {
   if (req.usuario.rol === 'bodega' && !DOCUMENTOS_BODEGA.has(documento)) {
     return next({ status: 403, codigo: 'sin_permiso', mensaje: 'Ese documento no corresponde a su rol' });
   }
-  // Farmacia imprime solo su SIGSA-4.
-  if (req.usuario.rol === 'farmacia' && !['sigsa4', 'requisicion'].includes(documento)) {
+  // Farmacia (post-consulta) imprime lo suyo: SIGSA-4, recetas, su inventario,
+  // sus requisiciones, su kardex y su BRES.
+  if (req.usuario.rol === 'farmacia'
+    && !['sigsa4', 'requisicion', 'receta_paciente', 'inventario_farmacia', 'kardex', 'bres'].includes(documento)) {
     return next({ status: 403, codigo: 'sin_permiso', mensaje: 'Los documentos de bodega los imprime bodega' });
+  }
+  // El encargado de un centro o puesto imprime sus requisiciones.
+  if (req.usuario.rol === 'servicio' && documento !== 'requisicion') {
+    return next({ status: 403, codigo: 'sin_permiso', mensaje: 'Ese documento no corresponde a su rol' });
   }
 
   if (pacienteId) {

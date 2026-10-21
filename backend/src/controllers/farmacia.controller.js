@@ -1,4 +1,5 @@
 const farmacia = require('../services/farmacia.service');
+const { bresFarmacia } = require('../services/farmaciaBres.service');
 
 /** Existencia de la farmacia por insumo y por lote. */
 async function existencias(req, res) {
@@ -47,4 +48,9 @@ async function ponerLote(req, res) {
   res.status(201).json(hecho);
 }
 
-module.exports = { existencias, dia, cerrarDia, devolver, ponerLote };
+/** BRES de la farmacia (post-consulta), con sus propios movimientos. */
+async function bres(req, res) {
+  res.json(await bresFarmacia(req.usuario.establecimientoId, req.params.periodo));
+}
+
+module.exports = { existencias, dia, cerrarDia, devolver, ponerLote, bres };

@@ -17,7 +17,9 @@ import Dona from '../../components/paneles/Dona.vue';
  *  2. Anotar lo que no pudo entregar (va al SIGSA 4 como no entregado).
  *  3. Pedir a bodega lo que se le acabó en el estante.
  *  4. Sacar del estante lo vencido y ponerle lote a lo que no lo tiene.
- * La existencia del centro (BRES, pedidos al Área) es de bodega, no de aquí.
+ * Arriba, las tres tareas del día en grande (como el inicio de la bodega) y
+ * los documentos del mes de post-consulta: su kardex y su BRES, que salen
+ * solos de lo que se entregó y de lo que mandó la bodega.
  */
 const auth = useAuthStore();
 const porAtender = ref(null);
@@ -38,6 +40,13 @@ async function cargar() {
   estante.value = e?.insumos ?? null;
   if (!p && !d && !e) error.value = 'No se pudo cargar el panel.';
 }
+
+// Periodos de los documentos del mes: el kardex del mes en curso y el BRES del que ya cerró.
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const local = new Date(Date.now() - 6 * 3600000);
+const mesActual = local.toISOString().slice(0, 7);
+const mesAnterior = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+const nombreMes = (p) => MESES[Number(p.slice(5, 7)) - 1];
 
 const minutosDesde = (f) => Math.max(0, Math.round((Date.now() - new Date(f)) / 60000));
 const horaDe = (f) => new Date(f).toLocaleTimeString('es-GT', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Guatemala' });
@@ -116,7 +125,7 @@ onMounted(() => {
   reloj = setInterval(async () => {
     const p = await intentar(inventario.porAtender());
     if (p) porAtender.value = p.porAtender;
-  }, 60000);
+  }, 15000);
 });
 onBeforeUnmount(() => clearInterval(reloj));
 </script>
@@ -125,16 +134,38 @@ onBeforeUnmount(() => clearInterval(reloj));
   <section class="panel-far">
     <header class="b-cabecera">
       <div>
-        <span class="b-antetitulo">Farmacia</span>
+        <span class="b-antetitulo">Farmacia · post-consulta</span>
         <h1 class="b-titulo mt-1">{{ saludo }}{{ primerNombre ? `, ${primerNombre}` : '' }}</h1>
-      </div>
-      <div class="b-acciones">
-        <RouterLink to="/dispensacion/control" class="b-btn secundario"><Icono nombre="inventario" :tamano="20" /> Estante y pedidos</RouterLink>
-        <RouterLink to="/dispensacion" class="b-btn primario"><Icono nombre="dispensacion" :tamano="20" /> Entregar recetas</RouterLink>
       </div>
     </header>
 
     <p v-if="error" role="alert" class="b-aviso error">{{ error }}</p>
+
+    <!-- Las tres tareas del día -->
+    <div class="tareas">
+      <RouterLink to="/dispensacion" class="tarea azul">
+        <span class="ic"><Icono nombre="dispensacion" :tamano="46" /></span>
+        <span class="txt"><b>Entregar recetas</b><small>Lo que recetó el médico, con el lote que vence primero</small></span>
+        <span v-if="porAtender?.length" class="pend">{{ porAtender.length }} {{ porAtender.length === 1 ? 'espera' : 'esperan' }}</span>
+      </RouterLink>
+      <RouterLink to="/dispensacion/control?pestana=pedir" class="tarea verde">
+        <span class="ic"><Icono nombre="trasladar" :tamano="46" /></span>
+        <span class="txt"><b>Pedir a bodega</b><small>La requisición ya va llena; usted la revisa y la envía</small></span>
+        <span v-if="pedirABodega.length" class="pend ambar">{{ pedirABodega.length }} por pedir</span>
+      </RouterLink>
+      <RouterLink to="/dispensacion/control?pestana=contar" class="tarea marino">
+        <span class="ic"><Icono nombre="correcto" :tamano="46" /></span>
+        <span class="txt"><b>Cerrar el día</b><small>Contar el estante y copiar el resumen al SIGSA</small></span>
+      </RouterLink>
+    </div>
+
+    <!-- Documentos del mes de post-consulta -->
+    <nav class="consultas" aria-label="Documentos del mes">
+      <RouterLink :to="`/imprimir/kardex?ubicacion=farmacia&periodo=${mesActual}`" target="_blank" class="consulta"><Icono nombre="hojaCalculo" :tamano="22" /> Kardex de {{ nombreMes(mesActual) }}</RouterLink>
+      <RouterLink :to="`/imprimir/bres/${mesAnterior}?ubicacion=farmacia`" target="_blank" class="consulta"><Icono nombre="imprimir" :tamano="22" /> BRES de {{ nombreMes(mesAnterior) }}</RouterLink>
+      <RouterLink :to="`/imprimir/sigsa4/${mesActual}`" target="_blank" class="consulta"><Icono nombre="consolidado" :tamano="22" /> SIGSA-4</RouterLink>
+      <RouterLink :to="`/imprimir/inventario-farmacia?fecha=${local.toISOString().slice(0, 10)}`" target="_blank" class="consulta"><Icono nombre="recibir" :tamano="22" /> Informe del día</RouterLink>
+    </nav>
 
     <div class="cifras">
       <TarjetaCifra v-for="t in tarjetas" :key="t.titulo" v-bind="t" />
@@ -192,7 +223,7 @@ onBeforeUnmount(() => clearInterval(reloj));
         </header>
         <ul v-if="pedirABodega.length" class="lista">
           <li v-for="i in pedirABodega.slice(0, 8)" :key="i.insumoId">
-            <span class="min-w-0 flex-1 truncate">{{ i.nombre }}</span>
+            <span class="min-w-0 flex-1 nombre-completo">{{ i.nombre }}</span>
             <small>Bodega: <b>{{ miles(i.enBodega) }}</b></small>
           </li>
         </ul>
@@ -210,7 +241,7 @@ onBeforeUnmount(() => clearInterval(reloj));
         </header>
         <ul v-if="noEntregadoHoy.length" class="lista">
           <li v-for="f in noEntregadoHoy" :key="f.insumoId">
-            <span class="min-w-0 flex-1 truncate">{{ f.nombre }}</span>
+            <span class="min-w-0 flex-1 nombre-completo">{{ f.nombre }}</span>
             <b class="rojo">{{ miles(f.noEntregado) }}</b>
           </li>
         </ul>
@@ -227,7 +258,7 @@ onBeforeUnmount(() => clearInterval(reloj));
           <span class="contador" :style="estiloTono(sinEnElCentro.length ? 'critico' : 'bien')">{{ sinEnElCentro.length }}</span>
         </header>
         <ul v-if="sinEnElCentro.length" class="lista corta">
-          <li v-for="i in sinEnElCentro" :key="i.insumoId"><span class="min-w-0 flex-1 truncate">{{ i.nombre }}</span></li>
+          <li v-for="i in sinEnElCentro" :key="i.insumoId"><span class="min-w-0 flex-1 nombre-completo">{{ i.nombre }}</span></li>
         </ul>
       </section>
     </div>
@@ -235,6 +266,25 @@ onBeforeUnmount(() => clearInterval(reloj));
 </template>
 
 <style scoped>
+/* Tareas grandes y documentos del mes, con el mismo diseño del inicio de la bodega. */
+.tareas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1100px) { .tareas { grid-template-columns: 1fr; } }
+.tarea { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; min-height: 210px; padding: 22px 24px; border: 2px solid #E2E8F0; border-bottom-width: 6px; border-radius: 24px; background: #fff; color: #14244A; transition: transform .08s, border-color .12s; }
+.tarea:hover { border-color: var(--c); }
+.tarea:active { transform: translateY(3px); border-bottom-width: 3px; }
+.tarea .ic { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 22px; background: var(--c); color: #fff; box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .22); }
+.tarea .txt { display: grid; gap: 4px; }
+.tarea b { font-size: 27px; font-weight: 900; line-height: 1.1; }
+.tarea small { font-size: 16px; font-weight: 700; color: #64748B; }
+.tarea.azul { --c: #2F83C4; } .tarea.verde { --c: #1A8F57; } .tarea.marino { --c: #172A5A; }
+.pend { position: absolute; top: 16px; right: 18px; padding: 4px 12px; border-radius: 10px; background: #2F83C4; color: #fff; font-size: 14px; font-weight: 900; }
+.pend.ambar { background: #E8930C; }
+.consultas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 800px) { .consultas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.consulta { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 68px; padding: 8px 12px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 16px; background: #fff; font-size: 16px; font-weight: 800; color: #172A5A; text-align: center; }
+.consulta:hover { border-color: #9FCDEC; background: #F7FBFE; }
+.consulta svg { color: #2F83C4; flex-shrink: 0; }
+
 .panel-far { display: grid; gap: 20px; }
 .cifras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1200px) { .cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

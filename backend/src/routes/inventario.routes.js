@@ -132,6 +132,8 @@ router.post(
       cantidad: z.coerce.number().int().min(0),
       // Inyectable o método puesto aquí, no llevado a casa.
       aplicada: z.boolean().optional(),
+      // No alcanza y no se entrega incompleto: todo lo recetado queda como no entregado.
+      noEntregar: z.boolean().optional(),
     })).max(50).optional(),
     // Se le explicó cómo tomarlo y cuándo regresar.
     orientado: z.boolean().optional(),

@@ -184,6 +184,24 @@ describe('entrega por paciente', () => {
     expect(cola.body.porAtender.some((x) => x.atencionId === atencionId)).toBe(false);
   });
 
+  it('si no alcanza y no se entrega incompleto, todo lo recetado queda como no entregado', async () => {
+    const insumo = await nuevoInsumo();
+    const l = await recibir(insumo.id, 6);
+    await aFarmacia(l.id, 6);
+    const { atencionId, prescripciones } = await consultaConRecetas([[insumo.id, 10]]);
+
+    const r = await farmacia(request(app).post(`/api/v1/dispensaciones/atenciones/${atencionId}`)).send({
+      renglones: [{ prescripcionId: prescripciones[0].id, cantidad: 0, noEntregar: true }],
+    });
+    expect(r.status).toBe(201);
+    expect(r.body.renglones.map((x) => [x.entregado, x.noEntregado])).toEqual([[0, 10]]);
+    // El estante no se toca y la demanda real cuenta los 10.
+    expect((await lote(l.id)).cantidadFarmacia).toBe(6);
+    expect(await prisma.demandaNoAtendida.findFirst({ where: { prescripcionId: prescripciones[0].id } })).toMatchObject({ cantidad: 10 });
+    const cola = await farmacia(request(app).get('/api/v1/dispensaciones/por-atender'));
+    expect(cola.body.porAtender.some((x) => x.atencionId === atencionId)).toBe(false);
+  });
+
   it('anular una entrega la devuelve al mismo lote en farmacia', async () => {
     const insumo = await nuevoInsumo();
     const l = await recibir(insumo.id, 10);

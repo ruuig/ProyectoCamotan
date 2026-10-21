@@ -37,7 +37,26 @@ const req = (n) => (n ? `Req. ${n}` : null);
  *   salida: lo que sale a un servicio o a la farmacia por requisicion.
  *   reajuste: lo demas (inventario fisico, bajas, correcciones), con su signo.
  */
-function describir(m) {
+function describir(m, ubicacion = 'bodega') {
+  // Tarjeta de la farmacia: entra lo que manda la bodega y sale lo entregado a pacientes.
+  if (ubicacion === 'farmacia') {
+    if (m.tipo === 'paso_farmacia') {
+      return {
+        columna: m.cantidad > 0 ? 'entrada' : 'salida',
+        referencia: req(m.traslado?.requisicion?.numero) ?? m.traslado?.numero ?? '',
+        remitenteDestinatario: m.cantidad > 0 ? 'Bodega del centro' : 'Bodega del centro (devolución)',
+        observaciones: m.cantidad > 0 ? '' : 'Devuelto a bodega',
+      };
+    }
+    if (m.tipo === 'entrega' || m.tipo === 'devolucion') {
+      return {
+        columna: 'salida',
+        referencia: '',
+        remitenteDestinatario: 'Pacientes (post-consulta)',
+        observaciones: m.pacientes ? `${m.pacientes} ${m.pacientes === 1 ? 'paciente' : 'pacientes'}` : '',
+      };
+    }
+  }
   const t = m.traslado;
   if (t) {
     return {
@@ -81,7 +100,7 @@ const redondear = (v) => Math.round(v * 100) / 100;
  * Renglones de la tarjeta a partir del saldo anterior. Funcion pura: recibe
  * los movimientos de bodega ya ordenados.
  */
-function filasKardex(movimientos, saldoAnterior = 0, valorAnterior = 0) {
+function filasKardex(movimientos, saldoAnterior = 0, valorAnterior = 0, ubicacion = 'bodega') {
   let saldo = saldoAnterior;
   let valor = valorAnterior ?? 0;
   let valorCompleto = valorAnterior != null;
@@ -90,7 +109,7 @@ function filasKardex(movimientos, saldoAnterior = 0, valorAnterior = 0) {
     const precio = costo(m);
     if (precio == null) valorCompleto = false;
     else valor += m.cantidad * precio;
-    const d = describir(m);
+    const d = describir(m, ubicacion);
     const entrada = d.columna === 'entrada' ? m.cantidad : null;
     return {
       id: m.id,
@@ -136,10 +155,10 @@ function datosInsumo(i) {
   };
 }
 
-async function saldosAntes(insumoIds, desde) {
+async function saldosAntes(insumoIds, desde, ubicacion = 'bodega') {
   if (!desde) return new Map();
   const previos = await prisma.movimientoInsumo.findMany({
-    where: { ubicacion: 'bodega', registradoEn: { lt: desde }, lote: { insumoId: { in: insumoIds } } },
+    where: { ubicacion, registradoEn: { lt: desde }, lote: { insumoId: { in: insumoIds } } },
     select: { cantidad: true, lote: { select: { insumoId: true, costoUnitario: true } } },
   });
   const res = new Map();
@@ -154,7 +173,32 @@ async function saldosAntes(insumoIds, desde) {
 }
 
 /** Tarjetas de varios insumos en el rango [desde, hasta). */
-async function kardexDe(establecimientoId, { insumoIds = null, desde = null, hasta = null, soloConMovimiento = false } = {}) {
+/**
+ * Farmacia: las entregas a pacientes de un mismo día y lote van en un solo
+ * renglón (si no, la tarjeta tendría un renglón por paciente).
+ */
+function agruparEntregas(movimientos) {
+  const salida = [];
+  const grupo = new Map();
+  for (const m of movimientos) {
+    if (m.tipo !== 'entrega' && m.tipo !== 'devolucion') { salida.push(m); continue; }
+    const dia = new Date(m.registradoEn.getTime() - 6 * 3600000).toISOString().slice(0, 10);
+    const clave = `${dia}:${m.loteId ?? m.lote.id}`;
+    const g = grupo.get(clave);
+    if (g) {
+      g.cantidad += m.cantidad;
+      if (m.tipo === 'entrega') g.pacientes += 1;
+      g.registradoEn = m.registradoEn;
+    } else {
+      const nuevo = { ...m, tipo: 'entrega', pacientes: m.tipo === 'entrega' ? 1 : 0 };
+      grupo.set(clave, nuevo);
+      salida.push(nuevo);
+    }
+  }
+  return salida.filter((m) => m.cantidad !== 0);
+}
+
+async function kardexDe(establecimientoId, { insumoIds = null, desde = null, hasta = null, soloConMovimiento = false, ubicacion = 'bodega' } = {}) {
   const insumos = await prisma.insumo.findMany({
     where: { establecimientoId, ...(insumoIds ? { id: { in: insumoIds } } : {}) },
     orderBy: [{ nombreGenerico: 'asc' }, { concentracion: 'asc' }],
@@ -163,11 +207,11 @@ async function kardexDe(establecimientoId, { insumoIds = null, desde = null, has
   const fecha = { ...(desde ? { gte: desde } : {}), ...(hasta ? { lt: hasta } : {}) };
   const [movimientos, anteriores] = await Promise.all([
     prisma.movimientoInsumo.findMany({
-      where: { ubicacion: 'bodega', lote: { insumoId: { in: ids } }, ...(desde || hasta ? { registradoEn: fecha } : {}) },
+      where: { ubicacion, lote: { insumoId: { in: ids } }, ...(desde || hasta ? { registradoEn: fecha } : {}) },
       include: INCLUIR,
       orderBy: [{ registradoEn: 'asc' }, { id: 'asc' }],
     }),
-    saldosAntes(ids, desde),
+    saldosAntes(ids, desde, ubicacion),
   ]);
   const porInsumo = new Map();
   for (const m of movimientos) {
@@ -176,28 +220,28 @@ async function kardexDe(establecimientoId, { insumoIds = null, desde = null, has
   }
   const tarjetas = [];
   for (const i of insumos) {
-    const propios = porInsumo.get(i.id) ?? [];
+    const propios = ubicacion === 'farmacia' ? agruparEntregas(porInsumo.get(i.id) ?? []) : (porInsumo.get(i.id) ?? []);
     if (soloConMovimiento && propios.length === 0) continue;
     const ant = anteriores.get(i.id) ?? { saldo: 0, valor: 0, completo: true };
     tarjetas.push({
       insumo: datosInsumo(i),
       saldoAnterior: ant.saldo,
       valorAnterior: ant.completo ? redondear(ant.valor) : null,
-      ...filasKardex(propios, ant.saldo, ant.completo ? ant.valor : null),
+      ...filasKardex(propios, ant.saldo, ant.completo ? ant.valor : null, ubicacion),
     });
   }
   return tarjetas;
 }
 
 /** Lo que va en el encabezado de la tarjeta, igual para todas. */
-async function encabezadoKardex(establecimientoId) {
+async function encabezadoKardex(establecimientoId, ubicacion = 'bodega') {
   const [est, config] = await Promise.all([
     prisma.establecimiento.findUnique({ where: { id: establecimientoId } }),
     configuracion(establecimientoId),
   ]);
   return {
     distrito: est ? est.distritoSalud || `${est.municipio}, ${est.departamento}` : '',
-    servicio: 'Bodega',
+    servicio: ubicacion === 'farmacia' ? 'Farmacia (post-consulta)' : 'Bodega',
     nivelMinimo: Number(config.nivelMinimoMeses),
     nivelMaximo: Number(config.nivelMaximoMeses),
   };

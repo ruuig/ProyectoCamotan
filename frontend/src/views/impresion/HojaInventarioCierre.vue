@@ -37,7 +37,7 @@ const tituloCierre = computed(() => {
   return `Inventario de Cierre de Medicamentos y M. Q. del Centro de Salud, ${est.value?.municipio ?? 'Camotán'}, al ${dia} de ${nombre[0].toUpperCase()}${nombre.slice(1)} de ${anio}`;
 });
 
-const hojas = computed(() => paginas(enBlanco ? renglonesEnBlanco(25) : datos.value?.filas ?? [], 25));
+const hojas = computed(() => [enBlanco ? renglonesEnBlanco(45) : datos.value?.filas ?? []]);
 const conReajustes = computed(() => datos.value?.fuente !== 'excel');
 const firmas = computed(() => datos.value?.firmas ?? {});
 const miles = (n) => Number(n).toLocaleString('en-US');
@@ -53,7 +53,7 @@ const v = (f, c) => (f.vacio ? '' : c === 'unidadEntrega' ? f[c] : miles(f[c]));
     :firmas="[]"
     imprimir-al-abrir
   >
-    <section v-for="(hoja, h) in hojas" :key="h" :class="h > 0 ? 'salto-pagina' : ''">
+    <section v-for="(hoja, h) in hojas" :key="h">
       <table class="w-full border-collapse text-[10px]">
         <thead>
           <tr class="bg-slate-100">
@@ -69,8 +69,8 @@ const v = (f, c) => (f.vacio ? '' : c === 'unidadEntrega' ? f[c] : miles(f[c]));
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(f, j) in hoja" :key="f.insumoId" class="h-5">
-            <td class="border border-slate-500 px-1 text-right">{{ f.vacio ? '' : h * 25 + j + 1 }}</td>
+          <tr v-for="(f, j) in hoja" :key="f.insumoId" >
+            <td class="border border-slate-500 px-1 text-right">{{ f.vacio ? '' : j + 1 }}</td>
             <td class="border border-slate-500 px-1">{{ f.vacio ? '' : textoInsumo(f) }}</td>
             <td class="border border-slate-500 px-1">{{ v(f, 'unidadEntrega') }}</td>
             <td class="border border-slate-500 px-1 text-right">{{ v(f, 'saldoAnterior') }}</td>
@@ -82,7 +82,6 @@ const v = (f, c) => (f.vacio ? '' : c === 'unidadEntrega' ? f[c] : miles(f[c]));
           </tr>
         </tbody>
       </table>
-      <p class="mt-1 text-right text-[9px]">Página {{ h + 1 }} de {{ hojas.length }}</p>
     </section>
     <!-- Firmas como en el formato del centro -->
     <section class="bloque-impresion firmas-cierre">

@@ -5,6 +5,7 @@ import servicio from '../../services/inventario';
 import HojaImpresion from '../../components/comunes/HojaImpresion.vue';
 import BresPreimpreso from '../../components/bodega/BresPreimpreso.vue';
 import { nombrePeriodo } from '../../dominio/bodega';
+import { useAuthStore } from '../../stores/auth';
 import { miles, general } from '../../components/bodega/diseno/PiezasBodega';
 import {
   establecimiento as cargarEstablecimiento, registrarImpresion, paginas, renglonesEnBlanco, textoInsumo,
@@ -23,6 +24,9 @@ const datos = ref(null);
 const est = ref(null);
 const error = ref('');
 const enBlanco = route.query.blanco === '1';
+// BRES de la farmacia (post-consulta): sus propios movimientos y su firma.
+const deFarmacia = route.query.ubicacion === 'farmacia';
+const auth = useAuthStore();
 
 // El centro imprime el BRES sobre el formulario preimpreso del MSPAS. El modo
 // y el ajuste de la impresora se recuerdan en este equipo.
@@ -46,7 +50,7 @@ const encabezadoPreimpreso = computed(() => {
   const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
   return {
     municipio: est.value?.municipio ?? 'Camotán',
-    servicio: 'Bodega',
+    servicio: datos.value?.servicio ?? 'Bodega',
     // PENDIENTE DE CONFIRMAR: en el Excel del centro estas dos casillas dicen 31.
     // Se interpretan como servicios que deben informar y servicios que informaron.
     serviciosTotal: enBlanco ? '' : datos.value?.serviciosTotal ?? '',
@@ -58,16 +62,21 @@ const encabezadoPreimpreso = computed(() => {
     fecha: enBlanco ? '' : `${String(ultimo).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${anio}`,
   };
 });
-const hojasPreimpreso = computed(() => hojas.value.map((h) => h.map((r) => (r.vacio ? r : { ...r, nombreFormulario: textoInsumo(r) }))));
+const hojasPreimpreso = computed(() => hojasFormulario.value.map((h) => h.map((r) => (r.vacio ? r : { ...r, nombreFormulario: textoInsumo(r) }))));
 
 const ORDEN_CATEGORIA = ['medicamentos', 'suplementos', 'planificacion_familiar', 'medico_quirurgico', 'laboratorio', 'tuberculosis'];
 
 async function cargar() {
   try {
-    const [bres, e] = await Promise.all([servicio.vistaPreviaBres(route.params.periodo), cargarEstablecimiento()]);
+    const [bres, e] = await Promise.all([
+      deFarmacia ? servicio.bresFarmacia(route.params.periodo) : servicio.vistaPreviaBres(route.params.periodo),
+      cargarEstablecimiento(),
+    ]);
+    // En el de farmacia firma quien lo imprime (el encargado de farmacia).
+    if (deFarmacia) bres.firmas = { ...bres.firmas, encargadoBodega: auth.usuario?.nombre ?? '' };
     datos.value = bres;
     est.value = e;
-    registrarImpresion('bres', `Período ${route.params.periodo}`, enBlanco);
+    registrarImpresion('bres', `${deFarmacia ? 'Farmacia, p' : 'P'}eríodo ${route.params.periodo}`, enBlanco);
   } catch (fallo) {
     error.value = fallo.message;
   }
@@ -83,7 +92,10 @@ const renglones = computed(() => {
   return lista;
 });
 
-const hojas = computed(() => paginas(renglones.value, 20));
+// Pantalla y hoja blanca: una sola tabla que llena cada página. El preimpreso
+// sí va de 20 en 20, como el formulario.
+const hojas = computed(() => [renglones.value]);
+const hojasFormulario = computed(() => paginas(renglones.value, 20));
 const columnas = computed(() => datos.value?.columnas ?? []);
 const TEXTO = ['codigoInterno', 'nombre', 'unidadEntrega'];
 
@@ -101,7 +113,7 @@ function valor(r, clave) {
 }
 
 const firmas = computed(() => [
-  { etiqueta: `Encargado de bodega${datos.value?.firmas?.encargadoBodega ? `: ${datos.value.firmas.encargadoBodega}` : ''}` },
+  { etiqueta: `Encargado de ${deFarmacia ? 'farmacia' : 'bodega'}${datos.value?.firmas?.encargadoBodega ? `: ${datos.value.firmas.encargadoBodega}` : ''}` },
   { etiqueta: `Coordinador municipal${datos.value?.firmas?.coordinadorMunicipal ? `: ${datos.value.firmas.coordinadorMunicipal}` : ''}` },
 ]);
 
@@ -133,6 +145,7 @@ onMounted(cargar);
       :hojas="hojasPreimpreso"
       :encabezado="encabezadoPreimpreso"
       :firmas="datos.firmas ?? {}"
+      :cargo-encargado="deFarmacia ? 'Encargado de Farmacia' : 'Encargado de Bodega'"
       :desplazamiento="ajuste"
     />
   </div>
@@ -140,7 +153,7 @@ onMounted(cargar);
   <HojaImpresion
     :confidencial="false"
     v-else-if="datos"
-    titulo="Balance, Requisición y Envío de Suministros (BRES)"
+    :titulo="`Balance, Requisición y Envío de Suministros (BRES)${deFarmacia ? ' · Farmacia (post-consulta)' : ''}`"
     :establecimiento="est"
     :firmas="firmas"
   >
@@ -161,7 +174,7 @@ onMounted(cargar);
       {{ datos.serviciosSinInforme }} servicio(s) sin informe del mes: su entregado cuenta como cero.
     </p>
 
-    <section v-for="(hoja, h) in hojas" :key="h" :class="h > 0 ? 'salto-pagina' : ''">
+    <section v-for="(hoja, h) in hojas" :key="h">
       <table class="tabla-compacta w-full border-collapse text-[9px]">
         <thead>
           <tr class="bg-slate-100">
@@ -176,7 +189,7 @@ onMounted(cargar);
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in hoja" :key="r.insumoId" class="h-5">
+          <tr v-for="r in hoja" :key="r.insumoId" >
             <td
               v-for="c in columnas"
               :key="c.clave"
@@ -188,7 +201,6 @@ onMounted(cargar);
           </tr>
         </tbody>
       </table>
-      <p class="mt-1 text-right text-[9px]">Página {{ h + 1 }} de {{ hojas.length }}</p>
     </section>
 
     <section v-if="!enBlanco && datos.observacionesRecepcion.length" class="bloque-impresion mt-3">

@@ -19,7 +19,7 @@ const POR_HOJA = 12;
 let estiloPagina = null;
 onMounted(async () => {
   estiloPagina = document.createElement('style');
-  estiloPagina.textContent = '@page { size: 13in 8.5in; margin: 7mm; }';
+  estiloPagina.textContent = '@page { size: 13in 8.5in; margin: 0; }';
   document.head.appendChild(estiloPagina);
   try {
     const q = { desde: route.query.desde, hasta: route.query.hasta, medicoId: route.query.medicoId ?? '' };
@@ -167,7 +167,7 @@ const anio = computed(() => route.query.desde?.slice(0, 4) ?? '');
 
 <style scoped>
 .tres-cs { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
-.hoja { width: 12.4in; margin: 0 auto; padding: 3mm 0; }
+.hoja { width: 12.4in; margin: 0 auto; padding: 10mm 0 7mm; }
 .salto { break-before: page; }
 .encabezado { display: flex; justify-content: space-between; align-items: flex-start; }
 .ministerio { font-size: 8px; font-weight: 700; }

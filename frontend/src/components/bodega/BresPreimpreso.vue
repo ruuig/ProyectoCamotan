@@ -6,12 +6,9 @@ import { computed, onMounted, onBeforeUnmount } from 'vue';
  *
  * El centro no imprime el BRES en hoja blanca: lo imprime encima del
  * formulario que ya trae títulos, líneas y columnas. Por eso aquí no hay
- * tabla ni bordes, solo los valores, cada uno en la posición que tiene en el
- * Excel "BRES ... IMP" del centro (documentacion/Plantillas/BRES SEPTIEMBRE2026IMP.xlsx):
- *
- *   papel oficio (8.5 × 13 pulgadas) horizontal, escala 90 %,
- *   margen izquierdo 0.79", superior 0.51",
- *   20 insumos por hoja (filas 10 a 29), firmas en las filas 32 y 33.
+ * tabla ni bordes, solo los valores. Las posiciones se midieron con regla
+ * sobre el formulario, en milímetros desde la esquina superior izquierda de
+ * la hoja (oficio horizontal): 20 insumos por hoja y las firmas al pie.
  *
  * Cada impresora corre la hoja un poco distinto, así que se puede ajustar
  * en milímetros (desplazamiento), y el ajuste se recuerda en el equipo.
@@ -21,35 +18,46 @@ const props = defineProps({
   encabezado: { type: Object, required: true },
   firmas: { type: Object, default: () => ({}) },
   desplazamiento: { type: Object, default: () => ({ x: 0, y: 0 }) },
+  cargoEncargado: { type: String, default: 'Encargado de Bodega' },
 });
 
-const ESCALA = 0.9;
-const MM_POR_PT = 25.4 / 72;
-const MARGEN_IZQ = 0.7874 * 25.4;
-const MARGEN_SUP = 0.5118 * 25.4;
+// El texto conserva el tamaño con que salía del Excel del centro (al 90 %).
+const ESCALA_TEXTO = 0.9;
 
-// Anchos de columna en milímetros, ya a la escala de 90 %. Medidos sobre el
-// PDF que exporta el propio Excel del centro: calcularlos desde el ancho en
-// caracteres dejaba la columna A 4 mm corta y corría todos los números.
-const ANCHOS = { A: 65.8, B: 15.9, C: 18.7, D: 18.7, E: 19.9, F: 18.9, G: 20.45, H: 19.75, I: 19.2, J: 20.8, K: 20.0, L: 18.5, M: 15.9, N: 17, O: 18 };
-// Altos de fila del Excel, en puntos.
-const ALTOS = [18.75, 15, 13.5, 15, 18, 24, 15, 15, 20.25, 19.5, 19.5, 19.5, 19.5, 19.5, 21, 19.5, 19.5, 20.1, 20.1,
-  20.1, 20.1, 20.1, 20.1, 19.5, 19.5, 19.5, 19.5, 19.5, 19.5, 11.25, 12.75, 15.75, 21.6];
+// Bordes de las columnas: suministro y las columnas A a L del formulario.
+const BORDES = [22.7, 91.2, 110.0, 128.7, 148.0, 167.3, 187.8, 205.0, 225.6, 244.5, 263.4, 281.5, 301.9, 322.3];
+const PRIMERA = 62.3; // borde superior del primer renglón
+const ALTO = 5.915; // alto de cada renglón
 
-const COLS = Object.keys(ANCHOS);
-const anchoMm = (letra) => ANCHOS[letra];
-const xCol = (letra) => MARGEN_IZQ + COLS.slice(0, COLS.indexOf(letra)).reduce((s, l) => s + anchoMm(l), 0);
-const altoFila = (n) => ALTOS[n - 1] * MM_POR_PT * ESCALA;
-const yFila = (n) => MARGEN_SUP + ALTOS.slice(0, n - 1).reduce((s, h) => s + h * MM_POR_PT * ESCALA, 0);
-
-/** Una celda (o rango combinado) del Excel como caja posicionada. */
-function caja(desde, hasta, filaIni, filaFin = filaIni) {
-  const x = xCol(desde) + props.desplazamiento.x;
-  const ancho = xCol(hasta) + anchoMm(hasta) - xCol(desde);
-  const y = yFila(filaIni) + props.desplazamiento.y;
-  const alto = yFila(filaFin) + altoFila(filaFin) - yFila(filaIni);
-  return { left: `${x}mm`, top: `${y}mm`, width: `${ancho}mm`, height: `${alto}mm` };
+/** Una caja en milímetros, corrida por el ajuste de la impresora. */
+function caja(x1, x2, y1, y2) {
+  return {
+    left: `${x1 + props.desplazamiento.x}mm`,
+    top: `${y1 + props.desplazamiento.y}mm`,
+    width: `${x2 - x1}mm`,
+    height: `${y2 - y1}mm`,
+  };
 }
+/** Texto sobre una línea del formulario: la caja termina en la línea. */
+const sobreLinea = (x1, x2, linea) => caja(x1, x2, linea - 5, linea - 0.4);
+const celda = (col, i) => caja(BORDES[col], BORDES[col + 1], PRIMERA + i * ALTO, PRIMERA + (i + 1) * ALTO);
+
+// Encabezado y pie, con las mismas medidas.
+const ENC = {
+  municipio: sobreLinea(75, 120, 29.6),
+  servicio: sobreLinea(75, 120, 34.2),
+  fecha: sobreLinea(75, 120, 39.1),
+  informan: sobreLinea(178, 215, 29.8),
+  debenInformar: sobreLinea(178, 215, 34.7),
+  minimo: caja(227.6, 244.1, 34.7, 40.0),
+  maximo: caja(244.1, 262.7, 34.7, 40.0),
+  mes: caja(281.0, 301.9, 34.7, 40.0),
+  anio: caja(301.9, 322.1, 34.7, 40.0),
+  elaborado: sobreLinea(121, 196, 192.7),
+  cargoElaborado: sobreLinea(226, 264, 192.7),
+  vistoBueno: sobreLinea(121, 196, 199.7),
+  cargoVistoBueno: sobreLinea(226, 264, 199.7),
+};
 
 /** Formato contable del Excel: separador de miles, el cero como guion. */
 function numero(v, entero = false) {
@@ -60,15 +68,14 @@ function numero(v, entero = false) {
   return n < 0 ? `(${texto})` : texto;
 }
 
-// Columnas de datos B a M, en el orden del formulario.
+// Columnas de datos A a L del formulario, en orden.
 const DATOS = [
-  ['B', 'saldoInicial'], ['C', 'entradas'], ['D', 'entregado'], ['E', 'noEntregado'], ['F', 'demandaReal'],
-  ['G', 'reajustes'], ['H', 'saldoFinal'], ['I', 'existenciaBodega'], ['J', 'pmdr'], ['K', 'med'],
-  ['L', 'cantidadMaxima'], ['M', 'cantidadSolicitar'],
+  'saldoInicial', 'entradas', 'entregado', 'noEntregado', 'demandaReal', 'reajustes',
+  'saldoFinal', 'existenciaBodega', 'pmdr', 'med', 'cantidadMaxima', 'cantidadSolicitar',
 ];
 
 const paginas = computed(() => props.hojas);
-const tamanoPx = (pt) => `${pt * ESCALA}pt`;
+const tamanoPx = (pt) => `${pt * ESCALA_TEXTO}pt`;
 
 // El tamaño de página se fija mientras esta vista está abierta: oficio
 // horizontal y sin márgenes (los márgenes ya están en las posiciones). Una
@@ -86,25 +93,25 @@ onBeforeUnmount(() => estiloPagina?.remove());
   <div class="bres-preimpreso">
     <div v-for="(hoja, h) in paginas" :key="h" class="hoja-oficio">
       <!-- Encabezado -->
-      <span class="celda negrita izquierda abajo" :style="[caja('B', 'D', 3), { fontSize: tamanoPx(9) }]">{{ encabezado.municipio }}</span>
-      <span class="celda negrita centro abajo" :style="[caja('G', 'G', 3), { fontSize: tamanoPx(9) }]">{{ encabezado.serviciosTotal }}</span>
-      <span class="celda negrita izquierda abajo" :style="[caja('B', 'D', 4), { fontSize: tamanoPx(9) }]">{{ encabezado.servicio }}</span>
-      <span class="celda negrita centro abajo" :style="[caja('G', 'G', 4), { fontSize: tamanoPx(9) }]">{{ encabezado.serviciosInformaron }}</span>
-      <span class="celda negrita derecha medio" :style="[caja('I', 'I', 4, 6), { fontSize: tamanoPx(10) }]">{{ encabezado.minimo }}</span>
-      <span class="celda negrita derecha medio" :style="[caja('J', 'J', 4, 6), { fontSize: tamanoPx(10) }]">{{ encabezado.maximo }}</span>
-      <span class="celda negrita derecha medio" :style="[caja('L', 'L', 4, 6), { fontSize: tamanoPx(10) }]">{{ encabezado.mes }}</span>
-      <span class="celda negrita derecha medio" :style="[caja('M', 'M', 4, 6), { fontSize: tamanoPx(10) }]">{{ encabezado.anio }}</span>
-      <span class="celda negrita izquierda abajo" :style="[caja('B', 'C', 5), { fontSize: tamanoPx(9) }]">{{ encabezado.fecha }}</span>
+      <span class="celda negrita izquierda abajo" :style="[ENC.municipio, { fontSize: tamanoPx(9) }]">{{ encabezado.municipio }}</span>
+      <span class="celda negrita centro abajo" :style="[ENC.informan, { fontSize: tamanoPx(9) }]">{{ encabezado.serviciosInformaron }}</span>
+      <span class="celda negrita izquierda abajo" :style="[ENC.servicio, { fontSize: tamanoPx(9) }]">{{ encabezado.servicio }}</span>
+      <span class="celda negrita centro abajo" :style="[ENC.debenInformar, { fontSize: tamanoPx(9) }]">{{ encabezado.serviciosTotal }}</span>
+      <span class="celda negrita centro medio" :style="[ENC.minimo, { fontSize: tamanoPx(10) }]">{{ encabezado.minimo }}</span>
+      <span class="celda negrita centro medio" :style="[ENC.maximo, { fontSize: tamanoPx(10) }]">{{ encabezado.maximo }}</span>
+      <span class="celda negrita centro medio" :style="[ENC.mes, { fontSize: tamanoPx(10) }]">{{ encabezado.mes }}</span>
+      <span class="celda negrita centro medio" :style="[ENC.anio, { fontSize: tamanoPx(10) }]">{{ encabezado.anio }}</span>
+      <span class="celda negrita izquierda abajo" :style="[ENC.fecha, { fontSize: tamanoPx(9) }]">{{ encabezado.fecha }}</span>
 
-      <!-- Renglones: filas 10 a 29 -->
+      <!-- Renglones -->
       <template v-for="(r, i) in hoja" :key="r.insumoId">
-        <span class="celda izquierda medio nombre" :style="[caja('A', 'A', 10 + i), { fontSize: tamanoPx(7) }]">{{ r.vacio ? '' : r.nombreFormulario }}</span>
+        <span class="celda izquierda medio nombre" :style="[celda(0, i), { fontSize: tamanoPx(7) }]">{{ r.vacio ? '' : r.nombreFormulario }}</span>
         <template v-if="!r.vacio">
           <span
-            v-for="[col, clave] in DATOS"
-            :key="col"
-            class="celda abajo derecha contable"
-            :style="[caja(col, col, 10 + i), { fontSize: tamanoPx(10) }]"
+            v-for="(clave, c) in DATOS"
+            :key="clave"
+            class="celda medio derecha contable"
+            :style="[celda(c + 1, i), { fontSize: tamanoPx(10) }]"
           >
             {{ numero(r[clave], clave === 'med' || clave === 'pmdr') }}
           </span>
@@ -112,10 +119,10 @@ onBeforeUnmount(() => estiloPagina?.remove());
       </template>
 
       <!-- Firmas -->
-      <span class="celda arriba firma" :style="[caja('D', 'H', 32), { fontSize: tamanoPx(11) }]">{{ firmas.encargadoBodega }}</span>
-      <span class="celda centro arriba desborda" :style="[caja('I', 'I', 32), { fontSize: tamanoPx(10) }]">Encargado de Bodega</span>
-      <span class="celda medio firma" :style="[caja('D', 'H', 33), { fontSize: tamanoPx(11) }]">{{ firmas.coordinadorMunicipal }}</span>
-      <span class="celda centro medio desborda" :style="[caja('I', 'I', 33), { fontSize: tamanoPx(10) }]">Coordinador Municipal</span>
+      <span class="celda abajo firma" :style="[ENC.elaborado, { fontSize: tamanoPx(11) }]">{{ firmas.encargadoBodega }}</span>
+      <span class="celda centro abajo desborda" :style="[ENC.cargoElaborado, { fontSize: tamanoPx(10) }]">{{ cargoEncargado }}</span>
+      <span class="celda abajo firma" :style="[ENC.vistoBueno, { fontSize: tamanoPx(11) }]">{{ firmas.coordinadorMunicipal }}</span>
+      <span class="celda centro abajo desborda" :style="[ENC.cargoVistoBueno, { fontSize: tamanoPx(10) }]">Coordinador Municipal</span>
     </div>
   </div>
 </template>

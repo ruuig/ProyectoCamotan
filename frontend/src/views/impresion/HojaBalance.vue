@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import HojaImpresion from '../../components/comunes/HojaImpresion.vue';
@@ -22,6 +22,16 @@ firmasBodega().then((f) => { firmas.value = f; });
 const error = ref('');
 const enBlanco = route.query.blanco === '1';
 
+// El balance sale en carta horizontal. Chrome no respeta una página con nombre
+// al imprimir, así que el tamaño se fija mientras esta vista está abierta.
+let estiloPagina = null;
+onMounted(() => {
+  estiloPagina = document.createElement('style');
+  estiloPagina.textContent = '@media print { @page { size: letter landscape; margin: 0; } }';
+  document.head.appendChild(estiloPagina);
+});
+onBeforeUnmount(() => estiloPagina?.remove());
+
 onMounted(async () => {
   try {
     const [b, e] = await Promise.all([
@@ -36,7 +46,7 @@ onMounted(async () => {
   }
 });
 
-const hojas = computed(() => paginas(enBlanco ? renglonesEnBlanco(20) : datos.value?.filas ?? [], 20));
+const hojas = computed(() => [enBlanco ? renglonesEnBlanco(30) : datos.value?.filas ?? []]);
 const v = (f, fn) => (f.vacio ? '' : fn(f));
 const abreviar = (n) => n.replace('Centro Comunitario', 'C/C').replace('Post-consulta (Centro de Salud)', 'Post-consulta');
 </script>
@@ -51,7 +61,7 @@ const abreviar = (n) => n.replace('Centro Comunitario', 'C/C').replace('Post-con
     :firmas="firmas"
     imprimir-al-abrir
   >
-    <section v-for="(hoja, h) in hojas" :key="h" :class="h > 0 ? 'salto-pagina' : ''">
+    <section v-for="(hoja, h) in hojas" :key="h">
       <table class="tabla-compacta w-full border-collapse text-[7.5px]">
         <thead>
           <tr class="bg-slate-100">
@@ -70,7 +80,7 @@ const abreviar = (n) => n.replace('Centro Comunitario', 'C/C').replace('Post-con
           </tr>
         </thead>
         <tbody>
-          <tr v-for="f in hoja" :key="f.insumoId" class="h-4">
+          <tr v-for="f in hoja" :key="f.insumoId" >
             <td class="border border-slate-500 px-1">{{ v(f, textoInsumo) }}</td>
             <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => x.bodega.saldoSiguiente) }}</td>
             <td class="border border-slate-500 px-1 text-right">{{ v(f, (x) => x.postConsulta.entregado) }}</td>
@@ -86,7 +96,6 @@ const abreviar = (n) => n.replace('Centro Comunitario', 'C/C').replace('Post-con
           </tr>
         </tbody>
       </table>
-      <p class="mt-1 text-right text-[8px]">Página {{ h + 1 }} de {{ hojas.length }}</p>
     </section>
     <p class="bloque-impresion mt-2 text-[8px]">
       Bodega: existencia al cierre. Post-consulta y servicios: entregado a usuarios en el mes.
@@ -97,8 +106,4 @@ const abreviar = (n) => n.replace('Centro Comunitario', 'C/C').replace('Post-con
   <p v-else class="p-8">Preparando el balance…</p>
 </template>
 
-<style>
-/* Página con nombre: solo el balance sale en horizontal. */
-@page apaisada { size: letter landscape; }
-.hoja-apaisada { page: apaisada; }
-</style>
+

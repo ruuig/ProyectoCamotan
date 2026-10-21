@@ -25,7 +25,7 @@ const POR_HOJA = 14;
 let estiloPagina = null;
 onMounted(async () => {
   estiloPagina = document.createElement('style');
-  estiloPagina.textContent = '@page { size: 13in 8.5in; margin: 8mm; }';
+  estiloPagina.textContent = '@page { size: 13in 8.5in; margin: 0; }';
   document.head.appendChild(estiloPagina);
   try {
     const [d, e] = await Promise.all([servicio.sigsa4(route.params.periodo), cargarEstablecimiento()]);
@@ -145,7 +145,7 @@ const QUIEN = { responsable: 'Resp.', otro: 'Recibe' };
 
 <style scoped>
 .sigsa4 { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
-.hoja { width: 12.3in; margin: 0 auto; padding: 4mm 0; }
+.hoja { width: 12.3in; margin: 0 auto; padding: 12mm 0 8mm; }
 .salto { break-before: page; }
 .encabezado { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .ministerio { font-size: 9px; font-weight: 700; }

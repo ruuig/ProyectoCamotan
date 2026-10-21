@@ -66,7 +66,7 @@ onMounted(cargar);
     <button type="button" class="rounded bg-black px-3 py-1.5 font-bold text-white" @click="imprimir">Imprimir</button>
   </div>
 
-  <div v-if="datos" class="boleta mx-auto max-w-[8.5in] bg-white text-black">
+  <div v-if="datos" class="boleta hoja-propia mx-auto max-w-[8.5in] bg-white text-black">
     <!-- ============ REFERENCIA ============ -->
     <header class="flex items-center gap-3">
       <LogoInstitucional class="h-12 w-12 shrink-0" />

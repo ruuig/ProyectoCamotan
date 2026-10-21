@@ -1,7 +1,10 @@
 /*
  * Hoja de impresion de fichas clinicas.
  *
- * Carta, margenes de 1.5 cm, blanco y negro. Se imprime desde el navegador o
+ * Carta, blanco y negro. La página va sin márgenes: así el navegador no puede
+ * agregar el enlace, la fecha ni el título de la pestaña. El margen de 1.5 cm lo
+ * da la propia hoja (relleno a los lados y filas vacías que se repiten arriba y
+ * abajo en cada página; ver HojaImpresion.vue). Se imprime desde el navegador o
  * se guarda como PDF: funciona sin conexion, no necesita un navegador sin
  * cabeza en el servidor y corre en los equipos que ya tiene el centro.
  */
@@ -9,8 +12,11 @@
 @media print {
   @page {
     size: letter;
-    margin: 1.5cm;
+    margin: 0;
   }
+
+  /* El papel siempre en blanco, aunque se impriman los fondos. */
+  html, body { background: #fff !important; }
 
   /* Fuera todo lo que no es el documento: menus, botones, avisos. */
   body * {
@@ -42,7 +48,9 @@
     color: #000;
     background: #fff;
     font-size: 10pt;
-    line-height: 1.35;
+    line-height: 1.3;
+    padding: 0 1.5cm;
+    max-width: none;
   }
 
   .no-imprimir {
@@ -142,4 +150,31 @@
 .hoja-impresion .tabla-compacta th,
 .hoja-impresion .tabla-compacta td {
   padding: 1pt 2pt;
+}
+
+/* --- Marco y membrete de los documentos (HojaImpresion.vue) ---------------- */
+.hoja-impresion {
+  max-width: 8.5in;
+  padding: 0 1.5cm;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.hoja-impresion .marco-impresion { width: 100%; border-collapse: collapse; }
+.hoja-impresion .marco-impresion > thead > tr > td,
+.hoja-impresion .marco-impresion > tfoot > tr > td,
+.hoja-impresion .marco-impresion > tbody > tr > td { border: none; padding: 0; }
+.hoja-impresion .margen-hoja { height: 1.3cm; }
+.hoja-impresion .membrete { display: flex; align-items: center; gap: 14px; padding-bottom: 6px; border-bottom: 2.5px solid #000; }
+.hoja-impresion .membrete-texto { flex: 1; text-align: center; font-size: 9.5pt; line-height: 1.3; padding-right: 62px; }
+.hoja-impresion .membrete-ministerio { font-weight: 700; text-transform: uppercase; font-size: 10.5pt; }
+.hoja-impresion .titulo-documento { margin: 10px 0 12px; padding-top: 2px; border-top: 0.75px solid #000; text-align: center; font-size: 12pt; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+.hoja-impresion .firmas-documento { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6cm; margin-top: 1.4cm; font-size: 9pt; text-align: center; }
+.hoja-impresion .firmas-documento.tres { grid-template-columns: 1fr 1fr 1fr; gap: 1cm; }
+.hoja-impresion .firma-documento { border-top: 1px solid #000; padding-top: 3px; }
+.hoja-impresion .pie-documento { margin-top: 10px; font-size: 7.5pt; text-align: center; color: #333; }
+
+/* Listados largos: una sola tabla que llena cada hoja; el encabezado de la
+   tabla se repite en cada página y ningún renglón se parte. */
+@media print {
+  .hoja-impresion main thead { display: table-header-group; }
+  .hoja-impresion main tbody tr { break-inside: avoid; page-break-inside: avoid; }
 }

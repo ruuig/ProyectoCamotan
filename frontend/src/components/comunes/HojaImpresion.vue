@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue';
+import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import LogoInstitucional from './LogoInstitucional.vue';
@@ -7,8 +7,9 @@ import LogoInstitucional from './LogoInstitucional.vue';
 /**
  * Marco comun de todo documento que se imprime.
  *
- * Pone el encabezado institucional, el pie con la constancia de impresion y la
- * leyenda de confidencialidad. Lo que cambia entre documentos va en el slot.
+ * Pone el membrete institucional, el título, las firmas y, en los documentos de
+ * pacientes, la leyenda de confidencialidad. Quién imprimió y cuándo queda en
+ * la bitácora, no en el papel. Lo que cambia entre documentos va en el slot.
  */
 const props = defineProps({
   titulo: { type: String, required: true },
@@ -42,12 +43,6 @@ function volver() {
   else window.close();
 }
 
-const impresoEn = computed(() =>
-  new Intl.DateTimeFormat('es-GT', {
-    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  }).format(new Date()),
-);
-
 onMounted(() => {
   // Se deja un respiro para que las imágenes y las fuentes terminen de cargar
   // antes de abrir el diálogo del navegador.
@@ -56,58 +51,54 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="hoja-impresion mx-auto max-w-[8.5in] bg-white p-8 text-slate-900">
-    <!-- Encabezado institucional -->
-    <header class="encabezado-impresion bloque-impresion mb-4 border-b-2 border-slate-900 pb-3">
-      <div class="flex items-start gap-4">
-        <LogoInstitucional orientacion="vertical" :alto="70" />
-        <div class="flex-1">
-          <p class="font-semibold">Ministerio de Salud Pública y Asistencia Social</p>
-          <h1 class="text-lg font-bold">{{ titulo }}</h1>
-          <p v-if="establecimiento" class="text-sm">
-            {{ establecimiento.nombre }}
-            <span v-if="establecimiento.municipio">
-              &middot; {{ establecimiento.municipio }}, {{ establecimiento.departamento }}
-            </span>
-          </p>
-          <p class="text-sm">
-            Área de Salud: {{ establecimiento?.departamento ?? '____________' }}
-            &middot; Distrito: {{ establecimiento?.municipio ?? '____________' }}
-          </p>
-        </div>
-      </div>
-    </header>
+  <div class="hoja-impresion mx-auto bg-white text-slate-900">
+    <!--
+      La hoja se imprime sin márgenes de página (así el navegador no agrega el
+      enlace, la fecha ni el título). El margen lo dan estas filas vacías, que
+      el navegador repite al principio y al final de cada página.
+    -->
+    <table class="marco-impresion">
+      <thead><tr><td><div class="margen-hoja" /></td></tr></thead>
+      <tfoot><tr><td><div class="margen-hoja" /></td></tr></tfoot>
+      <tbody><tr><td>
+        <!-- Membrete institucional -->
+        <header class="membrete bloque-impresion">
+          <LogoInstitucional orientacion="vertical" :alto="62" />
+          <div class="membrete-texto">
+            <p class="membrete-ministerio">Ministerio de Salud Pública y Asistencia Social</p>
+            <p>Dirección Departamental de Redes Integradas de Servicios de Salud de {{ establecimiento?.departamento ?? 'Chiquimula' }}</p>
+            <p v-if="establecimiento">{{ establecimiento.nombre }}<template v-if="establecimiento.municipio">, {{ establecimiento.municipio }}</template></p>
+          </div>
+        </header>
+        <h1 class="titulo-documento">{{ titulo }}</h1>
 
-    <main><slot /></main>
+        <main><slot /></main>
 
-    <!-- Firmas: el documento en papel no vale sin ellas -->
-    <section
-      v-if="firmas.length > 0"
-      class="bloque-impresion mt-8 grid gap-8"
-      :class="firmas.length === 3 ? 'grid-cols-3' : 'grid-cols-2'"
-    >
-      <div v-for="(f, i) in firmas" :key="i" class="border-t border-slate-900 pt-1 text-sm">
-        <!-- Con nombre fijo (firmas de bodega): nombre y debajo el cargo -->
-        <template v-if="f.nombre">
-          <p class="font-semibold">{{ f.nombre }}</p>
-          <p>{{ f.etiqueta }}</p>
-        </template>
-        <template v-else>
-          <p>{{ f.etiqueta }}</p>
-          <p v-if="f.conNombre">{{ auth.usuario?.nombre }}<template v-if="auth.usuario?.cargo">, {{ auth.usuario.cargo }}</template></p>
-        </template>
-      </div>
-    </section>
+        <!-- Firmas: el documento en papel no vale sin ellas -->
+        <section
+          v-if="firmas.length > 0"
+          class="firmas-documento bloque-impresion"
+          :class="firmas.length === 3 ? 'tres' : ''"
+        >
+          <div v-for="(f, i) in firmas" :key="i" class="firma-documento">
+            <!-- Con nombre fijo (firmas de bodega): nombre y debajo el cargo -->
+            <template v-if="f.nombre">
+              <p class="font-semibold">{{ f.nombre }}</p>
+              <p>{{ f.etiqueta }}</p>
+            </template>
+            <template v-else>
+              <p v-if="f.conNombre" class="font-semibold">{{ auth.usuario?.nombre }}</p>
+              <p>{{ f.etiqueta }}<template v-if="f.conNombre && auth.usuario?.cargo"> · {{ auth.usuario.cargo }}</template></p>
+            </template>
+          </div>
+        </section>
 
-    <!-- Pie con la constancia de impresión -->
-    <footer class="pie-impresion mt-6 border-t border-slate-400 pt-2 text-xs">
-      <p v-if="confidencial" class="font-semibold">Documento confidencial</p>
-      <p>
-        Impreso el {{ impresoEn }} por {{ auth.usuario?.nombre }}
-        ({{ auth.rol }}).
-      </p>
-      <slot name="pie" />
-    </footer>
+        <footer v-if="confidencial || $slots.pie" class="pie-documento">
+          <p v-if="confidencial">Documento confidencial. Uso exclusivo del servicio de salud.</p>
+          <slot name="pie" />
+        </footer>
+      </td></tr></tbody>
+    </table>
 
     <!-- Controles: no salen en el papel -->
     <div class="no-imprimir mt-6 flex gap-3 border-t border-slate-200 pt-4">

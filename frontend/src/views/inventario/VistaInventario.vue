@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import bodega from '../../services/bodega';
 import Icono from '../../components/comunes/Icono.vue';
@@ -13,7 +13,9 @@ import SelectorMes from '../../components/bodega/SelectorMes.vue';
 
 /**
  * Existencias de la bodega con las cifras del balance: lo que hay, para
- * cuántos meses alcanza y cuánto pedir. A la derecha, el insumo elegido.
+ * cuántos meses alcanza y cuánto pedir. Pensada para pantallas chicas: una
+ * sola barra (buscar, categoría y qué ver) y la lista empieza enseguida. Al
+ * tocar un insumo se abre su detalle encima; Esc o «Cerrar» lo quita.
  */
 const router = useRouter();
 // Abre en el último mes cerrado, que es el que coincide con el BRES.
@@ -26,10 +28,6 @@ const vista = ref('insumo');
 const filtro = ref('todos');
 const buscar = ref('');
 const categoriaFiltro = ref('');
-const orden = ref('alfabetico');
-// Por categoría es como está el estante; por situación es lo que hay que atender.
-const agrupar = ref('categoria');
-const plegados = ref(new Set());
 const elegidoId = ref(null);
 const servicioId = ref(null);
 
@@ -62,10 +60,11 @@ const resumen = computed(() => ({
 
 // Cada cifra con su tono: celeste es una acción, ámbar pide atención y rojo
 // es crítico. El número va en tinta; el color solo marca el ícono y el borde.
-const CIFRAS = [
-  { clave: 'pedir', etiqueta: 'Por pedir', icono: 'trasladar', tono: 'accion', ayuda: 'Insumos con cantidad a pedir en el BRES' },
-  { clave: 'bajo', etiqueta: 'Bajo mínimo', icono: 'alerta', tono: 'atencion', ayuda: 'El municipio tiene menos meses que el nivel mínimo' },
-  { clave: 'agotados', etiqueta: 'Agotados', icono: 'inventario', tono: 'critico', ayuda: 'La bodega está en cero y el insumo se consume' },
+const VER = [
+  { clave: 'todos', etiqueta: 'Todos' },
+  { clave: 'pedir', etiqueta: 'Por pedir' },
+  { clave: 'bajo', etiqueta: 'Bajo mínimo' },
+  { clave: 'agotados', etiqueta: 'Agotados' },
 ];
 
 const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -83,7 +82,7 @@ const visibles = computed(() => {
     .filter((f) => filtro.value !== 'agotados' || f.situacion === 'agotado')
     .filter((f) => !categoriaFiltro.value || f.categoria === categoriaFiltro.value)
     .filter((f) => !clave || sinTildes(`${f.nombre} ${f.codigoInterno}`).includes(clave))
-    .sort(COMPARAR[orden.value]);
+    .sort(filtro.value === 'pedir' ? COMPARAR.pedido : COMPARAR.alfabetico);
 });
 
 
@@ -91,51 +90,22 @@ const elegido = computed(() => todas.value.find((f) => f.insumoId === elegidoId.
 const lotesElegido = computed(() => lotesDe.value.get(elegidoId.value) ?? []);
 const enCuarentena = computed(() => lotesElegido.value.filter((l) => l.estado === 'cuarentena').reduce((s, l) => s + l.cantidad, 0));
 
-function alternar(f) {
-  filtro.value = filtro.value === f ? 'todos' : f;
+// Dónde está el producto en la bodega (estante, repisa).
+const ubicacionEditada = ref('');
+watch(elegidoId, () => { ubicacionEditada.value = elegido.value?.ubicacionFisica ?? ''; });
+async function guardarUbicacion() {
+  try {
+    await bodega.cambiarUbicacion(elegido.value.insumoId, ubicacionEditada.value.trim() || null);
+    elegido.value.ubicacionFisica = ubicacionEditada.value.trim() || null;
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
 }
 
-// Grupos de la lista. Situación va de lo más urgente a lo que no pide nada.
-const SITUACIONES = [
-  { clave: 'agotado', nombre: 'Agotados en bodega', porque: 'Se consumen y la bodega está en cero', tono: 'critico' },
-  { clave: 'bajo', nombre: 'Bajo el mínimo', porque: 'Alcanzan para menos meses que el nivel mínimo', tono: 'atencion' },
-  { clave: 'bien', nombre: 'Abastecidos', porque: 'Alcanzan al menos hasta el nivel mínimo', tono: 'bien' },
-  { clave: 'sin_consumo', nombre: 'Sin consumo registrado', porque: 'Sin demanda en el promedio del BRES', tono: 'neutro' },
-];
-
-const grupos = computed(() => {
-  const claves = agrupar.value === 'categoria'
-    ? [...Object.keys(CATEGORIA), ...new Set(visibles.value.map((f) => f.categoria).filter((c) => !CATEGORIA[c]))]
-    : SITUACIONES.map((s) => s.clave);
-  return claves
-    .map((clave) => {
-      const filas = visibles.value.filter((f) => (agrupar.value === 'categoria' ? f.categoria : f.situacion) === clave);
-      const sit = SITUACIONES.find((s) => s.clave === clave);
-      return {
-        clave,
-        nombre: sit ? sit.nombre : categoriaVisual(clave).nombre,
-        porque: sit?.porque ?? '',
-        estilo: sit ? estiloTono(sit.tono) : estiloCategoria(clave),
-        categoria: sit ? null : clave,
-        filas,
-        porPedir: filas.filter((f) => f.bres.M > 0).length,
-      };
-    })
-    .filter((g) => g.filas.length);
-});
-
-// Si el elegido deja de verse, se elige el primero que aparece en pantalla
-// (el primero del primer grupo, no el primero del abecedario).
-watch(grupos, (lista) => {
-  if (!lista.some((g) => g.filas.some((f) => f.insumoId === elegidoId.value))) elegidoId.value = lista[0]?.filas[0]?.insumoId ?? null;
-}, { immediate: true });
-
-function plegar(clave) {
-  const s = new Set(plegados.value);
-  if (s.has(clave)) s.delete(clave); else s.add(clave);
-  plegados.value = s;
-}
-watch(agrupar, () => { plegados.value = new Set(); });
+// El detalle se cierra con Esc.
+function alTeclear(e) { if (e.key === 'Escape') elegidoId.value = null; }
+onMounted(() => document.addEventListener('keydown', alTeclear));
+onBeforeUnmount(() => document.removeEventListener('keydown', alTeclear));
 
 // La regla mide lo que alcanza el municipio (K). Si solo la bodega está en
 // cero, la etiqueta "Agotado" ya lo dice y la regla sigue mostrando los meses.
@@ -188,113 +158,52 @@ const filasServicio = computed(() => {
           <button v-for="v in [['insumo', 'Por insumo'], ['servicio', 'Por servicio']]" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="vista = v[0]">{{ v[1] }}</button>
         </div>
         <RouterLink to="/inventario/nuevo" class="b-btn secundario"><Icono nombre="agregar" :tamano="20" /> Nuevo insumo</RouterLink>
-        <RouterLink to="/inventario/requisiciones" class="b-btn primario"><Icono nombre="trasladar" :tamano="20" :grosor="2.2" /> Requisición</RouterLink>
       </div>
     </header>
 
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
 
     <template v-if="balance">
-      <!-- Cifras que filtran -->
-      <div class="cifras mt-5">
-        <button
-          v-for="c in CIFRAS"
-          :key="c.clave"
-          type="button"
-          class="cifra"
-          :class="filtro === c.clave ? 'on' : ''"
-          :style="estiloTono(c.tono)"
-          :title="c.ayuda"
-          :aria-pressed="filtro === c.clave"
-          @click="alternar(c.clave)"
-        >
-          <span class="burbuja"><Icono :nombre="c.icono" :tamano="22" :grosor="2.2" /></span>
-          <span class="min-w-0">
-            <span class="n">{{ miles(resumen[c.clave]) }}</span>
-            <span class="e">{{ c.etiqueta }}</span>
-          </span>
-        </button>
-        <RouterLink to="/inventario/semaforo" class="cifra" :style="estiloTono('atencion')" title="Lotes en rojo del semáforo y vencidos">
-          <span class="burbuja"><Icono nombre="vencimiento" :tamano="22" :grosor="2.2" /></span>
-          <span class="min-w-0">
-            <span class="n">{{ miles(resumen.vencen) }}</span>
-            <span class="e">Lotes por vencer <Icono nombre="irA" :tamano="14" :grosor="2.4" class="inline -mt-0.5" /></span>
-          </span>
-        </RouterLink>
-      </div>
-
-      <!-- Búsqueda y categorías -->
-      <div class="mt-4 flex flex-wrap items-center gap-2">
-        <label class="b-buscar w-full sm:w-[230px]">
+      <!-- Una sola barra: buscar, categoría y qué ver -->
+      <div class="barra-filtros mt-3">
+        <label class="b-buscar buscar">
           <Icono nombre="buscar" :tamano="20" />
           <input v-model="buscar" type="search" class="b-campo" placeholder="Buscar insumo" aria-label="Buscar insumo" />
         </label>
-        <button
-          v-for="(c, clave) in CATEGORIA"
-          :key="clave"
-          type="button"
-          class="b-ficha-cat"
-          :class="categoriaFiltro === clave ? 'on' : ''"
-          :style="estiloCategoria(clave)"
-          :title="c.nombre"
-          @click="categoriaFiltro = categoriaFiltro === clave ? '' : clave"
-        >
-          <span class="ic"><Pictograma :categoria="clave" :grosor="2" /></span>
-          {{ c.corto }}
-        </button>
+        <select v-model="categoriaFiltro" class="b-campo categoria" aria-label="Categoría">
+          <option value="">Todas las categorías</option>
+          <option v-for="(c, clave) in CATEGORIA" :key="clave" :value="clave">{{ c.nombre }}</option>
+        </select>
+        <div class="b-segmentado ver" role="radiogroup" aria-label="Qué ver">
+          <button v-for="v in VER" :key="v.clave" type="button" role="radio" :aria-checked="filtro === v.clave" :class="filtro === v.clave ? 'on' : ''" @click="filtro = v.clave">
+            {{ v.etiqueta }}<span v-if="v.clave !== 'todos' && resumen[v.clave]" class="cuenta" :class="v.clave">{{ miles(resumen[v.clave]) }}</span>
+          </button>
+        </div>
       </div>
 
       <!-- Por insumo -->
       <div v-if="vista === 'insumo'" class="paneles mt-4">
         <div class="min-w-0">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <span class="text-sm font-extrabold text-apagado">{{ miles(visibles.length) }} insumos</span>
-          <div class="flex flex-wrap items-center gap-2">
-            <div class="b-segmentado" role="radiogroup" aria-label="Agrupar por">
-              <button v-for="o in [['categoria', 'Por categoría'], ['situacion', 'Por situación']]" :key="o[0]" type="button" role="radio" :aria-checked="agrupar === o[0]" :class="agrupar === o[0] ? 'on' : ''" @click="agrupar = o[0]">{{ o[1] }}</button>
-            </div>
-            <div class="b-segmentado" role="radiogroup" aria-label="Orden">
-              <button v-for="o in [['alfabetico', 'A – Z'], ['cobertura', 'Menos meses'], ['pedido', 'Mayor pedido']]" :key="o[0]" type="button" role="radio" :aria-checked="orden === o[0]" :class="orden === o[0] ? 'on' : ''" @click="orden = o[0]">{{ o[1] }}</button>
-            </div>
-          </div>
-        </div>
-
         <div class="lista" aria-label="Insumos">
           <div class="columnas" aria-hidden="true">
-            <span>Insumo</span><span class="der">En bodega</span><span class="col-cob">Alcanza para</span><span class="der">Pedir</span>
+            <span>Insumo · {{ miles(visibles.length) }}</span><span class="der">En bodega</span><span class="col-cob">Alcanza para</span><span class="der">Pedir</span>
           </div>
 
-          <section v-for="g in grupos" :key="g.clave" class="grupo" :style="g.estilo">
-            <button type="button" class="franja" :class="agrupar" :aria-expanded="!plegados.has(g.clave)" @click="plegar(g.clave)">
-              <span class="franja-ic">
-                <Pictograma v-if="g.categoria" :categoria="g.categoria" :grosor="2.2" />
-                <span v-else class="punto" />
-              </span>
-              <span class="min-w-0 flex-1 text-left">
-                <span class="block truncate">{{ g.nombre }}</span>
-                <small v-if="g.porque" class="block truncate">{{ g.porque }}</small>
-              </span>
-              <span class="franja-cuenta">
-                {{ g.filas.length }}
-                <b v-if="g.porPedir"> · {{ g.porPedir }} por pedir</b>
-              </span>
-              <Icono nombre="irA" :tamano="18" :grosor="2.6" class="flecha" :class="plegados.has(g.clave) ? '' : 'abierta'" />
-            </button>
-
-            <ul v-show="!plegados.has(g.clave)" class="filas">
-              <li v-for="f in g.filas" :key="f.insumoId">
+          <ul class="filas">
+              <li v-for="f in visibles" :key="f.insumoId">
                 <button
                   type="button"
                   class="prod"
                   :class="elegidoId === f.insumoId ? 'sel' : ''"
                   :style="estiloCategoria(f.categoria)"
                   :aria-pressed="elegidoId === f.insumoId"
-                  @click="elegidoId = f.insumoId"
+                  @click="elegidoId = elegidoId === f.insumoId ? null : f.insumoId"
                   @dblclick="router.push(`/inventario/${f.insumoId}`)"
                 >
                   <span class="prod-ic" :title="categoriaVisual(f.categoria).nombre"><Pictograma :categoria="f.categoria" :grosor="2.2" /></span>
                   <span class="min-w-0">
-                    <span class="block truncate font-extrabold text-tinta">{{ f.nombre }}</span>
+                    <span class="block nombre-completo font-extrabold text-tinta">{{ f.nombre }}</span>
+                    <span v-if="f.ubicacionFisica" class="donde"><Icono nombre="ubicacion" :tamano="13" /> {{ f.ubicacionFisica }}</span>
                     <span class="mt-0.5 flex items-center gap-2 text-[12.5px] font-semibold text-apagado">
                       <span class="font-mono">{{ f.codigoInterno }}</span>
                       <span v-if="ESTADO[f.situacion]" class="etiqueta" :style="estiloTono(ESTADO[f.situacion].tono)">{{ ESTADO[f.situacion].texto }}</span>
@@ -311,18 +220,27 @@ const filasServicio = computed(() => {
                   </span>
                 </button>
               </li>
-            </ul>
-          </section>
+          </ul>
           <p v-if="!visibles.length" class="b-vacio">Ningún insumo coincide.</p>
         </div>
         </div>
 
         <!-- Insumo elegido -->
+        <div v-if="elegido" class="velo-detalle" @click="elegidoId = null" />
         <aside v-if="elegido" class="detalle" :style="estiloCategoria(elegido.categoria)" aria-live="polite">
           <div class="detalle-cabeza">
+            <button type="button" class="cerrar-detalle" aria-label="Cerrar" @click="elegidoId = null"><Icono nombre="cerrar" :tamano="20" :grosor="2.4" /> Cerrar</button>
             <EstanteCategoria :categoria="elegido.categoria" />
             <h2 class="mt-3 text-[21px] font-extrabold leading-tight text-tinta">{{ elegido.nombre }}</h2>
             <p class="mt-1 font-mono text-sm font-semibold text-apagado">{{ elegido.codigoInterno }}</p>
+            <!-- Dónde está en la bodega: opcional, cuando ya está etiquetado -->
+            <form class="donde-form" @submit.prevent="guardarUbicacion">
+              <label for="donde" class="b-etiqueta">Dónde está <span class="b-opcional">opcional</span></label>
+              <div class="flex gap-2">
+                <input id="donde" v-model="ubicacionEditada" maxlength="80" class="b-campo" placeholder="Ej.: Estante 3, repisa B" />
+                <button type="submit" class="b-btn chico secundario" :disabled="(ubicacionEditada || '') === (elegido.ubicacionFisica || '')">Guardar</button>
+              </div>
+            </form>
           </div>
 
           <div class="mini mt-4">
@@ -412,35 +330,23 @@ const filasServicio = computed(() => {
 </template>
 
 <style scoped>
+.donde { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; padding: 1px 8px; border-radius: 8px; background: #EEF2F7; font-size: 12.5px; font-weight: 800; color: #334155; }
+.donde-form { margin-top: 10px; }
 /* Tonos (--t, --t-fondo, --t-borde, --t-hondo, --t-tinta) y colores de
    categoría (--cat, --cat-fondo, --cat-tinta) vienen de PiezasBodega. */
 
-/* --- Cifras: tarjetas con relieve; el color solo en la burbuja y el borde --- */
-.cifras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-@media (max-width: 900px) { .cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.cifra {
-  display: flex; align-items: center; gap: 14px; padding: 14px 16px; text-align: left; background: #fff;
-  border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 18px; color: #14244A;
-  transition: background .12s, border-color .12s, transform .06s;
-}
-.cifra:hover { border-color: var(--t-borde); }
-.cifra:active { transform: translateY(2px); border-bottom-width: 2px; }
-.cifra.on { background: var(--t-fondo); border-color: var(--t); border-bottom-color: var(--t-hondo); }
-.burbuja { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 14px; background: var(--t-fondo); color: var(--t-hondo); }
-.cifra.on .burbuja { background: var(--t); color: #fff; }
-.cifra .n { display: block; font-size: 28px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
-.cifra .e { display: block; margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #64748B; white-space: nowrap; }
-.cifra.on .e { color: var(--t-tinta); }
-@media (max-width: 600px) {
-  .cifra { gap: 10px; padding: 12px; }
-  .burbuja { width: 36px; height: 36px; border-radius: 12px; }
-  .cifra .n { font-size: 24px; }
-  .cifra .e { white-space: normal; font-size: 11px; }
-}
+/* --- Barra única de filtros ---------------------------------------------------- */
+.barra-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.barra-filtros .buscar { flex: 1 1 220px; }
+.barra-filtros .categoria { flex: 0 1 230px; height: 44px; }
+.ver button { display: inline-flex; align-items: center; gap: 6px; }
+.cuenta { min-width: 22px; padding: 0 7px; border-radius: 9px; background: #E2E8F0; color: #334155; font-size: 12.5px; font-weight: 900; text-align: center; }
+.cuenta.agotados { background: #FDECEC; color: #A83232; }
+.cuenta.bajo { background: #FFF1DC; color: #8A4B00; }
+.cuenta.pedir { background: #EAF3FB; color: #174E80; }
 
 /* --- Lista agrupada --------------------------------------------------------- */
-.paneles { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
-@media (max-width: 1099px) { .paneles { grid-template-columns: 1fr; } }
+.paneles { display: block; }
 /* La lista se desplaza con la página: con altura propia quedaba cortada cuando el panel del insumo era más alto. */
 .lista { padding: 0 2px 8px; }
 
@@ -460,27 +366,9 @@ const filasServicio = computed(() => {
   .franja-cuenta b { display: none; }
 }
 
-.grupo + .grupo { margin-top: 14px; }
-/* Franja del grupo: color pleno de la categoría (o del estado), como la
-   cabecera de una unidad; se pliega para recorrer el catálogo por partes. */
-.franja {
-  position: sticky; top: 106px; z-index: 2; display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px;
-  border-radius: 16px; border-bottom: 4px solid rgba(0, 0, 0, .18); color: #fff; font-weight: 900; font-size: 15.5px;
-  background: var(--cat); transition: transform .06s;
-}
-.franja.situacion { background: var(--t); }
-.franja:active { transform: translateY(2px); border-bottom-width: 2px; }
-.franja small { font-size: 12px; font-weight: 700; opacity: .9; }
-.franja-ic { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 11px; background: rgba(255, 255, 255, .22); }
-.franja-ic svg { width: 20px; height: 20px; }
-.franja-ic .punto { width: 12px; height: 12px; border-radius: 50%; background: #fff; }
-.franja-cuenta { flex-shrink: 0; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, .22); font-size: 13px; font-weight: 800; white-space: nowrap; }
-.flecha { flex-shrink: 0; transition: transform .15s; }
-.flecha.abierta { transform: rotate(90deg); }
-
-.filas { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.filas { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .prod {
-  width: 100%; padding: 10px 16px 10px 12px; text-align: left; background: #fff;
+  width: 100%; padding: 8px 16px 8px 12px; text-align: left; background: #fff;
   border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 16px;
   transition: border-color .12s, background .12s, transform .06s;
 }
@@ -504,7 +392,10 @@ const filasServicio = computed(() => {
 .nada { color: #CBD5E1; font-weight: 800; }
 
 /* --- Insumo elegido ---------------------------------------------------------- */
-.detalle { position: sticky; top: 88px; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 20px; padding: 0 16px 16px; background: #fff; overflow: hidden; }
+/* Encima de la lista, a la derecha: no le quita ancho a la tabla. */
+.velo-detalle { position: fixed; inset: 0; z-index: 40; background: rgba(15, 23, 42, .25); }
+.detalle { position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; width: min(400px, 100vw); overflow-y: auto; padding: 0 16px 20px; background: #fff; border-left: 2px solid #E5E9F0; box-shadow: -12px 0 30px -12px rgba(15, 23, 42, .35); }
+.cerrar-detalle { display: inline-flex; align-items: center; gap: 4px; float: right; padding: 6px 12px; border: 2px solid #CBD5E1; border-radius: 12px; background: #fff; font-size: 14px; font-weight: 800; color: #14244A; }
 .detalle-cabeza { margin: 0 -16px; padding: 18px 16px; background: var(--cat-fondo); }
 .mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .mini-c { padding: 10px 12px; border: 2px solid #E5E9F0; border-bottom-width: 3px; border-radius: 14px; }

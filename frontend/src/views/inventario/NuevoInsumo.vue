@@ -26,6 +26,7 @@ const form = reactive({
   categoria: '',
   codigoMspas: '',
   codigoBarras: '',
+  ubicacionFisica: '',
   costoReferencia: '',
   nombreComercial: '',
   perecedero: true,
@@ -46,6 +47,7 @@ async function guardar() {
       unidadEntrega: nulo(form.unidadEntrega),
       codigoMspas: nulo(form.codigoMspas),
       codigoBarras: nulo(form.codigoBarras),
+      ubicacionFisica: nulo(form.ubicacionFisica),
       costoReferencia: form.costoReferencia === '' ? null : Number(String(form.costoReferencia).replace(',', '.')),
       nombreComercial: nulo(form.nombreComercial),
       unidadesPorEmpaque: Number(String(form.unidadesPorEmpaque).replace(/[^\d]/g, '')) || 1,
@@ -155,6 +157,10 @@ async function guardar() {
             <div>
               <label for="codigoBarras" class="b-etiqueta">Código de barras</label>
               <input id="codigoBarras" v-model="form.codigoBarras" maxlength="40" class="b-campo" />
+            </div>
+            <div>
+              <label for="ubicacionFisica" class="b-etiqueta">Dónde está <span class="b-opcional">opcional</span></label>
+              <input id="ubicacionFisica" v-model="form.ubicacionFisica" maxlength="80" class="b-campo" placeholder="Ej.: Estante 3, repisa B" />
             </div>
             <div>
               <label for="costo" class="b-etiqueta">Costo unitario (Q)</label>

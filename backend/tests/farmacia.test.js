@@ -322,3 +322,68 @@ describe('trazabilidad en farmacia', () => {
     expect(v.body.descuadrados.filter((d) => d.insumo.startsWith(MARCA))).toEqual([]);
   });
 });
+
+describe('BRES de farmacia', () => {
+  it('los meses anteriores al sistema toman el informe de post-consulta importado del Excel para el promedio', async () => {
+    const { bresFarmacia } = await import('../src/services/farmaciaBres.service.js');
+    const meses = ['2026-07', '2026-08', '2026-09'];
+    const informes = await prisma.informeServicio.findMany({
+      where: { periodo: { in: meses }, importado: true, ubicacionId: farmaciaId },
+      include: { renglones: true },
+    });
+    if (informes.length !== meses.length) return; // base sin el historial importado
+    const demanda = new Map();
+    for (const i of informes) for (const r of i.renglones) demanda.set(r.insumoId, (demanda.get(r.insumoId) ?? 0) + r.entregado + r.noEntregado);
+    const [insumoId, total] = [...demanda].find(([, n]) => n >= 30);
+    const bres = await bresFarmacia(establecimientoId, '2026-10');
+    const fila = bres.renglones.find((r) => r.insumoId === insumoId);
+    expect(fila.pmdr).toBeCloseTo(total / 3, 0);
+  });
+});
+
+describe('BRES de farmacia: meses escritos a mano', () => {
+  // Meses sin informe ni movimientos en ninguna base de prueba.
+  const MESES = ['2024-01', '2024-02', '2024-03', '2024-04'];
+  const borrar = () => prisma.informeServicio.deleteMany({ where: { periodo: { in: MESES }, ubicacionId: farmaciaId } });
+  afterAll(borrar);
+
+  it('se escribe solo lo necesario; el saldo pasa al mes siguiente y da el promedio', async () => {
+    await borrar();
+    const insumo = await nuevoInsumo();
+    const enero = await farmacia(request(app).get('/api/v1/farmacia/historial/2024-01'));
+    expect(enero.status).toBe(200);
+    expect(enero.body.bloqueado).toBeNull();
+    expect(enero.body.saldoDelMesAnterior).toBe(false);
+
+    const escribir = (mes, fila) => farmacia(request(app).put(`/api/v1/farmacia/historial/${mes}`)).send({ renglones: [{ insumoId: insumo.id, ...fila }] });
+    expect((await escribir('2024-01', { saldoAnterior: 100, entradas: 50, entregado: 60, noEntregado: 10, reajustes: -5 })).status).toBe(200);
+    // Febrero ya no pide saldo anterior: sale de enero (100 + 50 - 60 - 5 = 85).
+    const febrero = await farmacia(request(app).get('/api/v1/farmacia/historial/2024-02'));
+    expect(febrero.body.saldoDelMesAnterior).toBe(true);
+    expect(febrero.body.renglones.find((r) => r.insumoId === insumo.id).saldoAnterior).toBe(85);
+    expect((await escribir('2024-02', { saldoAnterior: 999, entradas: 0, entregado: 30, noEntregado: 0 })).status).toBe(200);
+    expect((await escribir('2024-03', { entradas: 20, entregado: 30, noEntregado: 0 })).status).toBe(200);
+
+    const bresFeb = (await farmacia(request(app).get('/api/v1/farmacia/bres/2024-02'))).body;
+    expect(bresFeb.fuente).toBe('farmacia');
+    const f = bresFeb.renglones.find((r) => r.insumoId === insumo.id);
+    expect([f.saldoInicial, f.entregado, f.saldoFinal]).toEqual([85, 30, 55]);
+
+    // Abril sin datos: su promedio es la demanda de enero a marzo, (70 + 30 + 30) / 3.
+    const bresAbr = (await farmacia(request(app).get('/api/v1/farmacia/bres/2024-04'))).body;
+    expect(bresAbr.fuente).toBe('vacio');
+    expect(bresAbr.renglones.find((r) => r.insumoId === insumo.id).pmdr).toBeCloseTo(130 / 3, 5);
+
+    // Corregir enero reencadena febrero y marzo.
+    await escribir('2024-01', { saldoAnterior: 200, entradas: 50, entregado: 60, noEntregado: 10, reajustes: -5 });
+    const marzo = (await farmacia(request(app).get('/api/v1/farmacia/bres/2024-03'))).body.renglones.find((r) => r.insumoId === insumo.id);
+    expect(marzo.saldoInicial).toBe(155);
+    await borrar();
+  });
+
+  it('un mes que ya lleva el sistema no se escribe a mano', async () => {
+    const actual = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 7);
+    const r = await farmacia(request(app).put(`/api/v1/farmacia/historial/${actual}`)).send({ renglones: [] });
+    expect(r.status).toBe(409);
+  });
+});

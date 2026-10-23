@@ -4,7 +4,6 @@ import LayoutPrincipal from '../layouts/LayoutPrincipal.vue';
 import Login from '../views/auth/Login.vue';
 import PanelPreconsulta from '../views/paneles/PanelPreconsulta.vue';
 import PanelMedico from '../views/paneles/PanelMedico.vue';
-import PanelFarmacia from '../views/paneles/PanelFarmacia.vue';
 import PanelAdmin from '../views/paneles/PanelAdmin.vue';
 import PanelBodega from '../views/paneles/PanelBodega.vue';
 import ListaPacientes from '../views/pacientes/ListaPacientes.vue';
@@ -57,6 +56,7 @@ import NuevoInsumo from '../views/inventario/NuevoInsumo.vue';
 import DetalleInsumo from '../views/inventario/DetalleInsumo.vue';
 import VistaDispensacion from '../views/inventario/VistaDispensacion.vue';
 import VistaControlFarmacia from '../views/inventario/VistaControlFarmacia.vue';
+import VistaBresFarmacia from '../views/inventario/VistaBresFarmacia.vue';
 import VistaConsolidado from '../views/admin/VistaConsolidado.vue';
 const VistaTiempos = () => import('../views/admin/VistaTiempos.vue');
 import VistaAdministracion from '../views/admin/VistaAdministracion.vue';
@@ -78,7 +78,7 @@ const router = createRouter({
       children: [
         { path: 'preconsulta', name: 'panel-preconsulta', component: PanelPreconsulta, meta: { roles: ['preconsulta'] } },
         { path: 'medico', name: 'panel-medico', component: PanelMedico, meta: { roles: ['medico'] } },
-        { path: 'farmacia', name: 'panel-farmacia', component: PanelFarmacia, meta: { roles: ['farmacia'] } },
+        { path: 'farmacia', redirect: '/dispensacion' },
         { path: 'bodega', name: 'panel-bodega', component: PanelBodega, meta: { roles: ['bodega'] } },
         { path: 'admin', name: 'panel-admin', component: PanelAdmin, meta: { roles: ['admin'] } },
       ],
@@ -172,7 +172,15 @@ const router = createRouter({
       component: LayoutPrincipal,
       children: [
         { path: '', name: 'dispensacion', component: VistaDispensacion, meta: { roles: FARMACIA } },
-        { path: 'control', name: 'control-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA } },
+        // Lo del día (estante y cierre) y lo del mes (BRES y pedido a bodega).
+        { path: 'estante', name: 'estante-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA, pestana: 'estante' } },
+        { path: 'cierre', name: 'cierre-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA, pestana: 'dia' } },
+        { path: 'mes', name: 'mes-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA, pestana: 'mes' } },
+        { path: 'requisiciones', name: 'requisiciones-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA, pestana: 'hechas' } },
+        // El kardex y el BRES de farmacia se ven en pantalla antes de imprimirlos.
+        { path: 'kardex', name: 'kardex-farmacia', component: VistaKardex, meta: { roles: FARMACIA, ubicacion: 'farmacia' } },
+        { path: 'bres', name: 'bres-farmacia', component: VistaBresFarmacia, meta: { roles: FARMACIA } },
+        { path: 'control', redirect: (to) => ({ pedir: '/dispensacion/mes', contar: '/dispensacion/cierre' }[to.query.pestana] ?? '/dispensacion/estante') },
       ],
     },
     {

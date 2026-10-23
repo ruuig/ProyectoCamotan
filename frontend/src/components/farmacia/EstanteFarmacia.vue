@@ -9,16 +9,17 @@ import { miles, estiloTono } from '../bodega/diseno/PiezasBodega';
  * Estante de la farmacia (post-consulta), como un inventario: una fila por
  * medicamento con lo que hay para entregar, para cuánto alcanza y qué hacer.
  * Los lotes se ven al abrir la fila; ahí se pone el lote a lo que llegó sin
- * él y se devuelve a bodega lo vencido o lo que vence pronto.
+ * él (lo que llegó sin número no se puede entregar).
  *
  * "Alcanza" se mide con la demanda real de los últimos tres meses (lo
- * entregado más lo que no hubo): menos de un mes es pedir; cero es agotado.
+ * entregado más lo que no hubo): menos de un mes es poco; cero es agotado.
+ * Lo que se pide a bodega se arma una vez al mes, con el BRES (Requisición).
  */
 const props = defineProps({
   existencias: { type: Array, required: true },
   buscar: { type: String, default: '' },
 });
-const emit = defineEmits(['recargar', 'aviso', 'error', 'pedir']);
+const emit = defineEmits(['recargar', 'aviso', 'error']);
 
 const sinTildes = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const entero = (v) => (String(v ?? '').trim() === '' ? null : Number(String(v).replace(/[^0-9]/g, '')));
@@ -33,19 +34,33 @@ const filas = computed(() => props.existencias
     const lotes = [...x.lotes].sort((a, b) => Number(esSinLote(b)) - Number(esSinLote(a)) || new Date(a.fechaVence) - new Date(b.fechaVence));
     // Una sola etiqueta por medicamento: lo más urgente que hay que hacer.
     let etiqueta = null;
-    if (lotes.some(esVencido)) etiqueta = { texto: 'Devolver: vencido', tono: 'critico' };
+    if (lotes.some(esVencido)) etiqueta = { texto: 'Vencido', tono: 'critico' };
     else if (x.situacion === 'agotado') etiqueta = { texto: 'Agotado', tono: 'critico' };
     else if (lotes.some(esSinLote)) etiqueta = { texto: 'Ponerle lote', tono: 'atencion' };
-    else if (x.situacion === 'pedir') etiqueta = { texto: 'Pedir', tono: 'atencion' };
+    else if (x.situacion === 'pedir') etiqueta = { texto: 'Queda poco', tono: 'atencion' };
     const urgencia = lotes.some(esVencido) ? 0 : x.situacion === 'agotado' ? 1 : x.situacion === 'poner_lote' ? 2 : x.situacion === 'pedir' ? 3 : lotes.some(esSinLote) ? 4 : lotes.some(vencePronto) ? 5 : 6;
     // Lo que está pero no se puede entregar: sin lote, o en cuarentena.
     const sinLote = lotes.filter(esSinLote).reduce((t, l) => t + l.cantidad, 0);
     return { ...x, lotes, etiqueta, urgencia, sinLote };
   }));
 
+/* Filtros: lo que hay que atender, cada cosa por separado. */
+const FILTROS = [
+  { clave: 'todos', texto: 'Todos', pasa: () => true },
+  { clave: 'hay', texto: 'Para entregar', pasa: (x) => x.entregable > 0 },
+  { clave: 'agotado', texto: 'Agotados', pasa: (x) => x.situacion === 'agotado' },
+  { clave: 'poco', texto: 'Queda poco', pasa: (x) => x.situacion === 'pedir' },
+  { clave: 'lote', texto: 'Sin lote', pasa: (x) => x.lotes.some(esSinLote) },
+  { clave: 'vence', texto: 'Vencidos o por vencer', pasa: (x) => x.lotes.some((l) => esVencido(l) || vencePronto(l)) },
+];
+const filtro = ref('todos');
+const cuenta = computed(() => Object.fromEntries(FILTROS.map((f) => [f.clave, filas.value.filter(f.pasa).length])));
+
 const visibles = computed(() => {
   const q = sinTildes(props.buscar);
+  const pasa = FILTROS.find((f) => f.clave === filtro.value).pasa;
   return filas.value
+    .filter(pasa)
     .filter((x) => !q || sinTildes(x.nombre).includes(q))
     .sort((a, b) => a.urgencia - b.urgencia || a.nombre.localeCompare(b.nombre, 'es'));
 });
@@ -91,36 +106,17 @@ async function guardarLote() {
   }
 }
 
-/* --- Devolver a bodega ---------------------------------------------------------- */
-const devolviendo = ref(null);
-const devolucion = reactive({ cantidad: '', motivo: '' });
-const MOTIVOS = ['Vencido', 'Próximo a vencer', 'Dañado', 'Sobra en farmacia'];
-function abrirDevolucion(insumo, lote) {
-  devolviendo.value = { insumo, lote };
-  devolucion.cantidad = String(lote.cantidad);
-  devolucion.motivo = esVencido(lote) ? 'Vencido' : vencePronto(lote) ? 'Próximo a vencer' : '';
-}
-async function devolver() {
-  enviando.value = true;
-  try {
-    await farmacia.devolver({
-      renglones: [{ loteId: devolviendo.value.lote.loteId, cantidad: entero(devolucion.cantidad) }],
-      motivo: devolucion.motivo.trim(),
-    }, nuevaClaveIdempotencia());
-    emit('aviso', `Se devolvieron ${devolucion.cantidad} de ${devolviendo.value.insumo.nombre} (lote ${devolviendo.value.lote.numeroLote}) a bodega.`);
-    devolviendo.value = null;
-    emit('recargar');
-  } catch (fallo) {
-    emit('error', fallo.message);
-  } finally {
-    enviando.value = false;
-  }
-}
 </script>
 
 <template>
   <div class="estante-farmacia">
+    <div class="filtros" role="group" aria-label="Mostrar">
+      <button v-for="f in FILTROS" :key="f.clave" type="button" :class="{ on: filtro === f.clave }" :aria-pressed="filtro === f.clave" :disabled="!cuenta[f.clave] && f.clave !== 'todos'" @click="filtro = f.clave">
+        {{ f.texto }} <b>{{ cuenta[f.clave] }}</b>
+      </button>
+    </div>
     <div class="tabla">
+      <p v-if="!visibles.length" class="b-vacio">Ningún medicamento en esta lista.</p>
       <ul>
         <li v-for="x in visibles" :key="x.insumoId" class="fila" :class="{ abierta: abierto === x.insumoId }" :style="estiloTono(x.etiqueta?.tono ?? 'neutro')">
           <button type="button" class="resumen" :aria-expanded="abierto === x.insumoId" @click="alternar(x.insumoId)">
@@ -146,7 +142,6 @@ async function devolver() {
                 </span>
                 <b class="l-cant">{{ miles(l.cantidad) }}</b>
                 <button v-if="esSinLote(l)" type="button" class="b-btn exito" @click="abrirPonerLote(x, l)"><Icono nombre="lapiz" :tamano="18" /> Poner lote</button>
-                <button v-else type="button" class="b-btn" :class="esVencido(l) ? 'peligro' : 'secundario'" @click="abrirDevolucion(x, l)"><Icono nombre="trasladar" :tamano="18" /> Devolver</button>
               </li>
               <li v-if="!x.lotes.length" class="vacio">No hay nada en el estante.</li>
             </ul>
@@ -186,34 +181,18 @@ async function devolver() {
       </form>
     </div>
 
-    <!-- Devolver a bodega -->
-    <div v-if="devolviendo" class="fondo" role="dialog" aria-modal="true" aria-labelledby="titulo-devolver" @click.self="devolviendo = null">
-      <form class="b-panel ventana" @submit.prevent="devolver">
-        <header class="b-panel-cabeza"><h2 id="titulo-devolver" class="b-panel-titulo">Devolver a bodega</h2></header>
-        <div class="b-panel-cuerpo space-y-3">
-          <p class="caja-med"><b>{{ devolviendo.insumo.nombre }}</b><span>Lote {{ devolviendo.lote.numeroLote }} · hay {{ miles(devolviendo.lote.cantidad) }} en farmacia</span></p>
-          <div>
-            <label for="dev-cantidad" class="b-etiqueta">Cuántos regresan</label>
-            <input id="dev-cantidad" v-model="devolucion.cantidad" inputmode="numeric" required class="b-campo grande num" />
-          </div>
-          <div>
-            <span class="b-etiqueta">Por qué</span>
-            <div class="motivos" role="radiogroup" aria-label="Motivo">
-              <button v-for="m in MOTIVOS" :key="m" type="button" role="radio" :aria-checked="devolucion.motivo === m" :class="{ on: devolucion.motivo === m }" @click="devolucion.motivo = m">{{ m }}</button>
-            </div>
-          </div>
-          <div class="flex justify-end gap-2">
-            <button type="button" class="b-btn secundario" @click="devolviendo = null">Cancelar</button>
-            <button type="submit" class="b-btn primario" :disabled="enviando || !devolucion.motivo || !entero(devolucion.cantidad) || entero(devolucion.cantidad) > devolviendo.lote.cantidad">Devolver a bodega</button>
-          </div>
-        </div>
-      </form>
-    </div>
   </div>
 </template>
 
 <style scoped>
 .estante-farmacia { display: grid; gap: 14px; }
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; }
+.filtros button { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 14px; background: #fff; font-size: 14.5px; font-weight: 800; color: #334155; }
+.filtros button b { min-width: 24px; padding: 0 7px; border-radius: 9px; background: #F1F5F9; color: #14244A; text-align: center; }
+.filtros button.on { border-color: #2F83C4; border-bottom-color: #1F6AA5; background: #EAF3FB; color: #174E80; }
+.filtros button.on b { background: #2F83C4; color: #fff; }
+.filtros button:disabled { opacity: .45; }
+.filtros button:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 2px; }
 
 /* Tabla: columnas alineadas, filas grandes para tocar. */
 .tabla { overflow: hidden; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 20px; background: #fff; }

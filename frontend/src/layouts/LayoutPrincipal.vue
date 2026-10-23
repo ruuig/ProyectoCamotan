@@ -59,7 +59,7 @@ const GRUPOS = [
   {
     titulo: 'Atención',
     enlaces: [
-      { ruta: '__panel', etiqueta: 'Panel de inicio', icono: 'panel', roles: ['admin', 'preconsulta', 'medico', 'farmacia', 'bodega'] },
+      { ruta: '__panel', etiqueta: 'Panel de inicio', icono: 'panel', roles: ['admin', 'preconsulta', 'medico', 'bodega'] },
       { ruta: '/cola', etiqueta: 'Cola de atención', icono: 'cola', roles: ['admin', 'preconsulta', 'medico'] },
       { ruta: '/pacientes', etiqueta: 'Pacientes', icono: 'pacientes', roles: ['admin', 'preconsulta', 'medico'] },
       // El médico revisa su propio 3C/S; dirección lo ve por responsable en Consolidados.
@@ -69,10 +69,15 @@ const GRUPOS = [
   {
     titulo: 'Farmacia y bodega',
     enlaces: [
-      // Exacto: el control de farmacia vive dentro de /dispensacion y tiene su propio enlace.
-      { ruta: '/dispensacion', etiqueta: 'Dispensación', icono: 'dispensacion', roles: ['admin', 'farmacia'], exacto: true },
-      // Estante, pedido a bodega, el día y el conteo: todo el inventario de farmacia en un lugar.
-      { ruta: '/dispensacion/control', etiqueta: 'Estante y pedidos', icono: 'inventario', roles: ['admin', 'farmacia'] },
+      // Farmacia: entregar todo el día, ver el estante, cerrar el día y, una vez al mes, el BRES y el pedido.
+      { ruta: '/dispensacion', etiqueta: 'Entregar', icono: 'dispensacion', roles: ['admin', 'farmacia'], exacto: true },
+      { ruta: '/dispensacion/estante', etiqueta: 'Estante', icono: 'inventario', roles: ['admin', 'farmacia'] },
+      { ruta: '/dispensacion/cierre', etiqueta: 'Cierre del día', icono: 'correcto', roles: ['admin', 'farmacia'] },
+      { ruta: '/dispensacion/mes', etiqueta: 'Requisición', icono: 'trasladar', roles: ['admin', 'farmacia'] },
+      { ruta: '/dispensacion/requisiciones', etiqueta: 'Mis requisiciones', icono: 'imprimir', roles: ['admin', 'farmacia'] },
+      // El BRES de farmacia mes por mes, con los meses de antes del sistema, y su kardex.
+      { ruta: '/dispensacion/bres', etiqueta: 'Balance', icono: 'consolidado', roles: ['admin', 'farmacia'] },
+      { ruta: '/dispensacion/kardex', etiqueta: 'Kardex', icono: 'hojaCalculo', roles: ['admin', 'farmacia'] },
       { ruta: '/inventario', etiqueta: 'Bodega', icono: 'inventario', roles: ['admin'] },
     ],
   },

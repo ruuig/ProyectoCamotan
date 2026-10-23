@@ -1,5 +1,5 @@
 const farmacia = require('../services/farmacia.service');
-const { bresFarmacia } = require('../services/farmaciaBres.service');
+const { bresFarmacia, historialFarmacia, guardarHistorial } = require('../services/farmaciaBres.service');
 
 /** Existencia de la farmacia por insumo y por lote. */
 async function existencias(req, res) {
@@ -53,4 +53,19 @@ async function bres(req, res) {
   res.json(await bresFarmacia(req.usuario.establecimientoId, req.params.periodo));
 }
 
-module.exports = { existencias, dia, cerrarDia, devolver, ponerLote, bres };
+/** Un mes de antes del sistema, para escribirlo desde el BRES de papel. */
+async function historial(req, res) {
+  res.json(await historialFarmacia(req.usuario.establecimientoId, req.params.periodo));
+}
+
+async function guardarMes(req, res) {
+  const hecho = await guardarHistorial(req.usuario.establecimientoId, req.params.periodo, req.body, req.usuario.id);
+  await req.bitacora({
+    accion: 'actualizar',
+    entidad: 'reporte_servicio',
+    detalle: `Farmacia escribió su BRES de ${hecho.periodo}: ${hecho.renglones} medicamentos`,
+  });
+  res.json(hecho);
+}
+
+module.exports = { existencias, dia, cerrarDia, devolver, ponerLote, bres, historial, guardarMes };

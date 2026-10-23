@@ -1,29 +1,31 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { RouterLink, useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import farmacia from '../../services/farmacia';
 import Icono from '../../components/comunes/Icono.vue';
 import EstanteFarmacia from '../../components/farmacia/EstanteFarmacia.vue';
-import PedidoFarmacia from '../../components/farmacia/PedidoFarmacia.vue';
 import CierreDiaFarmacia from '../../components/farmacia/CierreDiaFarmacia.vue';
+import MesFarmacia from '../../components/farmacia/MesFarmacia.vue';
+import RequisicionesFarmacia from '../../components/farmacia/RequisicionesFarmacia.vue';
 
 /**
- * Estante y pedidos de la farmacia (post-consulta): pedir a bodega lo que
- * falta y ver lo que hay, lote por lote, con su vencimiento. Lo vencido se
- * devuelve a bodega. El informe del día (lo que entró y salió) se imprime.
+ * Lo que la farmacia (post-consulta) hace fuera de la ventanilla, cada cosa
+ * con su entrada en el menú:
+ *  - Estante: lo que hay, lote por lote; ponerle lote y devolver lo vencido.
+ *  - Cierre del día: contar lo que se movió y dejar el informe del día.
+ *  - Requisición: el pedido a bodega del mes, con las cantidades del BRES.
+ *  - Mis requisiciones: las ya hechas, para volver a imprimirlas o cancelarlas.
  */
+const TITULOS = {
+  estante: { antes: 'Farmacia', titulo: 'Estante' },
+  dia: { antes: 'Farmacia', titulo: 'Cierre del día' },
+  mes: { antes: 'Farmacia', titulo: 'Requisición' },
+  hechas: { antes: 'Farmacia', titulo: 'Mis requisiciones' },
+};
 const hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
-// Tres tareas: pedir lo que falta, ver lo que hay y, al final del día,
-// contar el estante (el cuaderno en línea) y copiar el resumen al SIGSA.
-const PESTANAS = [
-  { clave: 'pedir', texto: 'Pedir a bodega', icono: 'trasladar' },
-  { clave: 'existencias', texto: 'Mi estante', icono: 'inventario' },
-  { clave: 'contar', texto: 'Cerrar el día', icono: 'correcto' },
-];
 const route = useRoute();
-const router = useRouter();
-const pedida = route.query.pestana;
-const pestana = ref(PESTANAS.some((p) => p.clave === pedida) ? pedida : 'existencias');
+// Las tres rutas usan esta vista: la pestaña sale de la ruta.
+const pestana = computed(() => (TITULOS[route.meta.pestana] ? route.meta.pestana : 'estante'));
 const existencias = ref([]);
 const buscar = ref('');
 const error = ref('');
@@ -37,11 +39,10 @@ async function cargarExistencias() {
   }
 }
 
-watch(pestana, (p) => {
-  router.replace({ query: { pestana: p } });
+watch(pestana, () => {
+  aviso.value = '';
   cargarExistencias();
 });
-const porPedir = computed(() => existencias.value.filter((x) => x.pedir > 0).length);
 
 // Imprimir: el informe del inventario de un día (por defecto hoy), en su propia hoja.
 const fechaInforme = ref(hoy);
@@ -52,20 +53,17 @@ function imprimir() {
 }
 
 onMounted(cargarExistencias);
-
-
 </script>
 
 <template>
   <section>
-    <RouterLink to="/dispensacion" class="b-volver no-imprimir"><Icono nombre="volver" :tamano="18" :grosor="2.2" /> Dispensación</RouterLink>
     <header class="b-cabecera">
       <div>
-        <p class="b-antetitulo">Farmacia</p>
-        <h1 class="b-titulo">Estante y pedidos</h1>
+        <p class="b-antetitulo">{{ TITULOS[pestana].antes }}</p>
+        <h1 class="b-titulo">{{ TITULOS[pestana].titulo }}</h1>
       </div>
-      <div class="relative no-imprimir">
-        <button type="button" class="b-btn secundario" @click="eligiendoFecha = !eligiendoFecha"><Icono nombre="imprimir" :tamano="20" /> Imprimir</button>
+      <div v-if="pestana === 'dia'" class="relative no-imprimir">
+        <button type="button" class="b-btn secundario" @click="eligiendoFecha = !eligiendoFecha"><Icono nombre="imprimir" :tamano="20" /> Informe de otro día</button>
         <div v-if="eligiendoFecha" class="elegir-informe">
           <b>Informe del inventario</b>
           <label for="fecha-informe" class="b-etiqueta">Día</label>
@@ -75,35 +73,25 @@ onMounted(cargarExistencias);
       </div>
     </header>
 
-    <nav class="pestanas-grandes mt-5 no-imprimir" aria-label="Estante y pedidos">
-      <button v-for="p in PESTANAS" :key="p.clave" type="button" :class="{ on: pestana === p.clave }" :aria-current="pestana === p.clave ? 'page' : undefined" @click="pestana = p.clave">
-        <span class="ic"><Icono :nombre="p.icono" :tamano="26" /></span>
-        <b>{{ p.texto }}</b>
-        <span v-if="p.clave === 'pedir' && porPedir" class="globo">{{ porPedir }}</span>
-      </button>
-    </nav>
-
     <p v-if="aviso" class="b-aviso ok mt-4 no-imprimir" aria-live="polite">{{ aviso }}</p>
     <p v-if="error" role="alert" class="b-aviso error mt-4 no-imprimir">{{ error }}</p>
 
-    <div class="mt-5 flex flex-wrap items-end gap-3 no-imprimir">
-      <label v-if="pestana === 'existencias'" class="buscador">
+    <template v-if="pestana === 'estante'">
+      <label class="buscador mt-5 no-imprimir">
         <Icono nombre="buscar" :tamano="24" :grosor="2.4" />
         <input v-model="buscar" type="search" autocomplete="off" placeholder="Buscar medicamento" aria-label="Buscar medicamento" />
       </label>
-    </div>
+      <EstanteFarmacia
+        class="mt-4" :existencias="existencias" :buscar="buscar"
+        @recargar="cargarExistencias" @aviso="(t) => (aviso = t)" @error="(t) => (error = t)"
+      />
+    </template>
 
-    <!-- ===== Cerrar el día ===== -->
-    <CierreDiaFarmacia v-if="pestana === 'contar'" class="mt-4" @aviso="(t) => (aviso = t)" @error="(t) => (error = t)" />
+    <CierreDiaFarmacia v-else-if="pestana === 'dia'" class="mt-5" @aviso="(t) => (aviso = t)" @error="(t) => (error = t)" />
 
-    <!-- ===== Estante ===== -->
-    <EstanteFarmacia
-      v-if="pestana === 'existencias'" class="mt-4" :existencias="existencias" :buscar="buscar"
-      @recargar="cargarExistencias" @aviso="(t) => (aviso = t)" @error="(t) => (error = t)" @pedir="pestana = 'pedir'"
-    />
+    <RequisicionesFarmacia v-else-if="pestana === 'hechas'" class="mt-5" @aviso="(t) => (aviso = t)" @error="(t) => (error = t)" />
 
-    <!-- ===== Pedir a bodega ===== -->
-    <PedidoFarmacia v-if="pestana === 'pedir'" class="mt-4" :existencias="existencias" @aviso="(t) => (aviso = t)" @error="(t) => (error = t)" />
+    <MesFarmacia v-else class="mt-5" @aviso="(t) => (aviso = t)" @error="(t) => (error = t)" />
   </section>
 </template>
 

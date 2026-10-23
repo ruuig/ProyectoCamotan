@@ -13,11 +13,15 @@ import { fecha, periodoActual, leerAnotarReclamar, guardarAnotarReclamar, observ
  * Kardex de cada producto de la bodega: cada ingreso y cada despacho con su
  * requisición, a dónde fue, la entrada, la salida y la existencia. Se copia
  * a la tarjeta oficial o se imprime encima de ella.
+ *
+ * Farmacia (post-consulta) usa esta misma vista con su propia tarjeta: lo que
+ * recibió de bodega, lo que entregó a los pacientes y los ajustes del conteo.
  */
 const route = useRoute();
+const deFarmacia = route.meta.ubicacion === 'farmacia';
 const insumos = ref([]);
 const elegido = ref(null);
-const periodo = ref(periodoActual());
+const periodo = ref(route.query.periodo ?? periodoActual());
 // mes | desde (lo que falta pasar a las tarjetas) | todo
 const modo = ref(route.query.desde ? 'desde' : 'mes');
 const desde = ref(route.query.desde ?? new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 8) + '01');
@@ -30,7 +34,10 @@ const cargando = ref(false);
 const anotarReclamar = ref(leerAnotarReclamar());
 watch(anotarReclamar, guardarAnotarReclamar);
 
-const q = computed(() => (modo.value === 'todo' ? {} : modo.value === 'desde' ? { desde: desde.value } : { periodo: periodo.value }));
+const q = computed(() => ({
+  ...(modo.value === 'todo' ? {} : modo.value === 'desde' ? { desde: desde.value } : { periodo: periodo.value }),
+  ...(deFarmacia ? { ubicacion: 'farmacia' } : {}),
+}));
 const enlaceTodos = computed(() => `/imprimir/kardex?${new URLSearchParams(q.value)}`);
 const enlaceUno = computed(() => `/imprimir/kardex?${new URLSearchParams({ ...q.value, insumoId: elegido.value?.id ?? '' })}`);
 const dinero = (v) => (v == null ? '' : `Q ${Number(v).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -75,7 +82,10 @@ onMounted(async () => {
 <template>
   <section>
     <header class="b-cabecera">
-      <h1 class="b-titulo">Kardex</h1>
+      <div>
+        <p v-if="deFarmacia" class="b-antetitulo">Farmacia</p>
+        <h1 class="b-titulo">Kardex</h1>
+      </div>
       <div class="flex flex-wrap items-center gap-2">
         <div class="b-segmentado" role="radiogroup" aria-label="Tramo">
           <button v-for="m in [['mes', 'Un mes'], ['desde', 'Desde una fecha'], ['todo', 'Toda la historia']]" :key="m[0]" type="button" role="radio" :aria-checked="modo === m[0]" :class="modo === m[0] ? 'on' : ''" @click="modo = m[0]">{{ m[1] }}</button>
@@ -97,7 +107,7 @@ onMounted(async () => {
         </div>
         <BuscadorInsumo v-else :insumos="insumos" placeholder="Buscar producto" @elegir="elegir" />
       </div>
-      <label v-if="tarjeta" class="interruptor" title="Anota en Observaciones lo que llegó de menos y falta reclamar">
+      <label v-if="tarjeta && !deFarmacia" class="interruptor" title="Anota en Observaciones lo que llegó de menos y falta reclamar">
         <input v-model="anotarReclamar" type="checkbox" />
         <span class="pista" aria-hidden="true" />
         Anotar faltantes por reclamar

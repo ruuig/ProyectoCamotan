@@ -6,7 +6,8 @@ export const PANEL_POR_ROL = {
   admin: '/panel/admin',
   preconsulta: '/panel/preconsulta',
   medico: '/panel/medico',
-  farmacia: '/panel/farmacia',
+  // Farmacia empieza donde trabaja: la ventanilla de entrega.
+  farmacia: '/dispensacion',
   bodega: '/panel/bodega',
   servicio: '/servicio',
 };

@@ -22,6 +22,26 @@ router.get(
   validar(z.object({ periodo: z.string().regex(/^\d{4}-\d{2}$/, 'El período debe tener el formato AAAA-MM') }), 'params'),
   asincrono(farmacia.bres),
 );
+// Meses de antes del sistema: farmacia los escribe desde su BRES de papel.
+const conPeriodo = validar(z.object({ periodo: z.string().regex(/^\d{4}-\d{2}$/, 'El período debe tener el formato AAAA-MM') }), 'params');
+const cantidad = z.coerce.number().int().min(0, 'No puede ser negativo').optional();
+router.get('/historial/:periodo', consultar, conPeriodo, asincrono(farmacia.historial));
+router.put(
+  '/historial/:periodo',
+  deFarmacia,
+  conPeriodo,
+  validar(z.object({
+    renglones: z.array(z.object({
+      insumoId: z.coerce.number().int().positive(),
+      saldoAnterior: cantidad,
+      entradas: cantidad,
+      entregado: cantidad,
+      noEntregado: cantidad,
+      reajustes: z.coerce.number().int().optional(),
+    })).max(1000),
+  })),
+  asincrono(farmacia.guardarMes),
+);
 router.get(
   '/dia',
   consultar,

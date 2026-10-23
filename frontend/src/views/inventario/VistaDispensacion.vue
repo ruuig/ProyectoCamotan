@@ -217,7 +217,6 @@ onBeforeUnmount(() => {
         <h1 class="b-titulo">Entregar medicamentos</h1>
       </div>
       <div class="b-acciones">
-        <RouterLink to="/dispensacion/control" class="b-btn secundario"><Icono nombre="inventario" :tamano="20" /> Estante y pedidos</RouterLink>
         <RouterLink :to="`/imprimir/sigsa4/${periodo}`" target="_blank" class="b-btn secundario"><Icono nombre="imprimir" :tamano="20" /> SIGSA-4 del mes</RouterLink>
       </div>
     </header>

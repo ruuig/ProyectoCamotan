@@ -43,6 +43,8 @@ const HojaKardex = () => import('../views/impresion/HojaKardex.vue');
 const HojaInventarioFarmacia = () => import('../views/impresion/HojaInventarioFarmacia.vue');
 const VistaRequisiciones = () => import('../views/inventario/VistaRequisiciones.vue');
 const VistaKardex = () => import('../views/inventario/VistaKardex.vue');
+const VistaTrazadores = () => import('../views/inventario/VistaTrazadores.vue');
+const HojaTrazador = () => import('../views/impresion/HojaTrazador.vue');
 const VistaRecibir = () => import('../views/inventario/VistaRecibir.vue');
 const VistaPedirDdriss = () => import('../views/inventario/VistaPedirDdriss.vue');
 const VistaServicio = () => import('../views/servicio/VistaServicio.vue');
@@ -135,6 +137,8 @@ const router = createRouter({
             // Las rutas fijas van antes que ':id', o este se las traga.
             { path: 'cierre', name: 'inventario-cierre', component: InventarioCierre, meta: { roles: BODEGA } },
             { path: 'bres', name: 'bres', component: VistaBres, meta: { roles: BODEGA } },
+            // Informe mensual de trazadores a la DDRISS.
+            { path: 'trazadores', name: 'trazadores', component: VistaTrazadores, meta: { roles: BODEGA } },
             // El traslado es la requisicion: el enlace viejo lleva a ella.
             { path: 'traslados', redirect: '/inventario/requisiciones' },
             // Farmacia pide a bodega con requisición, como los demás servicios.
@@ -264,6 +268,7 @@ const router = createRouter({
         },
         { path: 'balance/:periodo', name: 'imprimir-balance', component: HojaBalance, meta: { roles: BODEGA } },
         { path: 'cierre/:periodo', name: 'imprimir-cierre', component: HojaInventarioCierre, meta: { roles: BODEGA } },
+        { path: 'trazador/:formato/:periodo', name: 'imprimir-trazador', component: HojaTrazador, meta: { roles: BODEGA } },
         { path: 'sigsa3cs', name: 'imprimir-sigsa3cs', component: HojaSigsa3cs, meta: { roles: ['admin', 'medico'] } },
         { path: 'sigsa4/:periodo', name: 'imprimir-sigsa4', component: HojaSigsa4, meta: { roles: FARMACIA } },
         { path: 'semaforo', name: 'imprimir-semaforo', component: HojaSemaforo, meta: { roles: BODEGA } },

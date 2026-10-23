@@ -309,6 +309,14 @@ router.get('/semaforo', deBodega, validar(consultaListado, 'query'), asincrono(b
 router.get('/inventario-cierre', deBodega, validar(consultaListado, 'query'), asincrono(bodega.inventarioCierre));
 router.get('/balance/:periodo/excel', deBodega, validar(z.object({ periodo }), 'params'), asincrono(bodega.exportarBalance));
 router.get('/bres/:periodo/excel', deBodega, validar(z.object({ periodo }), 'params'), asincrono(bodega.exportarBres));
+// Trazadores: el informe mensual a la DDRISS en sus tres formatos.
+router.get(
+  '/trazadores/:formato',
+  deBodega,
+  validar(z.object({ formato: z.enum(['medicamentos', 'quirurgico', 'laboratorio']) }), 'params'),
+  validar(z.object({ periodo: periodo.optional() }), 'query'),
+  asincrono(bodega.trazador),
+);
 
 // --- Alias del catálogo ---------------------------------------------------------------
 router.get('/lotes', deBodega, validar(z.object({ buscar: z.string().max(80).optional() }), 'query'), asincrono(bodega.buscarLotes));

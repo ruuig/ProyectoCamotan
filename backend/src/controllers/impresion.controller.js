@@ -16,6 +16,7 @@ const DOCUMENTOS = {
   oficio_baja: 'Oficio de baja',
   requisicion: 'Requisición despacho de almacén',
   kardex: 'Kardex (tarjeta de control de suministro)',
+  trazador: 'Informe de trazadores (quincenal) a la DDRISS',
   inventario_farmacia: 'Informe diario del inventario de farmacia',
   sigsa4: 'SIGSA-4, registro diario de post-consulta',
   sigsa3cs: 'SIGSA-3CS, registro diario de consulta',
@@ -23,7 +24,7 @@ const DOCUMENTOS = {
 };
 
 const DOCUMENTOS_BODEGA = new Set([
-  'bres', 'balance', 'inventario_cierre', 'hoja_conteo', 'semaforo', 'comprobante_traslado', 'tarjeta_control', 'oficio_baja', 'requisicion', 'kardex',
+  'bres', 'balance', 'inventario_cierre', 'hoja_conteo', 'semaforo', 'comprobante_traslado', 'tarjeta_control', 'oficio_baja', 'requisicion', 'kardex', 'trazador',
 ]);
 
 /**

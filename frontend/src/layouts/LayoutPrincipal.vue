@@ -98,6 +98,7 @@ const GRUPOS = [
       { ruta: '/inventario/informes', etiqueta: 'Informes de servicios', icono: 'consolidado', roles: ['bodega'] },
       { ruta: '/inventario/bres', etiqueta: 'BRES', icono: 'hojaCalculo', roles: ['bodega'] },
       { ruta: '/inventario/cierre', etiqueta: 'Inventario de cierre', icono: 'correcto', roles: ['bodega'] },
+      { ruta: '/inventario/trazadores', etiqueta: 'Trazadores', icono: 'crecimiento', roles: ['bodega'] },
     ],
   },
   {

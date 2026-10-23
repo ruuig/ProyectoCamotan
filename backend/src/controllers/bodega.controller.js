@@ -15,6 +15,7 @@ const { configuracion, rangosSemaforo, limitesDePeriodo } = require('../services
 const { errorDestino, errorLotes, registrarTraslado } = require('../services/traslados.service');
 const { enUbicacion } = require('../services/inventario.service');
 const bresService = require('../services/bres.service');
+const trazadores = require('../services/trazadores.service');
 const { kardexDe, encabezadoKardex } = require('../services/kardex.service');
 
 const ETIQUETA_TIPO_UBICACION = {
@@ -704,7 +705,15 @@ async function kardex(req, res) {
   res.json({ periodo: periodo ?? null, ubicacion, encabezado: await encabezadoKardex(req.usuario.establecimientoId, ubicacion), tarjetas });
 }
 
+/** Informe de trazadores del mes (por defecto, el mes en curso). */
+async function trazador(req, res) {
+  const local = new Date(Date.now() - 6 * 3600000);
+  const periodo = req.query.periodo ?? local.toISOString().slice(0, 7);
+  res.json(await trazadores.trazador(req.usuario.establecimientoId, req.params.formato, periodo));
+}
+
 module.exports = {
+  trazador,
   kardex,
   cambiarUbicacionFisica,
   listarUbicaciones,

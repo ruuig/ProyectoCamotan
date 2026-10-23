@@ -29,6 +29,8 @@ export default {
   recibirRequisicion: (id, datos, clave) => http.post(`/bodega/requisiciones/${id}/recibir`, datos, clave ? { 'Idempotency-Key': clave } : undefined),
   anularRequisicion: (id, motivo) => http.post(`/bodega/requisiciones/${id}/anular`, { motivo }),
   kardex: (parametros) => http.get(`/bodega/kardex?${consulta(parametros)}`),
+  // Informe de trazadores del mes: medicamentos, quirurgico o laboratorio.
+  trazador: (formato, periodo) => http.get(`/bodega/trazadores/${formato}${periodo ? `?periodo=${periodo}` : ''}`),
   entregar: (datos, clave) => http.post('/bodega/requisiciones/entregar', datos, clave ? { 'Idempotency-Key': clave } : undefined),
   anotarNumero: (id, numero) => http.patch(`/bodega/requisiciones/${id}/numero`, { numero }),
   solicitantes: () => http.get('/bodega/requisiciones/solicitantes'),

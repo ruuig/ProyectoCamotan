@@ -204,6 +204,8 @@ async function cancelar(p) {
         <header>
           <h2 id="titulo-resumen">Pedido a bodega</h2>
           <p>{{ aPedir.length }} medicamentos · {{ miles(totalUnidades) }} unidades</p>
+          <!-- Una requisición al mes: si ya salió una, que se note antes de mandar otra. -->
+          <p v-if="delMes" class="ya-hay">Ya hay una requisición del {{ fecha(delMes.fechaSolicitud) }} ({{ ESTADO[delMes.estado] ?? delMes.estado }}). Esta sería otra más.</p>
         </header>
         <ul class="resumen">
           <li v-for="f in aPedir" :key="f.insumoId">
@@ -266,6 +268,7 @@ async function cancelar(p) {
 .ventana { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 12px; width: min(560px, 100%); max-height: calc(100vh - 32px); padding: 20px; border-radius: 22px; background: #fff; }
 .ventana h2 { font-size: 22px; font-weight: 900; color: #14244A; }
 .ventana header p { font-size: 15px; font-weight: 700; color: #475569; }
+.ventana header .ya-hay { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #FFF1DC; color: #8A4B00; font-size: 14px; }
 .resumen { overflow-y: auto; border: 2px solid #E5E9F0; border-radius: 14px; }
 .resumen li { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-top: 1px solid #EEF2F6; font-size: 14.5px; font-weight: 700; color: #1E293B; }
 .resumen li:first-child { border-top: 0; }

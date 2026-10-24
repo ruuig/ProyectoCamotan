@@ -147,23 +147,15 @@ onMounted(() => { borrador.recuperar(); cargarSugerencia(); cargarEnviadas().cat
     <header class="b-cabecera">
       <div>
         <RouterLink to="/inventario/requisiciones" class="volver"><Icono nombre="volver" :tamano="16" /> Salidas</RouterLink>
-        <p class="b-antetitulo">Requisición</p>
+        <p class="b-antetitulo">{{ sugerencia ? `BRES ${nombreMes(periodo)}` : 'Bodega' }}</p>
         <h1 class="b-titulo">Requisición</h1>
       </div>
-      <p v-if="sugerencia" class="mes-bres"><Icono nombre="reloj" :tamano="18" /> Según el BRES de {{ nombreMes(periodo) }}</p>
     </header>
 
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
     <p v-if="aviso" class="b-aviso ok mt-4" aria-live="polite">{{ aviso }}</p>
 
     <AvisoBorrador v-if="borrador.recuperado.value && lineas.length" class="mt-4" texto="Se recuperó la requisición que dejó a medias." @descartar="empezarDeNuevo" />
-    <div v-if="sugerencia" class="explica mt-4">
-      <Icono nombre="informacion" :tamano="22" :grosor="2.2" />
-      <p>
-        Va llena con la <b>cantidad a pedir del BRES</b> de {{ nombreMes(periodo) }}: lo que falta para tener
-        <b>{{ sugerencia?.nivelMaximoMeses ?? 4 }} meses</b> de consumo en el municipio. Corrija, quite o agregue y envíela.
-      </p>
-    </div>
 
     <div class="rejilla mt-4">
       <EditorPedido v-model="lineas" :errores="erroresRenglon" :catalogo="catalogo" :nuevo-renglon="nuevoRenglon" puede-crear titulo="Qué pedir a la DDRISS" vacio="El BRES no pide nada este mes. Agregue lo que necesite." @volver-a-llenar="llenar" @creado="creado" />
@@ -171,16 +163,14 @@ onMounted(() => { borrador.recuperar(); cargarSugerencia(); cargarEnviadas().cat
       <aside class="lado">
         <section class="tarjeta">
           <h2>Datos de la requisición</h2>
-          <p class="nota">Se pide a: <b>{{ ALMACEN }}</b></p>
-          <div><label for="num" class="b-etiqueta">N.º del formulario <span class="b-opcional">opcional</span></label><input id="num" v-model="cabecera.numero" maxlength="20" class="b-campo font-mono" placeholder="El de la primera hoja; se puede anotar después" />
+          <div><label for="num" class="b-etiqueta">N.º del formulario <span class="b-opcional">opcional</span></label><input id="num" v-model="cabecera.numero" maxlength="20" class="b-campo font-mono" />
             <small v-if="numerosDe(cabecera.numero, aEnviar.map((l) => l.nombre)).length > 1" class="pista-hojas">Ocupa {{ numerosDe(cabecera.numero, aEnviar.map((l) => l.nombre)).length }} hojas: {{ textoNumero({ numeros: numerosDe(cabecera.numero, aEnviar.map((l) => l.nombre)) }) }}</small></div>
           <div><label for="sol" class="b-etiqueta">Solicita</label><input id="sol" v-model="cabecera.solicitante" class="b-campo" /></div>
-          <div><label for="jefe" class="b-etiqueta">Visto bueno <span class="b-opcional">opcional</span></label><input id="jefe" v-model="cabecera.jefe" class="b-campo" placeholder="Coordinador municipal" /></div>
+          <div><label for="jefe" class="b-etiqueta">Visto bueno <span class="b-opcional">opcional</span></label><input id="jefe" v-model="cabecera.jefe" class="b-campo" /></div>
           <div><label for="obs" class="b-etiqueta">Observaciones <span class="b-opcional">opcional</span></label><textarea id="obs" v-model="cabecera.observaciones" rows="2" class="b-campo" /></div>
           <button type="button" class="b-btn primario enviar" :disabled="enviando || !sugerencia || !aEnviar.length || cabecera.solicitante.trim().length < 3" @click="enviar">
             <Icono nombre="imprimir" :tamano="22" /> {{ enviando ? 'Registrando…' : `Registrar e imprimir (${aEnviar.length})` }}
           </button>
-          <p class="nota">Se imprime en la Requisición Despacho de Almacén (FOR-ASB-01) para firmarla y enviarla.</p>
         </section>
 
         <section class="tarjeta">
@@ -207,10 +197,7 @@ onMounted(() => { borrador.recuperar(); cargarSugerencia(); cargarEnviadas().cat
 
 <style scoped>
 .pista-hojas { display: block; margin-top: 4px; font-size: 13px; font-weight: 800; color: #174E80; }
-.mes-bres { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 14px; background: #EAF3FB; color: #174E80; font-size: 16px; font-weight: 800; }
 .volver { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 4px; font-size: 14px; font-weight: 700; color: #475569; }
-.explica { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-radius: 18px; background: #EAF3FB; color: #174E80; font-size: 15px; font-weight: 600; }
-.explica b { font-weight: 900; }
 .rejilla { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .rejilla { grid-template-columns: 1fr; } }
 .lado { display: grid; gap: 16px; }

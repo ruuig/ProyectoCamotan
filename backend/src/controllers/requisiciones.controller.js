@@ -73,7 +73,7 @@ const INCLUIR = {
   usuarioAutoriza: { select: { nombre: true } },
   usuarioDespacha: { select: { nombre: true } },
   usuarioAnula: { select: { nombre: true } },
-  renglones: { orderBy: { orden: 'asc' }, include: { insumo: { select: { id: true, codigoInterno: true, categoria: true, ubicacionFisica: true } } } },
+  renglones: { orderBy: { orden: 'asc' }, include: { insumo: { select: { id: true, codigoInterno: true, categoria: true, ubicacionFisica: true, ordenFormulario: true } } } },
   lotes: { orderBy: { id: 'asc' }, select: { id: true, insumoId: true, numeroLote: true, fechaVence: true, cantidadInicial: true } },
   traslado: {
     select: {
@@ -130,6 +130,8 @@ function vista(r) {
       codigoInterno: g.insumo?.codigoInterno ?? null,
       // Dónde buscarlo en la bodega al despachar.
       ubicacionFisica: g.insumo?.ubicacionFisica ?? null,
+      // Orden del balance y del BRES: la bodega despacha en ese orden.
+      ordenFormulario: g.insumo?.ordenFormulario ?? null,
       descripcion: g.descripcion,
       unidadMedida: g.unidadMedida,
       cantidadSolicitada: g.cantidadSolicitada,
@@ -158,10 +160,16 @@ async function existencias(establecimientoId, insumoIds) {
   const ahora = new Date();
   const res = {};
   for (const id of insumoIds) {
-    const enBodega = enUbicacion(lotes.filter((l) => l.insumoId === id), 'bodega')
+    const usables = enUbicacion(lotes.filter((l) => l.insumoId === id), 'bodega')
       .filter((l) => l.estado === 'disponible' && l.cantidadActual > 0 && new Date(l.fechaVence) >= ahora)
-      .reduce((s, l) => s + l.cantidadActual, 0);
-    res[id] = { enBodega, aCadaLugar: Math.round(enBodega / config.lugaresReparto) };
+      .sort((a, b) => new Date(a.fechaVence) - new Date(b.fechaVence) || a.id - b.id);
+    const enBodega = usables.reduce((s, l) => s + l.cantidadActual, 0);
+    res[id] = {
+      enBodega,
+      aCadaLugar: Math.round(enBodega / config.lugaresReparto),
+      // Los lotes que se pueden despachar, el que vence primero adelante.
+      lotes: usables.map((l) => ({ loteId: l.id, numeroLote: l.numeroLote, fechaVence: l.fechaVence, cantidad: l.cantidadActual })),
+    };
   }
   return res;
 }
@@ -368,13 +376,6 @@ async function autorizar(req, res, next) {
     return next({ status: 409, codigo: 'no_editable', mensaje: `La requisición ya está ${r.estado}` });
   }
   const indicadas = new Map((req.body.renglones ?? []).map((g) => [g.id, g]));
-  const sinMotivo = r.renglones.find((g) => {
-    const i = indicadas.get(g.id);
-    return i && i.cantidadAutorizada < g.cantidadSolicitada && !i.motivo;
-  });
-  if (sinMotivo) {
-    return next({ status: 400, codigo: 'falta_motivo', mensaje: `${sinMotivo.descripcion}: diga por qué se autoriza menos de lo pedido` });
-  }
   await prisma.$transaction([
     ...r.renglones.map((g) => prisma.requisicionRenglon.update({
       where: { id: g.id },

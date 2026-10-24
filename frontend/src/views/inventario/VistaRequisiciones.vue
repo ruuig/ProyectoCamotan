@@ -12,7 +12,6 @@ import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
 import { miles } from '../../components/bodega/diseno/PiezasBodega';
 import { fecha } from '../../dominio/bodega';
 import AtenderPedido from '../../components/bodega/AtenderPedido.vue';
-import { estiloTono } from '../../components/bodega/diseno/PiezasBodega';
 
 /**
  * Requisiciones: la bodega registra lo que entrega y el sistema genera la
@@ -192,10 +191,11 @@ function usarFila(f) {
 // Entregadas: solo lo que de verdad salió de bodega.
 const entregadas = computed(() => lista.value.filter((r) => ['despachada', 'parcial', 'recibida'].includes(r.estado)));
 const porAtender = computed(() => lista.value.filter((r) => ['solicitada', 'autorizada'].includes(r.estado)));
-const rechazadas = computed(() => lista.value.filter((r) => r.estado === 'anulada'));
 const mostradas = computed(() => (soloSinNumero.value ? entregadas.value.filter((r) => !r.numero) : entregadas.value));
 // Desde el panel se puede abrir un pedido directo: ?pedido=ID.
 const atendiendo = ref(route.query.pedido ? Number(route.query.pedido) : null);
+// Sin una elegida, se abre la primera que espera.
+const abiertaPedido = computed(() => (porAtender.value.some((p) => p.id === atendiendo.value) ? atendiendo.value : porAtender.value[0]?.id ?? null));
 async function pedidoListo(texto) {
   aviso.value = texto;
   atendiendo.value = null;
@@ -245,7 +245,7 @@ onMounted(() => {
         <button type="button" role="radio" :aria-checked="vista === 'nueva'" :class="vista === 'nueva' ? 'on' : ''" @click="vista = 'nueva'">Entregar</button>
         <!-- Con pedidos esperando, la pestaña se pinta de naranja con su número. -->
         <button type="button" role="radio" :aria-checked="vista === 'pedidos'" class="pest-pedidos" :class="{ on: vista === 'pedidos', hay: porAtender.length }" @click="vista = 'pedidos'">
-          Por atender <span v-if="porAtender.length" class="cuenta-pedidos">{{ porAtender.length }}</span>
+          Por despachar <span v-if="porAtender.length" class="cuenta-pedidos">{{ porAtender.length }}</span>
         </button>
         <button type="button" role="radio" :aria-checked="vista === 'registradas'" :class="vista === 'registradas' ? 'on' : ''" @click="vista = 'registradas'">Entregadas ({{ entregadas.length }})</button>
       </div>
@@ -257,46 +257,16 @@ onMounted(() => {
       <RouterLink v-if="ultima" :to="`/imprimir/requisicion/${ultima.id}`" target="_blank" class="b-btn secundario chico"><Icono nombre="imprimir" :tamano="16" /> Imprimir otra vez</RouterLink>
     </div>
 
-    <button v-if="vista !== 'pedidos' && porAtender.length" type="button" class="aviso-pedidos mt-4" @click="vista = 'pedidos'">
-      <span class="ic"><Icono nombre="trasladar" :tamano="24" /></span>
-      <span class="flex-1 text-left">
-        <b>{{ porAtender.length === 1 ? 'Hay 1 requisición por atender' : `Hay ${porAtender.length} requisiciones por atender` }}</b>
-        <small>{{ [...new Set(porAtender.map((p) => p.unidadSeccion))].slice(0, 3).join(' · ') }}</small>
-      </span>
-      <span class="ir">Atender</span>
-    </button>
-
-    <!-- Por atender: lo que pidieron y espera respuesta -->
-    <div v-if="vista === 'pedidos'" class="bandeja mt-5">
-      <ul class="pedidos">
-        <li v-for="p in porAtender" :key="p.id">
-          <button type="button" class="pedido" :class="{ on: atendiendo === p.id }" :style="estiloTono(p.estado === 'autorizada' ? 'accion' : 'atencion')" @click="atendiendo = p.id">
-            <span class="min-w-0">
-              <b>{{ p.unidadSeccion }}</b>
-              <small>{{ p.renglones }} {{ p.renglones === 1 ? 'producto' : 'productos' }} · {{ miles(p.solicitado) }} unidades · {{ p.solicitante }}</small>
-            </span>
-            <span class="espera">
-              <span class="chip">{{ p.estado === 'autorizada' ? 'Falta despachar' : 'Nuevo · atender' }}</span>
-              <small>{{ diasDesde(p.fechaSolicitud) === 0 ? 'Hoy' : `Hace ${diasDesde(p.fechaSolicitud)} ${diasDesde(p.fechaSolicitud) === 1 ? 'día' : 'días'}` }}</small>
-            </span>
-          </button>
-        </li>
-        <li v-if="!porAtender.length" class="vacio-bandeja">
-          <Icono nombre="correcto" :tamano="28" />
-          <b>No hay pedidos esperando</b>
-          <small>Cuando farmacia o un servicio pida, aparece aquí para autorizarlo y despacharlo.</small>
-        </li>
-        <li v-if="rechazadas.length" class="rechazadas">
-          <small>Rechazados recientes</small>
-          <span v-for="p in rechazadas.slice(0, 3)" :key="p.id">{{ p.unidadSeccion }} · {{ fecha(p.fechaSolicitud) }}</span>
-        </li>
-      </ul>
-      <AtenderPedido v-if="atendiendo" :id="atendiendo" @listo="pedidoListo" @cerrar="atendiendo = null" />
-      <div v-else-if="porAtender.length" class="elija">
-        <Icono nombre="trasladar" :tamano="36" />
-        <b>Elija un pedido para atenderlo</b>
-        <small>Se revisa cuánto se da de cada producto, y se despacha con el número del formulario.</small>
-      </div>
+    <!-- Por despachar: una pestaña por requisición y su hoja de despacho -->
+    <div v-if="vista === 'pedidos'" class="mt-5">
+      <nav v-if="porAtender.length > 1" class="pendientes" aria-label="Requisiciones por despachar">
+        <button v-for="p in porAtender" :key="p.id" type="button" class="pendiente" :class="{ on: abiertaPedido === p.id }" @click="atendiendo = p.id">
+          <b>{{ p.unidadSeccion }}</b>
+          <small>{{ p.renglones }} · {{ diasDesde(p.fechaSolicitud) === 0 ? 'hoy' : `hace ${diasDesde(p.fechaSolicitud)} ${diasDesde(p.fechaSolicitud) === 1 ? 'día' : 'días'}` }}</small>
+        </button>
+      </nav>
+      <AtenderPedido v-if="abiertaPedido" :id="abiertaPedido" class="mt-3" @listo="pedidoListo" />
+      <p v-else-if="!porAtender.length" class="b-vacio">No hay requisiciones por despachar.</p>
     </div>
 
     <!-- Entregar sin pedido -->
@@ -489,31 +459,15 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.pendientes { display: flex; flex-wrap: wrap; gap: 8px; }
+.pendiente { display: grid; min-width: 180px; padding: 8px 14px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 14px; background: #fff; text-align: left; }
+.pendiente b { font-size: 15px; font-weight: 900; color: #14244A; }
+.pendiente small { font-size: 13px; font-weight: 700; color: #64748B; }
+.pendiente.on { border-color: #E8930C; border-bottom-color: #B4610A; background: #FFF6E6; }
 .pest-pedidos.hay { background: #FFF1DC; color: #8A4B00; }
 .pest-pedidos.hay.on { background: #E8930C; color: #fff; }
 .cuenta-pedidos { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin-left: 4px; padding: 0 6px; border-radius: 11px; background: #D64545; color: #fff; font-size: 12.5px; font-weight: 900; }
 .pest-pedidos.hay.on .cuenta-pedidos { background: #fff; color: #B4610A; }
-.aviso-pedidos { display: flex; width: 100%; align-items: center; gap: 14px; padding: 14px 18px; border: 2px solid #F3C677; border-bottom-width: 4px; border-radius: 18px; background: #FFF6E6; color: #6B3D00; }
-.aviso-pedidos:hover { border-color: #E8930C; }
-.aviso-pedidos .ic { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: #E8930C; color: #fff; }
-.aviso-pedidos b { display: block; font-size: 17px; font-weight: 900; }
-.aviso-pedidos small { display: block; font-size: 14px; font-weight: 600; }
-.aviso-pedidos .ir { padding: 8px 16px; border-radius: 12px; background: #E8930C; color: #fff; font-weight: 900; }
-.bandeja { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; align-items: start; }
-@media (max-width: 1000px) { .bandeja { grid-template-columns: 1fr; } }
-.pedidos { display: grid; gap: 8px; }
-.pedido { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; min-height: 76px; padding: 12px 14px; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 18px; background: #fff; text-align: left; box-shadow: inset 6px 0 0 var(--t); }
-.pedido:hover { border-color: var(--t-borde); }
-.pedido.on { background: var(--t-fondo); border-color: var(--t); }
-.pedido b { display: block; font-size: 16px; font-weight: 900; color: #14244A; }
-.pedido small { display: block; font-size: 13px; font-weight: 600; color: #64748B; }
-.espera { display: grid; justify-items: end; gap: 2px; flex-shrink: 0; }
-.chip { padding: 2px 9px; border-radius: 9px; background: var(--t); color: #fff; font-size: 12px; font-weight: 900; }
-.vacio-bandeja, .elija { display: grid; justify-items: center; gap: 4px; padding: 28px 18px; border: 2px dashed #CBD5E1; border-radius: 20px; text-align: center; color: #64748B; }
-.vacio-bandeja b, .elija b { font-size: 17px; font-weight: 900; color: #14244A; }
-.vacio-bandeja svg { color: #22A06B; } .elija svg { color: #2F83C4; }
-.rechazadas { display: grid; gap: 2px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #8C2323; }
-.rechazadas small { font-weight: 900; text-transform: uppercase; letter-spacing: .05em; color: #64748B; }
 .no-imprime { margin-left: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; color: #94A3B8; }
 .lote-celda { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .lote-celda .lotes-salen { margin-bottom: 0; }

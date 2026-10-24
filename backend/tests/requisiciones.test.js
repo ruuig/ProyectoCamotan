@@ -221,7 +221,7 @@ describe('requisición', () => {
 });
 
 describe('Pedido de farmacia: pedir, autorizar, despachar o rechazar', () => {
-  it('bodega no puede autorizar menos de lo pedido sin decir por qué', async () => {
+  it('bodega puede dar menos de lo pedido sin decir por qué, y si lo dice queda anotado', async () => {
     const { insumo } = await insumoConLotes([[30, 400]]);
     const r = await far(request(app).post('/api/v1/bodega/requisiciones')).send({ ubicacionId: farmacia.id, fechaSolicitud: hoy(), solicitante: 'Personal de Farmacia', renglones: [{ insumoId: insumo.id, cantidadSolicitada: 50 }] });
     expect(r.status).toBe(201);
@@ -229,7 +229,8 @@ describe('Pedido de farmacia: pedir, autorizar, despachar o rechazar', () => {
     const renglon = r.body.requisicion.renglones[0].id;
 
     const sinMotivo = await bod(request(app).post(`/api/v1/bodega/requisiciones/${id}/autorizar`)).send({ renglones: [{ id: renglon, cantidadAutorizada: 30 }] });
-    expect(sinMotivo.status).toBe(400);
+    expect(sinMotivo.status).toBe(200);
+    expect(sinMotivo.body.requisicion.renglones[0].motivo).toBeNull();
 
     const ok = await bod(request(app).post(`/api/v1/bodega/requisiciones/${id}/autorizar`)).send({ renglones: [{ id: renglon, cantidadAutorizada: 30, motivo: 'No hay existencia' }] });
     expect(ok.status).toBe(200);

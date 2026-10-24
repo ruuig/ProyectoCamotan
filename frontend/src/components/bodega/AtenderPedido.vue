@@ -2,37 +2,32 @@
 import { ref, reactive, computed, watch } from 'vue';
 import { textoNumero, numerosDe } from '../../dominio/hojasRequisicion';
 import { usarBorrador } from '../../dominio/borrador';
-import AvisoBorrador from '../comunes/AvisoBorrador.vue';
 import bodega from '../../services/bodega';
 import { nuevaClaveIdempotencia } from '../../services/almacenLocal';
 import Icono from '../comunes/Icono.vue';
 import { miles, estiloTono } from './diseno/PiezasBodega';
 
 /**
- * Atender un pedido (Requisición FOR-ASB-01), como lo pide el formato:
- * cantidad solicitada, autorizada y despachada.
- *
- *  1. Autorizar: por renglón, cuánto se da. Si es menos de lo pedido se dice
- *     por qué; lo que no se da es demanda que bodega pide al Área en su BRES.
- *  2. Despachar: con el número del formulario y quién recibe. Sale por PEPE y
- *     entra a la existencia del servicio (o al estante de farmacia).
- *  3. Rechazar: si el pedido completo no procede, se anula con su motivo y el
- *     servicio lo ve.
+ * Hoja de despacho de una requisición (FOR-ASB-01): lo que se va a sacar de
+ * la bodega, producto por producto en el orden del balance, con el lote que
+ * se toma (el que vence primero; si no alcanza, el siguiente en otra línea).
+ * Bodega despacha lo que le piden: la cantidad viene llena y solo se cambia si
+ * se da menos. La casilla es para ir marcando lo que ya se tomó del estante.
+ * Al despachar sale de la bodega con esos lotes y entra donde se pidió.
  */
 const props = defineProps({ id: { type: Number, required: true } });
-const emit = defineEmits(['listo', 'cerrar']);
+const emit = defineEmits(['listo']);
 
 const r = ref(null);
 const existencias = ref({});
 const error = ref('');
 const enviando = ref(false);
-const autorizar = reactive({});
-const motivos = reactive({});
+const cantidades = reactive({});
+const tomados = reactive({});
 const despacho = reactive({ numero: '', recibidoPor: '' });
 const rechazando = ref(false);
 const motivoRechazo = ref('');
 
-const MOTIVOS = ['No hay existencia', 'Ya se le despachó este mes', 'Se reparte entre los servicios', 'Pidió más de lo que consume'];
 const entero = (v) => Number(String(v ?? '').replace(/[^0-9]/g, '')) || 0;
 
 async function cargar() {
@@ -43,8 +38,7 @@ async function cargar() {
     existencias.value = d.existencias ?? {};
     for (const g of d.requisicion.renglones) {
       const hay = g.insumoId ? existencias.value[g.insumoId]?.enBodega ?? 0 : g.cantidadSolicitada;
-      autorizar[g.id] = String(g.cantidadAutorizada ?? Math.min(g.cantidadSolicitada, hay));
-      motivos[g.id] = g.motivo ?? (hay < g.cantidadSolicitada ? 'No hay existencia' : '');
+      cantidades[g.id] = String(g.cantidadAutorizada ?? Math.min(g.cantidadSolicitada, hay));
     }
     despacho.numero = d.requisicion.numero ?? '';
     despacho.recibidoPor = d.requisicion.recibidoPor ?? d.requisicion.solicitante ?? '';
@@ -52,62 +46,60 @@ async function cargar() {
     error.value = fallo.message;
   }
 }
-// Lo que se cambió en el pedido no se pierde al ir a otra pantalla.
-const borrador = usarBorrador(() => `atender-${props.id}`, { autorizar, motivos, despacho });
+// Lo marcado y lo cambiado no se pierde al ir a otra pantalla.
+const borrador = usarBorrador(() => `atender-${props.id}`, { cantidades, tomados, despacho });
 watch(() => props.id, async () => { await cargar(); borrador.recuperar(); }, { immediate: true });
 
-const enBodega = (g) => (g.insumoId ? existencias.value[g.insumoId]?.enBodega ?? 0 : null);
-const menos = (g) => entero(autorizar[g.id]) < g.cantidadSolicitada;
-const excede = (g) => g.insumoId && entero(autorizar[g.id]) > enBodega(g);
-const faltaMotivo = computed(() => (r.value?.renglones ?? []).some((g) => menos(g) && !String(motivos[g.id] ?? '').trim()));
-const hayExceso = computed(() => (r.value?.renglones ?? []).some(excede));
-const totalAutorizado = computed(() => (r.value?.renglones ?? []).reduce((t, g) => t + entero(autorizar[g.id]), 0));
-const editable = computed(() => ['solicitada', 'autorizada'].includes(r.value?.estado));
-
-function renglonesAutorizados() {
-  return r.value.renglones.map((g) => ({ id: g.id, cantidadAutorizada: entero(autorizar[g.id]), motivo: menos(g) ? motivos[g.id].trim() : null }));
-}
-
-async function soloAutorizar() {
-  enviando.value = true;
-  error.value = '';
-  try {
-    await bodega.autorizarRequisicion(r.value.id, renglonesAutorizados());
-    borrador.limpiar();
-    emit('listo', `Pedido de ${r.value.unidadSeccion} autorizado. Falta despacharlo.`);
-    await cargar();
-  } catch (fallo) {
-    error.value = fallo.message;
-  } finally {
-    enviando.value = false;
+/* Los lotes que se toman para una cantidad: el que vence primero, luego el siguiente. */
+function lotesPara(g) {
+  if (!g.insumoId) return [];
+  let falta = entero(cantidades[g.id]);
+  const salen = [];
+  for (const l of existencias.value[g.insumoId]?.lotes ?? []) {
+    if (falta <= 0) break;
+    const n = Math.min(falta, l.cantidad);
+    salen.push({ ...l, cantidad: n });
+    falta -= n;
   }
+  return salen;
 }
+
+/* La hoja: en el orden del balance; un renglón por lote. */
+const hoja = computed(() => [...(r.value?.renglones ?? [])]
+  .sort((a, b) => (a.ordenFormulario ?? 1e6) - (b.ordenFormulario ?? 1e6) || a.orden - b.orden)
+  .map((g) => ({ g, lotes: lotesPara(g) })));
+const enBodega = (g) => (g.insumoId ? existencias.value[g.insumoId]?.enBodega ?? 0 : null);
+const excede = (g) => g.insumoId && entero(cantidades[g.id]) > enBodega(g);
+const hayExceso = computed(() => (r.value?.renglones ?? []).some(excede));
+const total = computed(() => (r.value?.renglones ?? []).reduce((t, g) => t + entero(cantidades[g.id]), 0));
+const marcados = computed(() => hoja.value.filter(({ g }) => tomados[g.id]).length);
+const editable = computed(() => ['solicitada', 'autorizada'].includes(r.value?.estado));
+const vence = (v) => new Date(v).toLocaleDateString('es-GT', { month: '2-digit', year: 'numeric', timeZone: 'UTC' });
 
 async function despachar() {
   enviando.value = true;
   error.value = '';
   try {
-    await bodega.autorizarRequisicion(r.value.id, renglonesAutorizados());
+    const renglones = r.value.renglones.map((g) => ({ id: g.id, cantidad: entero(cantidades[g.id]) }));
+    await bodega.autorizarRequisicion(r.value.id, renglones.map((x) => ({ id: x.id, cantidadAutorizada: x.cantidad })));
     await bodega.despacharRequisicion(r.value.id, {
       numero: despacho.numero.trim(),
       recibidoPor: despacho.recibidoPor.trim(),
-      renglones: r.value.renglones.map((g) => ({ id: g.id, cantidadDespachada: entero(autorizar[g.id]) })),
+      // Salen los lotes que dice la hoja.
+      renglones: r.value.renglones.map((g) => ({
+        id: g.id,
+        cantidadDespachada: entero(cantidades[g.id]),
+        ...(g.insumoId && entero(cantidades[g.id]) ? { lotes: lotesPara(g).map((l) => ({ loteId: l.loteId, cantidad: l.cantidad })) } : {}),
+      })),
     }, nuevaClaveIdempotencia());
     window.open(`/imprimir/requisicion/${r.value.id}`, '_blank');
     borrador.limpiar();
-    emit('listo', `Despachado a ${r.value.unidadSeccion}: ${miles(totalAutorizado.value)} unidades. Ya está en su existencia.`);
+    emit('listo', `Despachado: ${r.value.unidadSeccion}, ${miles(total.value)} unidades.`);
   } catch (fallo) {
     error.value = fallo.message;
   } finally {
     enviando.value = false;
   }
-}
-
-// Si no hay nada que dar, se responde así: el servicio lo ve y bodega lo
-// incluye en lo que pide al Área.
-async function avisarSinExistencia() {
-  motivoRechazo.value = 'Bodega no tiene existencia de lo pedido: se incluye en lo que bodega pide al Área de Salud';
-  await rechazar();
 }
 
 async function rechazar() {
@@ -116,7 +108,7 @@ async function rechazar() {
   try {
     await bodega.anularRequisicion(r.value.id, motivoRechazo.value.trim());
     borrador.limpiar();
-    emit('listo', `Pedido de ${r.value.unidadSeccion} rechazado. Lo verá con el motivo.`);
+    emit('listo', `Rechazado: ${r.value.unidadSeccion}.`);
   } catch (fallo) {
     error.value = fallo.message;
   } finally {
@@ -124,136 +116,117 @@ async function rechazar() {
   }
 }
 
-const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: 'numeric', month: 'long', timeZone: 'UTC' }) : '');
+const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
 const ESTADO = {
-  solicitada: { texto: 'Por atender', tono: 'accion' },
-  autorizada: { texto: 'Autorizado, falta despachar', tono: 'atencion' },
-  despachada: { texto: 'Despachado', tono: 'bien' },
-  anulada: { texto: 'Rechazado', tono: 'critico' },
+  solicitada: { texto: 'Por despachar', tono: 'atencion' },
+  autorizada: { texto: 'Por despachar', tono: 'atencion' },
+  despachada: { texto: 'Despachada', tono: 'bien' },
+  anulada: { texto: 'Rechazada', tono: 'critico' },
 };
 </script>
 
 <template>
-  <article class="atender">
+  <article class="hoja-despacho">
     <p v-if="error" role="alert" class="b-aviso error">{{ error }}</p>
     <template v-if="r">
       <header class="cabeza">
         <div class="min-w-0">
-          <span class="estado" :style="estiloTono(ESTADO[r.estado]?.tono ?? 'neutro')">{{ ESTADO[r.estado]?.texto ?? r.estado }}</span>
-          <h2>{{ r.unidadSeccion }}</h2>
-          <p>Pidió <b>{{ r.solicitante }}</b> el {{ fecha(r.fechaSolicitud) }}<template v-if="r.numero"> · Formulario {{ textoNumero(r) }}</template></p>
-          <p v-if="r.observaciones" class="obs">{{ r.observaciones }}</p>
+          <h2>{{ r.unidadSeccion }} <span class="estado" :style="estiloTono(ESTADO[r.estado]?.tono ?? 'neutro')">{{ ESTADO[r.estado]?.texto ?? r.estado }}</span></h2>
+          <p class="meta">{{ r.solicitante }} · {{ fecha(r.fechaSolicitud) }} · {{ r.renglones.length }} productos<template v-if="r.numero"> · Formulario {{ textoNumero(r) }}</template></p>
         </div>
-        <button type="button" class="cerrar" aria-label="Cerrar" @click="emit('cerrar')"><Icono nombre="cerrar" :tamano="22" :grosor="2.4" /></button>
       </header>
 
-      <!-- Paso 1: cuánto se da de cada cosa -->
-      <section class="paso">
-        <h3><span class="num">1</span> Cuánto se le da</h3>
-        <ul class="renglones">
-          <li v-for="g in r.renglones" :key="g.id" class="renglon" :style="estiloTono(excede(g) ? 'critico' : menos(g) ? 'atencion' : 'bien')">
-            <div class="min-w-0">
-              <b class="nombre">{{ g.descripcion }}</b>
-              <small v-if="g.ubicacionFisica" class="donde"><Icono nombre="ubicacion" :tamano="14" /> {{ g.ubicacionFisica }}</small>
-              <p class="datos">
-                Pidió <b>{{ miles(g.cantidadSolicitada) }}</b>
-                <template v-if="g.insumoId"> · en bodega hay <b :class="{ rojo: enBodega(g) < g.cantidadSolicitada }">{{ miles(enBodega(g)) }}</b></template>
-              </p>
-              <div v-if="editable && menos(g)" class="motivo">
-                <span>¿Por qué menos?</span>
-                <button v-for="m in MOTIVOS" :key="m" type="button" :class="{ on: motivos[g.id] === m }" @click="motivos[g.id] = m">{{ m }}</button>
-              </div>
-              <p v-else-if="g.motivo" class="motivo-texto">{{ g.motivo }}</p>
-              <p v-if="excede(g)" class="aviso-rojo">No hay tanto en bodega.</p>
-            </div>
-            <div class="cantidad">
-              <label :for="`a-${g.id}`">Se da</label>
-              <input :id="`a-${g.id}`" v-model="autorizar[g.id]" :disabled="!editable" inputmode="numeric" class="b-campo num" />
-            </div>
-          </li>
-        </ul>
-        <p class="nota">Lo que no se da no se pierde: es demanda que bodega pide al Área de Salud en el BRES del mes.</p>
-      </section>
+      <div class="tabla">
+        <div class="fila cab">
+          <span>Producto</span><span>Lote</span><span>Vence</span><span class="n">Solicitado</span><span class="n">Despachar</span><span class="marca">{{ editable ? `${marcados}/${hoja.length}` : '' }}</span>
+        </div>
+        <div v-for="{ g, lotes } in hoja" :key="g.id" class="fila" :class="{ hecho: tomados[g.id], sin: g.insumoId && !enBodega(g), excede: excede(g) }">
+          <span class="producto">{{ g.descripcion }}</span>
+          <span class="lotes">
+            <span v-for="l in lotes" :key="l.loteId" class="lote">{{ l.numeroLote }}<b v-if="lotes.length > 1"> × {{ miles(l.cantidad) }}</b></span>
+            <span v-if="g.insumoId && !lotes.length" class="nada">Sin existencia</span>
+          </span>
+          <span class="lotes">
+            <span v-for="l in lotes" :key="l.loteId" class="vence">{{ vence(l.fechaVence) }}</span>
+          </span>
+          <span class="n">{{ miles(g.cantidadSolicitada) }}</span>
+          <span class="n">
+            <input v-if="editable" v-model="cantidades[g.id]" inputmode="numeric" class="cant" :class="{ menos: entero(cantidades[g.id]) < g.cantidadSolicitada }" :aria-label="`Despachar de ${g.descripcion}`" />
+            <b v-else>{{ miles(g.cantidadDespachada ?? 0) }}</b>
+          </span>
+          <span class="marca">
+            <input v-if="editable" v-model="tomados[g.id]" type="checkbox" class="check" :aria-label="`Tomado: ${g.descripcion}`" />
+          </span>
+        </div>
+      </div>
 
-      <!-- Paso 2: despachar -->
-      <section v-if="editable" class="paso">
-        <h3><span class="num">2</span> Despachar</h3>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label for="num-form" class="b-etiqueta">No. del formulario</label>
-            <input id="num-form" v-model="despacho.numero" class="b-campo grande font-mono" placeholder="El número impreso de la primera hoja" />
-            <small v-if="r && numerosDe(despacho.numero, r.renglones.map((g) => g.descripcion)).length > 1" class="pista-hojas">
-              Ocupa {{ numerosDe(despacho.numero, r.renglones.map((g) => g.descripcion)).length }} hojas: {{ numerosDe(despacho.numero, r.renglones.map((g) => g.descripcion)).join(', ') }}
-            </small>
-          </div>
-          <div>
-            <label for="recibe" class="b-etiqueta">Quién recibe</label>
-            <input id="recibe" v-model="despacho.recibidoPor" class="b-campo grande" />
-          </div>
-        </div>
+      <div v-if="editable" class="despacho">
+        <label><span>No. formulario</span><input v-model="despacho.numero" class="b-campo font-mono" /></label>
+        <label><span>Recibe</span><input v-model="despacho.recibidoPor" class="b-campo" /></label>
         <div class="botones">
-          <button type="button" class="b-btn peligro" :disabled="enviando" @click="rechazando = !rechazando"><Icono nombre="cerrar" :tamano="20" /> Rechazar el pedido</button>
-          <button v-if="r.estado === 'solicitada'" type="button" class="b-btn secundario" :disabled="enviando || faltaMotivo || hayExceso" @click="soloAutorizar">
-            Solo autorizar
-          </button>
-          <button v-if="!totalAutorizado" type="button" class="b-btn primario grande-btn" :disabled="enviando" @click="avisarSinExistencia">
-            <Icono nombre="alerta" :tamano="22" /> Avisar que no hay existencia
-          </button>
-          <button v-else type="button" class="b-btn exito grande-btn" :disabled="enviando || faltaMotivo || hayExceso || !despacho.numero.trim() || despacho.recibidoPor.trim().length < 3" @click="despachar">
-            <Icono nombre="trasladar" :tamano="22" /> {{ enviando ? 'Despachando…' : `Despachar ${miles(totalAutorizado)} e imprimir` }}
+          <button type="button" class="b-btn secundario" :disabled="enviando" @click="rechazando = !rechazando">Rechazar</button>
+          <button type="button" class="b-btn exito" :disabled="enviando || !total || hayExceso || !despacho.numero.trim() || despacho.recibidoPor.trim().length < 3" @click="despachar">
+            <Icono nombre="imprimir" :tamano="20" /> {{ enviando ? 'Despachando…' : `Despachar e imprimir · ${miles(total)}` }}
           </button>
         </div>
-        <p v-if="faltaMotivo" class="nota rojo-nota">Diga por qué se da menos de lo pedido.</p>
+        <small v-if="numerosDe(despacho.numero, r.renglones.map((g) => g.descripcion)).length > 1" class="hojas">Hojas {{ numerosDe(despacho.numero, r.renglones.map((g) => g.descripcion)).join(', ') }}</small>
         <form v-if="rechazando" class="rechazo" @submit.prevent="rechazar">
-          <label for="mot-rech" class="b-etiqueta">Por qué se rechaza (lo verá quien pidió)</label>
-          <input id="mot-rech" v-model="motivoRechazo" minlength="5" class="b-campo" placeholder="Ej.: pedido repetido, ya se despachó el 12 de octubre" />
+          <input v-model="motivoRechazo" minlength="5" class="b-campo" placeholder="Motivo" aria-label="Motivo del rechazo" />
           <button type="submit" class="b-btn peligro" :disabled="enviando || motivoRechazo.trim().length < 5">Rechazar</button>
         </form>
-      </section>
-
-      <section v-else class="paso">
-        <p v-if="r.estado === 'anulada'" class="b-aviso error">Rechazado: {{ r.motivoAnulacion }}</p>
-        <p v-else class="b-aviso ok">Despachado el {{ fecha(r.despachadaEn) }} por {{ r.despachadaPor }}. Recibió {{ r.recibidoPor }}.</p>
-      </section>
+      </div>
+      <p v-else-if="r.estado === 'anulada'" class="b-aviso error">Rechazada · {{ r.motivoAnulacion }}</p>
+      <p v-else class="b-aviso ok">Despachada {{ fecha(r.despachadaEn) }} · {{ r.despachadaPor }} · recibió {{ r.recibidoPor }}</p>
     </template>
   </article>
 </template>
 
 <style scoped>
-.donde { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 1px 8px; border-radius: 8px; background: #EEF2F7; font-size: 13px; font-weight: 800; color: #334155; }
-.pista-hojas { display: block; margin-top: 4px; font-size: 13px; font-weight: 800; color: #174E80; }
-.atender { display: grid; gap: 14px; padding: 18px; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 22px; background: #fff; }
+.hoja-despacho { display: grid; gap: 12px; }
 .cabeza { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.cabeza h2 { margin-top: 6px; font-size: 22px; font-weight: 900; color: #14244A; }
-.cabeza p { font-size: 14.5px; font-weight: 600; color: #475569; }
-.cabeza b { color: #14244A; }
-.obs { margin-top: 4px; padding: 6px 10px; border-radius: 10px; background: #F8FAFC; font-size: 13.5px; }
-.estado { display: inline-block; padding: 2px 10px; border-radius: 9px; background: var(--t-fondo); color: var(--t-tinta); font-size: 13px; font-weight: 900; }
-.cerrar { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; color: #64748B; }
-.cerrar:hover { background: #F1F5F9; }
-.paso { display: grid; gap: 10px; }
-.paso h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 900; color: #14244A; }
-.num { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #172A5A; color: #fff; font-size: 14px; }
-.renglones { display: grid; gap: 8px; }
-.renglon { display: grid; grid-template-columns: minmax(0, 1fr) 130px; align-items: center; gap: 14px; padding: 12px 14px; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 16px; box-shadow: inset 6px 0 0 var(--t); }
-.nombre { display: block; font-size: 16.5px; font-weight: 900; color: #14244A; }
-.datos { margin-top: 2px; font-size: 14px; font-weight: 600; color: #475569; }
-.datos b { color: #14244A; font-weight: 900; }
-.datos b.rojo { color: #A83232; }
-.motivo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
-.motivo span { font-size: 13px; font-weight: 800; color: #8A4B00; }
-.motivo button { min-height: 38px; padding: 0 12px; border: 2px solid #E2E8F0; border-bottom-width: 3px; border-radius: 11px; background: #fff; font-size: 13px; font-weight: 800; color: #334155; }
-.motivo button.on { border-color: #E8930C; background: #FFF4E0; color: #8A4B00; }
-.motivo-texto { margin-top: 4px; font-size: 13px; font-weight: 700; color: #8A4B00; }
-.aviso-rojo { margin-top: 4px; font-size: 13px; font-weight: 800; color: #A83232; }
-.cantidad { display: grid; gap: 2px; }
-.cantidad label { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; color: #64748B; }
-.cantidad input { width: 100%; height: 52px; font-size: 20px; font-weight: 900; text-align: right; }
-.nota { font-size: 13px; font-weight: 600; color: #64748B; }
-.rojo-nota { color: #A83232; font-weight: 800; }
-.b-campo.grande { height: 52px; font-size: 17px; }
+.cabeza h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 22px; font-weight: 900; color: #14244A; }
+.meta { margin-top: 2px; font-size: 14.5px; font-weight: 700; color: #475569; }
+.estado { padding: 2px 10px; border-radius: 9px; background: var(--t-fondo); color: var(--t-tinta); font-size: 13px; font-weight: 900; }
+
+.tabla { border: 2px solid #E5E9F0; border-radius: 16px; background: #fff; overflow: hidden; }
+.fila { display: grid; grid-template-columns: minmax(0, 1fr) 150px 80px 96px 110px 52px; align-items: center; gap: 10px; padding: 6px 14px; border-top: 1px solid #EEF2F6; }
+.fila.cab { position: sticky; top: 0; z-index: 1; border-top: 0; background: #F1F5F9; font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
+.fila:not(.cab):hover { background: #F7FBFE; }
+.fila.hecho { background: #F1FAF5; }
+.fila.hecho .producto { color: #64748B; text-decoration: line-through; text-decoration-color: #94A3B8; }
+.fila.sin .producto, .fila.sin .n { color: #94A3B8; }
+.producto { min-width: 0; font-size: 15px; font-weight: 800; color: #14244A; overflow-wrap: anywhere; }
+.lotes { display: grid; gap: 2px; }
+.lote { font-family: ui-monospace, monospace; font-size: 14px; font-weight: 800; color: #172A5A; }
+.lote b { font-family: inherit; font-weight: 700; color: #64748B; }
+.vence { font-size: 14px; font-weight: 700; color: #475569; font-variant-numeric: tabular-nums; }
+.nada { font-size: 13px; font-weight: 700; color: #A83232; }
+.n { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: #334155; }
+.cant { width: 100%; height: 38px; padding: 0 10px; border: 2px solid #CBD5E1; border-radius: 10px; text-align: right; font-size: 16px; font-weight: 900; color: #14244A; background: #fff; }
+.cant:focus { outline: none; border-color: #172A5A; box-shadow: 0 0 0 3px #DCE4F5; }
+.cant.menos { border-color: #E8930C; background: #FFF8EB; }
+.fila.excede .cant { border-color: #D64545; background: #FDF2F2; }
+.marca { display: grid; place-items: center; font-size: 11px; }
+.check { width: 24px; height: 24px; accent-color: #1E8E5E; cursor: pointer; }
+
+.despacho { position: sticky; bottom: 0; display: grid; grid-template-columns: 180px minmax(0, 1fr) auto; align-items: end; gap: 12px; padding: 12px 0 2px; background: #fff; }
+.despacho > label { display: grid; gap: 4px; min-width: 0; }
+.despacho > label > span { font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
 .botones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.grande-btn { height: 56px; padding: 0 22px; font-size: 17px; border-radius: 16px; }
-.rechazo { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #FDECEC; }
-@media (max-width: 640px) { .renglon { grid-template-columns: 1fr; } }
+.botones .b-btn { height: 48px; }
+.hojas { grid-column: 1 / -1; font-size: 12px; font-weight: 800; color: #174E80; }
+.rechazo { grid-column: 1 / -1; display: flex; gap: 8px; padding: 10px; border-radius: 14px; background: #FDECEC; }
+.rechazo input { flex: 1; }
+@media (max-width: 900px) {
+  .despacho { position: static; grid-template-columns: 1fr 1fr; }
+  .botones { grid-column: 1 / -1; }
+}
+@media (max-width: 680px) {
+  /* En el teléfono: el nombre a lo ancho; debajo, lote, cantidad y la casilla. */
+  .fila { grid-template-columns: minmax(0, 1fr) 96px 40px; gap: 4px 8px; padding: 8px 10px; }
+  .fila.cab { display: none; }
+  .producto { grid-column: 1 / -1; }
+  .fila > :nth-child(3), .fila > :nth-child(4) { display: none; }
+  .despacho { grid-template-columns: 1fr; }
+}
 </style>

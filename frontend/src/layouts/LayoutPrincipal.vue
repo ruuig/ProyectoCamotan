@@ -81,21 +81,21 @@ const GRUPOS = [
       { ruta: '/inventario', etiqueta: 'Bodega', icono: 'inventario', roles: ['admin'] },
     ],
   },
-  // Bodega: lo del día arriba, el cierre del mes en medio, las consultas abajo.
+  // Bodega: el ciclo del mes en el orden en que se trabaja (pedir a la DDRISS,
+  // recibir, despachar a los puestos, capturar su consumo); después los informes
+  // que salen solos de eso y, al final, las consultas.
   {
-    titulo: 'Bodega',
+    titulo: 'Ciclo del mes',
     enlaces: [
-      { ruta: '/inventario/requisiciones?ver=pedidos', etiqueta: 'Salidas', icono: 'trasladar', roles: ['bodega'], contador: 'pedidos' },
       { ruta: '/inventario/pedir-ddriss', etiqueta: 'Requisición', icono: 'trasladar', roles: ['bodega'] },
       { ruta: '/inventario/recibir', etiqueta: 'Recibir', icono: 'recibir', roles: ['bodega'] },
-      { ruta: '/inventario/productos', etiqueta: 'Existencias', icono: 'inventario', roles: ['bodega'] },
-      { ruta: '/inventario/semaforo', etiqueta: 'Semáforo', icono: 'vencimiento', roles: ['bodega'] },
+      { ruta: '/inventario/requisiciones?ver=pedidos', etiqueta: 'Salidas', icono: 'trasladar', roles: ['bodega'], contador: 'pedidos' },
+      { ruta: '/inventario/informes', etiqueta: 'Consumo de puestos', icono: 'consolidado', roles: ['bodega'] },
     ],
   },
   {
-    titulo: 'Cierre del mes',
+    titulo: 'Informes',
     enlaces: [
-      { ruta: '/inventario/informes', etiqueta: 'Informes de servicios', icono: 'consolidado', roles: ['bodega'] },
       { ruta: '/inventario/bres', etiqueta: 'BRES', icono: 'hojaCalculo', roles: ['bodega'] },
       { ruta: '/inventario/cierre', etiqueta: 'Inventario de cierre', icono: 'correcto', roles: ['bodega'] },
       { ruta: '/inventario/trazadores', etiqueta: 'Trazadores', icono: 'crecimiento', roles: ['bodega'] },
@@ -104,6 +104,8 @@ const GRUPOS = [
   {
     titulo: 'Consultas',
     enlaces: [
+      // El semáforo vive dentro de Existencias (vista Vencimientos).
+      { ruta: '/inventario/productos', etiqueta: 'Existencias', icono: 'inventario', roles: ['bodega'], tambien: ['/inventario/semaforo'] },
       { ruta: '/inventario/kardex', etiqueta: 'Kardex', icono: 'hojaCalculo', roles: ['bodega'] },
       { ruta: '/inventario/trazabilidad', etiqueta: 'Trazabilidad', icono: 'trazabilidad', roles: ['bodega'] },
       { ruta: '/inventario/bajas', etiqueta: 'Bajas y retiros', icono: 'quitar', roles: ['bodega'] },
@@ -217,6 +219,7 @@ function cambiarTamano(paso) {
             class="menu-enlace mb-1 flex min-h-tocable items-center gap-3 px-3 py-2.5 transition-colors"
             :active-class="enlace.exacto ? '' : 'menu-activo'"
             exact-active-class="menu-activo"
+            :class="{ 'menu-activo': enlace.tambien?.some((p) => route.path.startsWith(p)) }"
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />
             <span class="truncate">{{ enlace.etiqueta }}</span>
@@ -263,6 +266,7 @@ function cambiarTamano(paso) {
             class="menu-enlace mb-1 flex min-h-tocable items-center gap-3 px-3 py-2.5 transition-colors"
             :active-class="enlace.exacto ? '' : 'menu-activo'"
             exact-active-class="menu-activo"
+            :class="{ 'menu-activo': enlace.tambien?.some((p) => route.path.startsWith(p)) }"
             @click="menuAbierto = false"
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />

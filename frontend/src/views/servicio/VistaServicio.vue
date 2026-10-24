@@ -55,7 +55,9 @@ const borrador = usarBorrador('requisicion-servicio', { lineas, cabecera }, { va
 borrador.recuperar();
 function empezarDeNuevo() { borrador.limpiar(); llenar(); }
 
-const conDetalle = (r) => ({ ...r, detalle: `Tiene ${miles(r.tiene)} · entrega ${miles(r.demandaMensual)} al mes` });
+// Columnas de cada renglón: lo que tiene el puesto y lo que entrega al mes.
+const COLUMNAS = ['Tiene', 'Entrega / mes'];
+const conDetalle = (r) => ({ ...r, datos: [miles(r.tiene), miles(r.demandaMensual)] });
 function llenar() {
   lineas.value = (sugerencia.value?.renglones ?? [])
     .filter((r) => r.sugerido > 0)
@@ -292,7 +294,7 @@ onMounted(async () => {
       </div>
       <div class="rejilla mt-4">
         <AvisoBorrador v-if="borrador.recuperado.value && lineas.length" class="col-span-full" texto="Se recuperó la requisición que dejó a medias." @descartar="empezarDeNuevo" />
-        <EditorPedido v-model="lineas" :errores="erroresRenglon" :catalogo="catalogo" :nuevo-renglon="nuevoRenglon" vacio="No le falta nada según sus informes. Agregue lo que necesite." @volver-a-llenar="llenar" />
+        <EditorPedido v-model="lineas" :errores="erroresRenglon" :catalogo="catalogo" :nuevo-renglon="nuevoRenglon" :columnas="COLUMNAS" vacio="Nada sugerido según sus informes." />
         <aside class="tarjeta">
           <h2>Firmas</h2>
           <div><label for="sol" class="b-etiqueta">Solicita</label><input id="sol" v-model="cabecera.solicitante" class="b-campo" /></div>

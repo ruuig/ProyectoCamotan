@@ -28,6 +28,16 @@ const borrador = usarBorrador(() => `recibir-req-${elegida.value?.id}`, { filas,
 const entero = (v) => Number(String(v ?? '').replace(/[^0-9]/g, '')) || 0;
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
 
+async function anular(r) {
+  try {
+    await bodega.anularRequisicion(r.id, 'Bodega anuló la requisición antes de que llegara');
+    emit('aviso', 'Requisición anulada.');
+    await cargar();
+  } catch (fallo) {
+    emit('error', fallo.message);
+  }
+}
+
 async function cargar() {
   const r = await bodega.requisiciones({ direccion: 'superior' });
   pendientes.value = r.requisiciones.filter((x) => ['solicitada', 'autorizada', 'parcial'].includes(x.estado));
@@ -122,26 +132,24 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
 
 <template>
   <div class="recibir-req">
-    <!-- 1. Qué requisición llegó -->
+    <!-- Las requisiciones a la DDRISS que esperan mercadería -->
     <template v-if="!elegida">
-      <h2 class="paso-titulo">¿Qué requisición llegó?</h2>
-      <ul v-if="pendientes.length" class="pendientes">
-        <li v-for="r in pendientes" :key="r.id">
-          <button type="button" class="pendiente" @click="elegir(r.id)">
-            <span class="min-w-0 flex-1">
-              <b>Requisición {{ r.numero ? `N.º ${textoNumero(r)}` : `del ${fecha(r.fechaSolicitud)}` }}</b>
-              <small>{{ r.almacen }} · {{ r.renglones }} productos · {{ miles(r.solicitado) }} unidades pedidas</small>
-              <small v-if="r.estado === 'parcial'" class="parte">Ya llegaron {{ miles(r.despachado) }}: falta el resto</small>
-            </span>
-            <span class="ir">Recibir <Icono nombre="irA" :tamano="18" /></span>
-          </button>
-        </li>
-      </ul>
-      <div v-else class="sin-pendientes">
-        <b>No hay requisiciones esperando mercadería</b>
-        <small>Primero se hace la requisición a la DDRISS; cuando llega, se recibe aquí.</small>
-        <RouterLink to="/inventario/pedir-ddriss" class="b-btn primario mt-2"><Icono nombre="trasladar" :tamano="18" /> Requisición</RouterLink>
+      <div v-if="pendientes.length" class="tabla-pend">
+        <div class="fila-pend cab"><span>No.</span><span>Fecha</span><span class="n">Productos</span><span class="n">Unidades</span><span>Estado</span><span /></div>
+        <div v-for="r in pendientes" :key="r.id" class="fila-pend">
+          <span class="num">{{ r.numero ? textoNumero(r) : '—' }}</span>
+          <span>{{ fecha(r.fechaSolicitud) }}</span>
+          <span class="n">{{ r.renglones }}<small class="suf"> productos</small></span>
+          <span class="n">{{ miles(r.solicitado) }}<small class="suf"> unidades</small></span>
+          <span><span class="est" :class="{ parte: r.estado === 'parcial' }">{{ r.estado === 'parcial' ? `Llegaron ${miles(r.despachado)}` : 'Por recibir' }}</span></span>
+          <span class="acc">
+            <button type="button" class="b-btn primario chico" @click="elegir(r.id)">Recibir</button>
+            <RouterLink :to="`/imprimir/requisicion/${r.id}`" target="_blank" class="b-btn secundario chico" aria-label="Imprimir"><Icono nombre="imprimir" :tamano="16" /></RouterLink>
+            <button v-if="r.estado === 'solicitada'" type="button" class="b-btn secundario chico" @click="anular(r)">Anular</button>
+          </span>
+        </div>
       </div>
+      <p v-else class="b-vacio">No hay requisiciones por recibir.</p>
     </template>
 
     <!-- 2. Lo que llegó de esa requisición -->
@@ -227,6 +235,22 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
 </template>
 
 <style scoped>
+.tabla-pend { border: 2px solid #E5E9F0; border-radius: 16px; background: #fff; overflow: hidden; }
+.fila-pend { display: grid; grid-template-columns: 120px 130px 90px 110px minmax(120px, 1fr) auto; align-items: center; gap: 12px; padding: 8px 14px; border-top: 1px solid #EEF2F6; font-size: 15px; font-weight: 700; color: #1E293B; }
+.fila-pend.cab { border-top: 0; background: #F1F5F9; font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
+.fila-pend .n { text-align: right; font-variant-numeric: tabular-nums; }
+.fila-pend .num { font-family: ui-monospace, monospace; font-weight: 900; color: #172A5A; }
+.est { padding: 2px 10px; border-radius: 9px; background: #EAF3FB; color: #174E80; font-size: 13px; font-weight: 900; }
+.est.parte { background: #FFF1DC; color: #8A4B00; }
+.acc { display: flex; gap: 6px; justify-content: flex-end; }
+.suf { display: none; }
+@media (max-width: 760px) {
+  .fila-pend { grid-template-columns: 1fr 1fr; }
+  .fila-pend .n { text-align: left; }
+  .suf { display: inline; font-size: 13px; font-weight: 600; color: #64748B; }
+  .fila-pend.cab { display: none; }
+  .acc { grid-column: 1 / -1; justify-content: flex-start; }
+}
 .recibir-req { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .recibir-req > *, .productos, .producto, .info, .lotes, .lote > *, .decidir > *, .pie { min-width: 0; }
 .lote input { width: 100%; min-width: 0; }

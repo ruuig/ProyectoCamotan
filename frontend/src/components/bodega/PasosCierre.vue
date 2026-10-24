@@ -1,18 +1,24 @@
 <script setup>
 import { computed } from 'vue';
-import { RouterLink, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import Icono from '../comunes/Icono.vue';
 import { cierre, nombrePeriodo, periodoPrevio, periodoActual } from '../../dominio/bodega';
 
-/** Encabezado del cierre del mes: el mes que se cierra y sus tres pasos. */
-defineProps({ estado: { type: Object, default: () => ({}) } }); // { informes: '18/30' }
+/**
+ * Encabezado de Consumo de puestos, Inventario de cierre y BRES: el nombre, su
+ * estado y el mes que se cierra (el mismo mes para las tres). Cada una tiene su
+ * entrada en el menú; aquí no se repiten como pasos.
+ */
+const props = defineProps({ estado: { type: Object, default: () => ({}) } }); // { informes: '18 de 30' }
 
 const route = useRoute();
-const PASOS = [
-  { ruta: 'informes-servicios', a: '/inventario/informes', texto: 'Informes de servicios', clave: 'informes' },
-  { ruta: 'inventario-cierre', a: '/inventario/cierre', texto: 'Inventario de cierre', clave: 'inventario' },
-  { ruta: 'bres', a: '/inventario/bres', texto: 'BRES', clave: 'bres' },
-];
+const PANTALLAS = {
+  'informes-servicios': { titulo: 'Consumo de puestos', clave: 'informes' },
+  'inventario-cierre': { titulo: 'Inventario de cierre', clave: 'inventario' },
+  bres: { titulo: 'BRES', clave: 'bres' },
+};
+const pantalla = computed(() => PANTALLAS[route.name] ?? { titulo: 'Cierre del mes', clave: '' });
+const estadoTexto = computed(() => props.estado[pantalla.value.clave] ?? '');
 
 function siguiente(p) {
   const [a, m] = p.split('-').map(Number);
@@ -26,39 +32,24 @@ const titulo = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div>
     <header class="b-cabecera">
-      <div class="flex items-center gap-3">
-        <h1 class="b-titulo">Cierre del mes</h1>
+      <div class="flex flex-wrap items-center gap-3">
+        <h1 class="b-titulo">{{ pantalla.titulo }}</h1>
         <div class="selector-mes" role="group" aria-label="Mes que se cierra">
           <button type="button" aria-label="Mes anterior" @click="cierre.periodo = periodoPrevio(cierre.periodo)"><Icono nombre="volver" :tamano="20" :grosor="2.2" /></button>
           <span>{{ titulo }}</span>
           <button type="button" aria-label="Mes siguiente" :disabled="!puedeAvanzar" @click="cierre.periodo = siguiente(cierre.periodo)"><Icono nombre="irA" :tamano="20" :grosor="2.2" /></button>
         </div>
+        <span v-if="estadoTexto" class="estado">{{ estadoTexto }}</span>
       </div>
       <div class="b-acciones"><slot name="acciones" /></div>
     </header>
-
-    <nav class="b-pasos" aria-label="Pasos del cierre">
-      <RouterLink
-        v-for="(p, i) in PASOS"
-        :key="p.ruta"
-        :to="p.a"
-        class="b-paso"
-        :class="route.name === p.ruta ? 'on' : ''"
-        :aria-current="route.name === p.ruta ? 'step' : undefined"
-      >
-        <span class="num">{{ i + 1 }}</span>
-        <span class="txt">
-          <b>{{ p.texto }}</b>
-          <small v-if="estado[p.clave]">{{ estado[p.clave] }}</small>
-        </span>
-      </RouterLink>
-    </nav>
   </div>
 </template>
 
 <style scoped>
+.estado { padding: 4px 12px; border-radius: 10px; background: #EAF3FB; color: #174E80; font-size: 14px; font-weight: 800; }
 .selector-mes { display: inline-flex; align-items: center; height: 44px; border: 2px solid #CBD5E1; border-radius: 12px; overflow: hidden; }
 .selector-mes span { min-width: 170px; padding: 0 12px; text-align: center; font-weight: 700; font-size: 16px; color: #14244A; }
 .selector-mes button { display: grid; place-items: center; width: 40px; height: 100%; color: #172A5A; }

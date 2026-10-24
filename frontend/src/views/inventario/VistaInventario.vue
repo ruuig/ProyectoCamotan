@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
-import { RouterLink, useRouter } from 'vue-router';
+import { RouterLink, useRouter, useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import Icono from '../../components/comunes/Icono.vue';
 import Pictograma from '../../components/bodega/diseno/Pictograma.vue';
@@ -13,18 +13,25 @@ import SelectorMes from '../../components/bodega/SelectorMes.vue';
 
 /**
  * Existencias de la bodega con las cifras del balance: lo que hay, para
- * cuántos meses alcanza y cuánto pedir. Pensada para pantallas chicas: una
- * sola barra (buscar, categoría y qué ver) y la lista empieza enseguida. Al
- * tocar un insumo se abre su detalle encima; Esc o «Cerrar» lo quita.
+ * cuántos meses alcanza y cuánto se consume. Cuánto pedir lo dice el BRES y
+ * sale en la Requisición; aquí no se repite. Tres vistas: por insumo, por
+ * servicio y vencimientos (el semáforo). Al tocar un insumo se abre su detalle
+ * encima; Esc o «Cerrar» lo quita.
  */
 const router = useRouter();
+const route = useRoute();
 // Abre en el último mes cerrado, que es el que coincide con el BRES.
 const periodo = ref(periodoPrevio(periodoActual()));
 const balance = ref(null);
 const semaforo = ref(null);
 const error = ref('');
 
-const vista = ref('insumo');
+const vista = ref(route.query.vista === 'servicio' ? 'servicio' : 'insumo');
+const VISTAS = [['insumo', 'Por insumo'], ['servicio', 'Por servicio'], ['vencimientos', 'Vencimientos']];
+function cambiarVista(v) {
+  if (v === 'vencimientos') router.push('/inventario/semaforo');
+  else vista.value = v;
+}
 const filtro = ref('todos');
 const buscar = ref('');
 const categoriaFiltro = ref('');
@@ -52,7 +59,6 @@ const lotesDe = computed(() => new Map((semaforo.value?.filas ?? []).map((f) => 
 const todas = computed(() => (balance.value?.filas ?? []).map((f) => ({ ...f, situacion: situacion(f.bres) })));
 
 const resumen = computed(() => ({
-  pedir: todas.value.filter((f) => f.bres.M > 0).length,
   bajo: todas.value.filter((f) => f.situacion === 'bajo').length,
   agotados: todas.value.filter((f) => f.situacion === 'agotado').length,
   vencen: (semaforo.value?.resumen.rojo ?? 0) + (semaforo.value?.resumen.vencido ?? 0),
@@ -62,7 +68,6 @@ const resumen = computed(() => ({
 // es crítico. El número va en tinta; el color solo marca el ícono y el borde.
 const VER = [
   { clave: 'todos', etiqueta: 'Todos' },
-  { clave: 'pedir', etiqueta: 'Por pedir' },
   { clave: 'bajo', etiqueta: 'Bajo mínimo' },
   { clave: 'agotados', etiqueta: 'Agotados' },
 ];
@@ -71,18 +76,16 @@ const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(
 const COMPARAR = {
   alfabetico: (a, b) => a.nombre.localeCompare(b.nombre, 'es'),
   cobertura: (a, b) => (a.bres.K ?? Infinity) - (b.bres.K ?? Infinity) || a.nombre.localeCompare(b.nombre, 'es'),
-  pedido: (a, b) => b.bres.M - a.bres.M || a.nombre.localeCompare(b.nombre, 'es'),
 };
 
 const visibles = computed(() => {
   const clave = sinTildes(buscar.value.trim());
   return todas.value
-    .filter((f) => filtro.value !== 'pedir' || f.bres.M > 0)
     .filter((f) => filtro.value !== 'bajo' || f.situacion === 'bajo')
     .filter((f) => filtro.value !== 'agotados' || f.situacion === 'agotado')
     .filter((f) => !categoriaFiltro.value || f.categoria === categoriaFiltro.value)
     .filter((f) => !clave || sinTildes(`${f.nombre} ${f.codigoInterno}`).includes(clave))
-    .sort(filtro.value === 'pedir' ? COMPARAR.pedido : COMPARAR.alfabetico);
+    .sort(COMPARAR.alfabetico);
 });
 
 
@@ -155,7 +158,7 @@ const filasServicio = computed(() => {
       </div>
       <div class="b-acciones">
         <div class="b-segmentado" role="radiogroup" aria-label="Vista">
-          <button v-for="v in [['insumo', 'Por insumo'], ['servicio', 'Por servicio']]" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="vista = v[0]">{{ v[1] }}</button>
+          <button v-for="v in VISTAS" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="cambiarVista(v[0])">{{ v[1] }}</button>
         </div>
         <RouterLink to="/inventario/nuevo" class="b-btn secundario"><Icono nombre="agregar" :tamano="20" /> Nuevo insumo</RouterLink>
       </div>
@@ -186,7 +189,7 @@ const filasServicio = computed(() => {
         <div class="min-w-0">
         <div class="lista" aria-label="Insumos">
           <div class="columnas" aria-hidden="true">
-            <span>Insumo · {{ miles(visibles.length) }}</span><span class="der">En bodega</span><span class="col-cob">Alcanza para</span><span class="der">Pedir</span>
+            <span>Insumo · {{ miles(visibles.length) }}</span><span class="der">En bodega</span><span class="col-cob">Alcanza para</span><span class="der">Consumo / mes</span>
           </div>
 
           <ul class="filas">
@@ -214,10 +217,7 @@ const filasServicio = computed(() => {
                     <ReglaCobertura :meses="f.bres.K" :minimo="minimo" :maximo="maximo" :tono="tonoRegla(f)" :ancho="112" />
                     <span class="meses"><b>{{ f.bres.K === null ? '—' : decimal(f.bres.K) }}</b> {{ f.bres.K === null ? '' : 'meses' }}</span>
                   </span>
-                  <span class="der">
-                    <span v-if="f.bres.M > 0" class="pedir" :style="estiloTono('accion')">{{ miles(f.bres.M) }}</span>
-                    <span v-else class="nada">—</span>
-                  </span>
+                  <span class="der consumo">{{ f.bres.J ? miles(Math.round(f.bres.J)) : '—' }}</span>
                 </button>
               </li>
           </ul>
@@ -247,17 +247,12 @@ const filasServicio = computed(() => {
             <div class="mini-c"><span>En bodega</span><b>{{ miles(elegido.bres.I) }}</b></div>
             <div class="mini-c"><span>Alcanza para</span><b>{{ elegido.bres.K === null ? '—' : `${decimal(elegido.bres.K)} m` }}</b></div>
             <div class="mini-c"><span>Consumo / mes</span><b>{{ miles(elegido.bres.J) }}</b></div>
-            <div class="mini-c pedir-c" :style="estiloTono(elegido.bres.M > 0 ? 'accion' : 'neutro')"><span>Pedir</span><b>{{ elegido.bres.M > 0 ? miles(elegido.bres.M) : '—' }}</b></div>
+            <div class="mini-c"><span>Saldo del municipio</span><b>{{ miles(elegido.bres.H) }}</b></div>
           </div>
 
-          <dl class="cuentas mt-3">
-            <div><dt>Saldo del municipio</dt><dd>{{ miles(elegido.bres.H) }}</dd></div>
-            <div v-if="enCuarentena"><dt>En cuarentena</dt><dd>{{ miles(enCuarentena) }}</dd></div>
-            <div><dt>Máximo ({{ maximo }} meses de consumo)</dt><dd>{{ cantidad(elegido.bres.L) }}</dd></div>
+          <dl v-if="enCuarentena" class="cuentas mt-3">
+            <div><dt>En cuarentena</dt><dd>{{ miles(enCuarentena) }}</dd></div>
           </dl>
-          <p class="mt-2 text-xs font-semibold text-apagado">
-            Pedir = máximo − {{ balance.configuracion.formulaPedido === 'mspas' ? 'saldo del municipio' : 'existencia en bodega' }}; si da negativo, no se pide.
-          </p>
 
           <p class="b-subtitulo mt-5">Lotes</p>
           <ul class="mt-2 space-y-2">
@@ -343,15 +338,14 @@ const filasServicio = computed(() => {
 .cuenta { min-width: 22px; padding: 0 7px; border-radius: 9px; background: #E2E8F0; color: #334155; font-size: 12.5px; font-weight: 900; text-align: center; }
 .cuenta.agotados { background: #FDECEC; color: #A83232; }
 .cuenta.bajo { background: #FFF1DC; color: #8A4B00; }
-.cuenta.pedir { background: #EAF3FB; color: #174E80; }
 
 /* --- Lista agrupada --------------------------------------------------------- */
 .paneles { display: block; }
 /* La lista se desplaza con la página: con altura propia quedaba cortada cuando el panel del insumo era más alto. */
 .lista { padding: 0 2px 8px; }
 
-/* Columnas alineadas: ícono | insumo | en bodega | alcanza para | pedir */
-.columnas, .prod { display: grid; grid-template-columns: 40px minmax(0, 1fr) 96px 176px 92px; align-items: center; column-gap: 14px; }
+/* Columnas alineadas: ícono | insumo | en bodega | alcanza para | consumo al mes */
+.columnas, .prod { display: grid; grid-template-columns: 32px minmax(0, 1fr) 96px 176px 110px; align-items: center; column-gap: 14px; }
 .columnas {
   position: sticky; top: 72px; /* debajo de la barra superior (72 px) */ z-index: 3; padding: 8px 16px 8px 14px; background: #F8FAFC;
   font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #64748B;
@@ -366,17 +360,14 @@ const filasServicio = computed(() => {
   .franja-cuenta b { display: none; }
 }
 
-.filas { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
-.prod {
-  width: 100%; padding: 8px 16px 8px 12px; text-align: left; background: #fff;
-  border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 16px;
-  transition: border-color .12s, background .12s, transform .06s;
-}
-.prod:hover { border-color: #C5CFDC; }
-.prod:active { transform: translateY(2px); border-bottom-width: 2px; }
-.prod.sel { border-color: var(--cat); border-bottom-color: var(--cat-tinta); background: color-mix(in srgb, var(--cat-fondo) 45%, #fff); }
-.prod-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--cat-fondo); color: var(--cat-tinta); }
-.prod-ic svg { width: 22px; height: 22px; }
+.filas { display: flex; flex-direction: column; margin-top: 4px; border: 2px solid #E5E9F0; border-radius: 16px; background: #fff; overflow: hidden; }
+.filas li + li .prod { border-top: 1px solid #EEF2F6; }
+.prod { width: 100%; padding: 6px 16px 6px 12px; text-align: left; background: #fff; transition: background .12s; }
+.prod:hover { background: #F7FBFE; }
+.prod.sel { background: color-mix(in srgb, var(--cat-fondo) 45%, #fff); }
+.prod-ic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--cat-fondo); color: var(--cat-tinta); }
+.prod-ic svg { width: 18px; height: 18px; }
+.consumo { font-size: 15px; font-weight: 800; color: #334155; font-variant-numeric: tabular-nums; }
 
 .etiqueta { padding: 1px 8px; border-radius: 7px; background: var(--t-fondo); color: var(--t-tinta); font-size: 11px; font-weight: 800; white-space: nowrap; }
 .bodega { justify-self: end; font-size: 17px; font-weight: 900; color: #14244A; font-variant-numeric: tabular-nums; }
@@ -384,11 +375,6 @@ const filasServicio = computed(() => {
 .cobertura { display: flex; align-items: center; gap: 8px; }
 .meses { font-size: 12px; font-weight: 700; color: #64748B; white-space: nowrap; }
 .meses b { font-size: 15px; font-weight: 900; color: #14244A; font-variant-numeric: tabular-nums; }
-.pedir {
-  display: inline-block; min-width: 64px; padding: 4px 10px; text-align: center; border-radius: 12px;
-  background: var(--t-fondo); border: 2px solid var(--t-borde); border-bottom-width: 3px; border-bottom-color: var(--t);
-  color: var(--t-tinta); font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums;
-}
 .nada { color: #CBD5E1; font-weight: 800; }
 
 /* --- Insumo elegido ---------------------------------------------------------- */
@@ -401,8 +387,6 @@ const filasServicio = computed(() => {
 .mini-c { padding: 10px 12px; border: 2px solid #E5E9F0; border-bottom-width: 3px; border-radius: 14px; }
 .mini-c span { display: block; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
 .mini-c b { display: block; margin-top: 2px; font-size: 20px; font-weight: 900; color: #14244A; font-variant-numeric: tabular-nums; }
-.mini-c.pedir-c { background: var(--t-fondo); border-color: var(--t-borde); border-bottom-color: var(--t); }
-.mini-c.pedir-c span, .mini-c.pedir-c b { color: var(--t-tinta); }
 .cuentas div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 2px; border-bottom: 2px solid #F1F4F8; font-size: 14px; font-weight: 600; color: #475569; }
 .cuentas dd { font-weight: 800; color: #14244A; font-variant-numeric: tabular-nums; }
 

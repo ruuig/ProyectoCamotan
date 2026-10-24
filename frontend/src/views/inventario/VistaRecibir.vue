@@ -152,8 +152,11 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
   <section>
     <header class="b-cabecera">
       <h1 class="b-titulo">Recibir</h1>
+      <div class="b-acciones">
+      <button v-if="vista === 'nueva' && !sinRequisicion" type="button" class="b-btn secundario chico" @click="sinRequisicion = true">Sin requisición</button>
       <div class="b-segmentado" role="radiogroup" aria-label="Vista">
-        <button v-for="m in [['nueva', 'Nueva recepción'], ['recibidas', `Recibidas (${recibidas.length})`], ['faltantes', `Faltantes por reclamar (${faltantes.length})`]]" :key="m[0]" type="button" role="radio" :aria-checked="vista === m[0]" :class="vista === m[0] ? 'on' : ''" @click="vista = m[0]">{{ m[1] }}</button>
+        <button v-for="m in [['nueva', 'Por recibir'], ['recibidas', `Recibidas (${recibidas.length})`], ['faltantes', `Faltantes (${faltantes.length})`]]" :key="m[0]" type="button" role="radio" :aria-checked="vista === m[0]" :class="vista === m[0] ? 'on' : ''" @click="vista = m[0]">{{ m[1] }}</button>
+      </div>
       </div>
     </header>
 
@@ -163,12 +166,11 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
     <!-- Nueva recepción: contra la requisición que llegó -->
     <div v-if="vista === 'nueva' && !sinRequisicion" class="mt-5 space-y-4">
       <RecibirRequisicion :inicial="route.query.requisicion ?? null" @aviso="(t) => { aviso = t; error = ''; }" @error="(t) => (error = t)" @listo="cargar" />
-      <button type="button" class="enlace-origen" @click="sinRequisicion = true">Registrar sin requisición (inventario inicial u otro caso especial)</button>
     </div>
 
     <!-- Caso especial: sin requisición -->
     <form v-if="vista === 'nueva' && sinRequisicion" class="mt-5 space-y-4" @submit.prevent="registrar">
-      <button type="button" class="enlace-origen" @click="sinRequisicion = false">← Volver a recibir por requisición</button>
+      <button type="button" class="enlace-origen" @click="sinRequisicion = false">← Por requisición</button>
       <div class="documento">
         <!-- Todo llega por despacho de la DDRISS; otro origen solo en un caso concreto. -->
         <fieldset v-if="otroOrigen" class="col-llega">
@@ -197,7 +199,7 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
           <input id="fec" v-model="doc.fecha" type="date" required class="b-campo" />
         </div>
       </div>
-      <button v-if="!otroOrigen" type="button" class="enlace-origen" @click="elegirOtroOrigen">¿No viene por despacho? Donación, préstamo o traslado</button>
+      <button v-if="!otroOrigen" type="button" class="enlace-origen" @click="elegirOtroOrigen">Otro origen: donación, préstamo o traslado</button>
 
       <div class="agregar">
         <span class="b-etiqueta">Agregar producto</span>
@@ -296,7 +298,7 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
     </div>
 
     <!-- Faltantes por reclamar -->
-    <div v-else class="b-tabla-marco mt-5">
+    <div v-else-if="vista === 'faltantes'" class="b-tabla-marco mt-5">
       <table class="b-tabla">
         <thead><tr><th>Producto</th><th>Lote</th><th>Documento</th><th>Viene de</th><th>Fecha</th><th class="n">Faltan</th><th /></tr></thead>
         <tbody>

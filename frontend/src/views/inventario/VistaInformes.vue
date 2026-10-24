@@ -129,7 +129,7 @@ onMounted(cargarEstado);
 
 <template>
   <section>
-    <PasosCierre :estado="{ informes: estado ? `${grupos.listo.length} de ${servicios.length} listos` : '' }" />
+    <PasosCierre />
 
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
     <p v-if="aviso" class="b-aviso ok mt-4" aria-live="polite">{{ aviso }}</p>
@@ -159,7 +159,6 @@ onMounted(cargarEstado);
 
       <ul class="lugares mt-3">
         <li v-for="s in lugares" :key="s.ubicacionId" class="lugar">
-          <span class="marca" :class="s.estado" aria-hidden="true" />
           <span class="min-w-0 flex-1">
             <span class="block truncate font-semibold text-tinta">{{ s.nombre }}</span>
             <small v-if="s.estado === 'diferencia'" class="text-[#B7710A]">{{ s.diferencias }} {{ s.diferencias === 1 ? 'insumo' : 'insumos' }} sin cuadrar</small>
@@ -261,10 +260,6 @@ onMounted(cargarEstado);
 @media (max-width: 900px) { .lugares { grid-template-columns: 1fr; } }
 .lugar { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 4px; border-bottom: 1px solid #EEF2F6; }
 .lugar small { display: block; font-size: 12px; font-weight: 600; color: #64748B; }
-.marca { flex-shrink: 0; width: 4px; align-self: stretch; margin: 6px 0; border-radius: 2px; }
-.marca.listo { background: #22A06B; }
-.marca.diferencia { background: #E8930C; }
-.marca.pendiente { background: #CBD5E1; }
 .captura { max-height: max(380px, calc(100vh - 420px)); }
 .captura th { white-space: normal; line-height: 1.25; vertical-align: bottom; }
 .captura th.n { max-width: 96px; }

@@ -75,9 +75,15 @@ const enlaceImprimir = computed(() => {
 
 <template>
   <section>
+    <!-- Es la vista «Vencimientos» de Existencias: el mismo selector arriba. -->
     <header class="b-cabecera">
-      <h1 class="b-titulo">Semáforo</h1>
+      <h1 class="b-titulo">Existencias</h1>
       <div class="b-acciones">
+        <div class="b-segmentado" role="radiogroup" aria-label="Vista">
+          <RouterLink to="/inventario/productos" role="radio" aria-checked="false">Por insumo</RouterLink>
+          <RouterLink to="/inventario/productos?vista=servicio" role="radio" aria-checked="false">Por servicio</RouterLink>
+          <button type="button" role="radio" aria-checked="true" class="on">Vencimientos</button>
+        </div>
         <RouterLink :to="enlaceImprimir" target="_blank" class="b-btn secundario"><Icono nombre="imprimir" :tamano="20" /> Imprimir semáforo</RouterLink>
       </div>
     </header>

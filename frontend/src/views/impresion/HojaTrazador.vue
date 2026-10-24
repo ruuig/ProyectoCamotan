@@ -44,9 +44,18 @@ function volver() {
 </script>
 
 <template>
-  <div class="hoja">
+  <!-- hoja-propia: lo único que se imprime (ver style-impresion.css). -->
+  <div class="hoja hoja-propia">
     <p v-if="error" class="error">{{ error }}</p>
-    <template v-if="datos">
+    <!--
+      La página va sin márgenes para que el navegador no escriba la fecha, el
+      enlace ni el número de página. El margen de arriba y de abajo lo dan estas
+      filas vacías, que se repiten en cada hoja.
+    -->
+    <table v-if="datos" class="marco">
+      <thead><tr><td><div class="margen" /></td></tr></thead>
+      <tfoot><tr><td><div class="margen" /></td></tr></tfoot>
+      <tbody><tr><td>
       <div class="linea" />
       <header class="cabeza">
         <div>
@@ -78,7 +87,8 @@ function volver() {
           </tr>
         </tbody>
       </table>
-    </template>
+      </td></tr></tbody>
+    </table>
 
     <div class="controles">
       <button type="button" class="boton-primario" @click="imprimir">Imprimir</button>
@@ -90,6 +100,9 @@ function volver() {
 <style scoped>
 .hoja { max-width: 820px; margin: 0 auto; padding: 16px; background: #fff; color: #000; font-family: Calibri, Carlito, Arial, sans-serif; }
 .error { color: #A52A2A; font-weight: 700; }
+.marco { width: 100%; border-collapse: collapse; }
+.marco > thead td, .marco > tfoot td, .marco > tbody > tr > td { padding: 0; border: 0; }
+.margen { height: 0; }
 .linea { height: 5px; margin: 0 0 6px; background: repeating-linear-gradient(90deg, #9DB3CF 0 6px, #C9D6E6 6px 9px); }
 .cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
 .cabeza h1 { font-family: Arial, sans-serif; font-size: 15px; font-weight: 900; color: #1F3864; }
@@ -106,9 +119,11 @@ function volver() {
 .valor { width: 82px; text-align: center; font-weight: 700; }
 tr { page-break-inside: avoid; }
 .controles { display: flex; gap: 12px; margin-top: 20px; padding-top: 12px; border-top: 1px solid #E2E8F0; }
-@page { size: letter portrait; margin: 10mm 12mm; }
 @media print {
-  .hoja { max-width: none; padding: 0; }
+  .hoja { max-width: none; padding: 0 12mm; }
+  .margen { height: 10mm; }
   .controles { display: none; }
+  /* Los colores del formato salen en el papel. */
+  .linea, .titulo-seccion, .columnas th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 </style>

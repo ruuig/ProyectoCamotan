@@ -46,6 +46,10 @@ function volver() {
 <template>
   <!-- hoja-propia: lo único que se imprime (ver style-impresion.css). -->
   <div class="hoja hoja-propia">
+    <div class="controles">
+      <button type="button" class="boton-primario" @click="imprimir">Imprimir</button>
+      <button type="button" class="boton-secundario" @click="volver">Volver</button>
+    </div>
     <p v-if="error" class="error">{{ error }}</p>
     <!--
       La página va sin márgenes para que el navegador no escriba la fecha, el
@@ -90,10 +94,6 @@ function volver() {
       </td></tr></tbody>
     </table>
 
-    <div class="controles">
-      <button type="button" class="boton-primario" @click="imprimir">Imprimir</button>
-      <button type="button" class="boton-secundario" @click="volver">Volver</button>
-    </div>
   </div>
 </template>
 
@@ -118,7 +118,7 @@ function volver() {
 .texto { font-weight: 600; }
 .valor { width: 82px; text-align: center; font-weight: 700; }
 tr { page-break-inside: avoid; }
-.controles { display: flex; gap: 12px; margin-top: 20px; padding-top: 12px; border-top: 1px solid #E2E8F0; }
+.controles { display: flex; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #E2E8F0; }
 @media print {
   .hoja { max-width: none; padding: 0 12mm; }
   .margen { height: 10mm; }

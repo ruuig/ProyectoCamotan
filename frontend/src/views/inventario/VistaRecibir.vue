@@ -120,7 +120,7 @@ async function registrarLlegada(cantidad) {
   enviando.value = true;
   try {
     await bodega.reponer(f.loteId, cantidad);
-    aviso.value = `Registrado: llegaron ${cantidad} de ${f.insumo}.`;
+    aviso.value = `Registrado: ${cantidad} de ${f.insumo}.`;
     reponiendo.value = null;
     await cargar();
   } catch (fallo) {
@@ -210,7 +210,7 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
         <table class="b-tabla">
           <thead>
             <tr>
-              <th>Producto</th><th>Lote</th><th>Vence</th><th class="n">Dice el documento</th><th class="n">Llegó</th><th>Buen estado</th><th />
+              <th>Producto</th><th>Lote</th><th>Vence</th><th class="n">Según documento</th><th class="n">Recibido</th><th>Buen estado</th><th />
             </tr>
           </thead>
           <tbody>
@@ -220,18 +220,18 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
               <td><input v-model="r.vence" type="date" required class="celda fecha-vence" :aria-label="`Vence ${r.nombre}`" /></td>
               <td class="n"><input v-model="r.cantidadDocumento" inputmode="numeric" required class="celda" :aria-label="`Cantidad del documento de ${r.nombre}`" /></td>
               <td class="n">
-                <input v-model="r.cantidadRecibida" inputmode="numeric" :placeholder="r.cantidadDocumento || 'igual'" class="celda" :aria-label="`Cantidad que llegó de ${r.nombre}`" />
+                <input v-model="r.cantidadRecibida" inputmode="numeric" :placeholder="r.cantidadDocumento || 'igual'" class="celda" :aria-label="`Recibido de ${r.nombre}`" />
                 <small v-if="faltan(r)" class="falta">faltan {{ faltan(r) }}</small>
               </td>
               <td><label class="flex items-center gap-1.5 text-sm"><input v-model="r.conforme" type="checkbox" /> {{ r.conforme ? 'Sí' : 'No: cuarentena' }}</label></td>
               <td class="n"><button type="button" class="quitar" aria-label="Quitar" @click="renglones.splice(i, 1)"><Icono nombre="cerrar" :tamano="16" /></button></td>
             </tr>
-            <tr v-if="!renglones.length"><td colspan="7" class="b-vacio">Agregue los productos del documento.</td></tr>
+            <tr v-if="!renglones.length"><td colspan="7" class="b-vacio">Sin productos.</td></tr>
           </tbody>
         </table>
       </div>
       <p v-if="totalFaltan" class="b-aviso atencion text-sm">
-        {{ totalFaltan }} {{ totalFaltan === 1 ? 'producto llegó' : 'productos llegaron' }} incompletos: entra lo que dice el documento y lo que falta queda por reclamar.
+        Incompletos: {{ totalFaltan }} · la diferencia queda por reclamar
       </p>
       <div class="flex flex-wrap gap-2">
         <input v-model="doc.observaciones" maxlength="1000" placeholder="Observaciones" aria-label="Observaciones" class="b-campo min-w-[12rem] flex-1" />
@@ -292,7 +292,7 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
               </td>
             </tr>
           </template>
-          <tr v-if="!recibidas.length"><td colspan="8" class="b-vacio">Todavía no hay recepciones.</td></tr>
+          <tr v-if="!recibidas.length"><td colspan="8" class="b-vacio">Sin recepciones.</td></tr>
         </tbody>
       </table>
     </div>
@@ -309,9 +309,9 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
             <td>{{ f.remitente ?? '' }}</td>
             <td class="whitespace-nowrap">{{ fecha(f.fecha) }}</td>
             <td class="n rojo">{{ miles(f.porReponer) }}</td>
-            <td class="n"><button type="button" class="b-btn secundario chico" @click="llego(f)">Llegó</button></td>
+            <td class="n"><button type="button" class="b-btn secundario chico" @click="llego(f)">Registrar</button></td>
           </tr>
-          <tr v-if="!faltantes.length"><td colspan="7" class="b-vacio">No hay faltantes por reclamar.</td></tr>
+          <tr v-if="!faltantes.length"><td colspan="7" class="b-vacio">Sin faltantes.</td></tr>
         </tbody>
       </table>
     </div>
@@ -319,15 +319,15 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
     <!-- Llegó lo que faltaba -->
     <div v-if="reponiendo" class="fondo-llego" role="dialog" aria-modal="true" aria-labelledby="titulo-llego" @click.self="reponiendo = null">
       <div class="ventana-llego">
-        <p id="titulo-llego" class="llego-titulo">Llegó lo que faltaba</p>
+        <p id="titulo-llego" class="llego-titulo">Faltante</p>
         <p class="llego-producto">{{ reponiendo.insumo }}</p>
         <p class="llego-lote">Lote <b>{{ reponiendo.numeroLote }}</b><template v-if="reponiendo.documento"> · documento {{ reponiendo.documento }}</template></p>
         <div class="llego-falta"><span>Faltaban</span><b>{{ reponiendo.porReponer }}</b></div>
         <button type="button" class="b-btn exito llego-todo" :disabled="enviando" @click="registrarLlegada(reponiendo.porReponer)">
-          <Icono nombre="correcto" :tamano="22" /> Llegó todo
+          <Icono nombre="correcto" :tamano="22" /> Completo
         </button>
         <form class="llego-parte" @submit.prevent="registrarLlegada(entero(parte))">
-          <input v-model="parte" inputmode="numeric" placeholder="Solo una parte" aria-label="Cuántos llegaron" class="b-campo num" :class="{ invalido: entero(parte) > reponiendo.porReponer }" />
+          <input v-model="parte" inputmode="numeric" placeholder="Cantidad" aria-label="Cantidad recibida" class="b-campo num" :class="{ invalido: entero(parte) > reponiendo.porReponer }" />
           <button type="submit" class="b-btn secundario" :disabled="enviando || !entero(parte) || entero(parte) > reponiendo.porReponer">Registrar</button>
         </form>
         <button type="button" class="llego-cancelar" @click="reponiendo = null">Cancelar</button>

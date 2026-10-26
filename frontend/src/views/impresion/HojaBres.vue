@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import servicio from '../../services/inventario';
 import HojaImpresion from '../../components/comunes/HojaImpresion.vue';
@@ -42,6 +42,19 @@ const modo = ref(leer(CLAVE_MODO, 'preimpreso'));
 const ajuste = ref(leer(CLAVE_AJUSTE, { x: 0, y: 0 }));
 function imprimir() { window.print(); }
 function cambiarModo(m) { modo.value = m; guardar(CLAVE_MODO, m); }
+
+// En hoja blanca la página va en carta horizontal; el preimpreso fija la suya (oficio).
+let estiloPagina = null;
+function fijarPagina() {
+  estiloPagina?.remove();
+  estiloPagina = null;
+  if (modo.value !== 'blanco') return;
+  estiloPagina = document.createElement('style');
+  estiloPagina.textContent = '@media print { @page { size: letter landscape; margin: 0; } }';
+  document.head.appendChild(estiloPagina);
+}
+watch(modo, fijarPagina, { immediate: true });
+onBeforeUnmount(() => estiloPagina?.remove());
 function mover(eje, mm) { ajuste.value = { ...ajuste.value, [eje]: Math.round((ajuste.value[eje] + mm) * 10) / 10 }; guardar(CLAVE_AJUSTE, ajuste.value); }
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -153,6 +166,7 @@ onMounted(cargar);
   <HojaImpresion
     :confidencial="false"
     v-else-if="datos"
+    class="hoja-apaisada"
     :titulo="`Balance, Requisición y Envío de Suministros (BRES)${deFarmacia ? ' · Farmacia (post-consulta)' : ''}`"
     :establecimiento="est"
     :firmas="firmas"

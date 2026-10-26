@@ -21,8 +21,8 @@ import { miles } from './diseno/PiezasBodega';
 const lineas = defineModel({ type: Array, required: true });
 const props = defineProps({
   catalogo: { type: Array, default: () => [] }, // [{ id, nombreGenerico, ... }]
-  titulo: { type: String, default: 'Qué pedir' },
-  vacio: { type: String, default: 'Nada sugerido.' },
+  titulo: { type: String, default: 'Productos' },
+  vacio: { type: String, default: 'Sin productos.' },
   // Las columnas de datos de cada renglón, entre el producto y la cantidad.
   columnas: { type: Array, default: () => [] },
   // Para agregar: arma el renglón nuevo a partir del producto elegido.
@@ -131,7 +131,7 @@ function creado(insumo) {
       <button v-for="c in paraAgregar" :key="c.id" type="button" class="opcion" @click="agregar(c)">
         <Icono nombre="agregar" :tamano="16" :grosor="2.6" /> {{ c.nombreGenerico }}
       </button>
-      <button type="button" class="opcion otra" @click="agregarLibre"><Icono nombre="lapiz" :tamano="16" /> Escribir «{{ buscar.trim() }}» a mano</button>
+      <button type="button" class="opcion otra" @click="agregarLibre"><Icono nombre="lapiz" :tamano="16" /> Agregar «{{ buscar.trim() }}» sin catálogo</button>
       <button v-if="puedeCrear" type="button" class="opcion otra" @click="creando = true"><Icono nombre="agregar" :tamano="16" :grosor="2.6" /> Producto nuevo</button>
     </div>
     <CrearInsumoRapido v-if="creando" @creado="creado" @cerrar="creando = false" />

@@ -23,6 +23,12 @@ logo.cargar();
 const router = useRouter();
 const route = useRoute();
 const menuAbierto = ref(false);
+// La barra lateral se abre al pasar el mouse (o al llegar con el teclado) y el
+// contenido se corre con ella.
+const lateralAbierta = ref(false);
+function salirConTeclado(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) lateralAbierta.value = false;
+}
 // Todos los roles tienen el menú a la izquierda: bodega también, con sus tareas.
 const sinMenu = computed(() => false);
 
@@ -186,17 +192,23 @@ function cambiarTamano(paso) {
 <template>
   <div class="min-h-screen bg-fondo">
     <!--
-      Barra lateral fija de 248 px. Arriba la marca del establecimiento y
-      debajo la navegación, agrupada y separada con líneas.
+      Barra lateral fija y angosta (76 px): el escudo y los íconos. Al pasar el
+      mouse (o al llegar con el teclado) se abre a 248 px encima del contenido,
+      con el logo completo y el nombre de cada entrada.
     -->
     <aside
       v-if="!sinMenu && !completa"
-      class="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r border-linea
+      class="lateral fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-linea
              bg-superficie panel:flex"
+      :class="{ abierta: lateralAbierta }"
       aria-label="Módulos del sistema"
+      @mouseenter="lateralAbierta = true"
+      @mouseleave="lateralAbierta = false"
+      @focusin="lateralAbierta = true"
+      @focusout="salirConTeclado"
     >
       <RouterLink :to="auth.rutaPanel" class="marca-lateral">
-        <img :src="logo.horizontal" alt="Ministerio de Salud Pública y Asistencia Social" class="marca-logo" />
+        <span class="marca-recorte"><img :src="logo.horizontal" alt="Ministerio de Salud Pública y Asistencia Social" class="marca-logo" /></span>
         <span class="marca-centro">
           <strong>{{ establecimiento.nombre || 'Centro de Salud' }}</strong>
           <span v-if="establecimiento.ubicacion"><Icono nombre="ubicacion" :tamano="14" /> {{ establecimiento.ubicacion }}</span>
@@ -220,14 +232,15 @@ function cambiarTamano(paso) {
             :active-class="enlace.exacto ? '' : 'menu-activo'"
             exact-active-class="menu-activo"
             :class="{ 'menu-activo': enlace.tambien?.some((p) => route.path.startsWith(p)) }"
+            :title="enlace.etiqueta"
           >
             <Icono :nombre="enlace.icono" :tamano="20" class="shrink-0" />
-            <span class="truncate">{{ enlace.etiqueta }}</span>
+            <span class="etiqueta-menu truncate">{{ enlace.etiqueta }}</span>
             <span v-if="enlace.contador && contadores[enlace.contador]" class="contador-menu">{{ contadores[enlace.contador] }}</span>
           </RouterLink>
         </div>
       </nav>
-      <BotonInstalar />
+      <div class="instalar-lateral"><BotonInstalar /></div>
     </aside>
 
     <!-- Menú desplegable en pantalla angosta: la barra fija no cabe -->
@@ -278,7 +291,7 @@ function cambiarTamano(paso) {
       <BotonInstalar />
     </aside>
 
-    <div :class="sinMenu || completa ? '' : 'panel:pl-[248px]'">
+    <div :class="sinMenu || completa ? '' : ['con-lateral', { abierta: lateralAbierta }]">
       <!-- Barra superior: la fecha de hoy y quién está operando -->
       <header
         class="sticky top-0 z-30 flex h-[72px] items-center justify-between gap-4
@@ -367,6 +380,26 @@ function cambiarTamano(paso) {
 /* Marca de la barra lateral: el logo del Ministerio completo y, debajo, el
    centro con su ubicación. */
 .marca-lateral { display: block; padding: 18px 16px 14px; border-bottom: 2px solid #E2E8F0; }
+
+/* --- Barra lateral angosta que se abre al pasar el mouse ---------------------- */
+/* La barra y el contenido se mueven juntos: mismo tiempo y misma curva. */
+.lateral { width: 76px; overflow-x: hidden; will-change: width; transition: width .24s cubic-bezier(.2, .8, .2, 1), box-shadow .24s ease; }
+.lateral.abierta { width: 248px; box-shadow: 10px 0 28px -16px rgba(15, 23, 42, .3); }
+@media (min-width: 1100px) {
+  .con-lateral { padding-left: 76px; transition: padding-left .24s cubic-bezier(.2, .8, .2, 1); }
+  .con-lateral.abierta { padding-left: 248px; }
+}
+.lateral .marca-lateral { padding: 16px 8px 14px; white-space: nowrap; }
+/* El logo no cambia de imagen: cerrada se ve solo el escudo y al abrir se destapa. */
+.marca-recorte { display: block; width: 60px; overflow: hidden; transition: width .24s cubic-bezier(.2, .8, .2, 1); }
+.lateral.abierta .marca-recorte { width: 170px; }
+.lateral .marca-logo { width: 160px; max-width: none; }
+.lateral .marca-centro { overflow: hidden; text-overflow: ellipsis; }
+.lateral .menu-enlace { position: relative; white-space: nowrap; }
+.lateral .marca-centro, .lateral .etiqueta-menu, .lateral .instalar-lateral { opacity: 0; transition: opacity .18s ease; }
+.lateral.abierta .marca-centro, .lateral.abierta .etiqueta-menu, .lateral.abierta .instalar-lateral { opacity: 1; }
+/* Cerrada, el contador va como globo sobre el ícono. */
+.lateral:not(.abierta) .contador-menu { position: absolute; top: 2px; left: 26px; min-width: 18px; padding: 0 5px; font-size: 11px; }
 .marca-logo { display: block; width: 100%; max-width: 200px; height: auto; }
 .marca-centro { display: block; margin-top: 12px; padding-top: 10px; border-top: 2px dashed #E2E8F0; }
 .marca-centro strong { display: block; font-size: 15px; font-weight: 800; line-height: 1.2; color: #14244A; }

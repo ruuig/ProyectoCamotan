@@ -313,7 +313,7 @@ const filasServicio = computed(() => {
                   <td><ReglaCobertura :meses="x.meses" :minimo="minimo" :maximo="maximo" :tono="x.tono" :ancho="120" /></td>
                   <td class="n meses-tabla" :class="x.tono">{{ x.tono === 'agotado' ? '0' : x.meses === null ? '—' : decimal(x.meses) }}</td>
                 </tr>
-                <tr v-if="!filasServicio.length"><td colspan="5" class="b-vacio">Este servicio no tiene movimientos registrados.</td></tr>
+                <tr v-if="!filasServicio.length"><td colspan="5" class="b-vacio">Sin movimientos.</td></tr>
               </tbody>
             </table>
           </div>

@@ -132,11 +132,10 @@ onMounted(() => { borrador.recuperar(); cargarSugerencia(); });
     <p v-if="aviso" class="b-aviso ok mt-4" aria-live="polite">{{ aviso }}</p>
 
     <div class="rejilla mt-4">
-      <EditorPedido v-model="lineas" :errores="erroresRenglon" :catalogo="catalogo" :nuevo-renglon="nuevoRenglon" :columnas="COLUMNAS" puede-crear titulo="Qué pedir a la DDRISS" vacio="El BRES no pide nada este mes." @creado="creado" />
+      <EditorPedido v-model="lineas" :errores="erroresRenglon" :catalogo="catalogo" :nuevo-renglon="nuevoRenglon" :columnas="COLUMNAS" puede-crear @creado="creado" />
 
       <aside class="lado">
         <section class="tarjeta">
-          <h2>Datos de la requisición</h2>
           <div><label for="num" class="b-etiqueta">N.º del formulario <span class="b-opcional">opcional</span></label><input id="num" v-model="cabecera.numero" maxlength="20" class="b-campo font-mono" />
             <small v-if="numerosDe(cabecera.numero, aEnviar.map((l) => l.nombre)).length > 1" class="pista-hojas">Ocupa {{ numerosDe(cabecera.numero, aEnviar.map((l) => l.nombre)).length }} hojas: {{ textoNumero({ numeros: numerosDe(cabecera.numero, aEnviar.map((l) => l.nombre)) }) }}</small></div>
           <div><label for="sol" class="b-etiqueta">Solicita</label><input id="sol" v-model="cabecera.solicitante" class="b-campo" /></div>

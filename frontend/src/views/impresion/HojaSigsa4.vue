@@ -64,6 +64,9 @@ const QUIEN = { responsable: 'Resp.', otro: 'Recibe' };
 
 <template>
   <div v-if="datos" class="sigsa4 hoja-propia">
+    <div class="no-imprimir controles">
+      <button type="button" class="boton-primario" @click="imprimir">Imprimir</button>
+    </div>
     <section v-for="(hoja, h) in hojas" :key="h" class="hoja" :class="h > 0 ? 'salto' : ''">
       <header class="encabezado">
         <div class="titulo">
@@ -135,9 +138,6 @@ const QUIEN = { responsable: 'Resp.', otro: 'Recibe' };
       <p class="pagina">Hoja {{ h + 1 }} de {{ hojas.length }} · {{ datos.renglones.length }} renglones en el mes</p>
     </section>
 
-    <div class="no-imprimir controles">
-      <button type="button" class="boton-primario" @click="imprimir">Imprimir</button>
-    </div>
   </div>
   <p v-else-if="error" class="p-8 text-red-700">{{ error }}</p>
   <p v-else class="p-8">Preparando el SIGSA-4…</p>

@@ -142,7 +142,7 @@ const usado = computed(() => (datos.value ? 1 - datos.value.lote.cantidadActual 
             </span>
             <b class="tabular-nums text-tinta">{{ miles(s.cantidad) }}</b>
           </li>
-          <li v-if="!datos.servicios?.length" class="b-vacio justify-center">No se ha trasladado a servicios.</li>
+          <li v-if="!datos.servicios?.length" class="b-vacio justify-center">Sin traslados.</li>
         </ul>
 
         <ul v-else class="libro">
@@ -153,7 +153,7 @@ const usado = computed(() => (datos.value ? 1 - datos.value.lote.cantidadActual 
             </span>
             <b class="tabular-nums text-tinta">{{ miles(p.cantidad) }}</b>
           </li>
-          <li v-if="!datos.pacientes.length" class="b-vacio justify-center">No se ha entregado a pacientes.</li>
+          <li v-if="!datos.pacientes.length" class="b-vacio justify-center">Sin entregas.</li>
         </ul>
       </section>
     </div>

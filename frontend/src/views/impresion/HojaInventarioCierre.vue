@@ -38,7 +38,6 @@ const tituloCierre = computed(() => {
 });
 
 const hojas = computed(() => [enBlanco ? renglonesEnBlanco(45) : datos.value?.filas ?? []]);
-const conReajustes = computed(() => datos.value?.fuente !== 'excel');
 const firmas = computed(() => datos.value?.firmas ?? {});
 const miles = (n) => Number(n).toLocaleString('en-US');
 const v = (f, c) => (f.vacio ? '' : c === 'unidadEntrega' ? f[c] : miles(f[c]));
@@ -63,9 +62,7 @@ const v = (f, c) => (f.vacio ? '' : c === 'unidadEntrega' ? f[c] : miles(f[c]));
             <th class="border border-slate-500 px-1 text-right">Saldo Ant.</th>
             <th class="border border-slate-500 px-1 text-right">Entradas</th>
             <th class="border border-slate-500 px-1 text-right">Entregado</th>
-            <th v-if="conReajustes" class="border border-slate-500 px-1 text-right">Reajustes</th>
             <th class="border border-slate-500 px-1 text-right">Saldo Actual</th>
-            <th class="border border-slate-500 px-1 text-right">÷ {{ datos.lugaresReparto ?? 32 }}</th>
           </tr>
         </thead>
         <tbody>
@@ -76,9 +73,7 @@ const v = (f, c) => (f.vacio ? '' : c === 'unidadEntrega' ? f[c] : miles(f[c]));
             <td class="border border-slate-500 px-1 text-right">{{ v(f, 'saldoAnterior') }}</td>
             <td class="border border-slate-500 px-1 text-right">{{ v(f, 'entradas') }}</td>
             <td class="border border-slate-500 px-1 text-right">{{ v(f, 'entregado') }}</td>
-            <td v-if="conReajustes" class="border border-slate-500 px-1 text-right">{{ v(f, 'reajustes') }}</td>
             <td class="border border-slate-500 px-1 text-right font-bold">{{ v(f, 'saldoActual') }}</td>
-            <td class="border border-slate-500 px-1 text-right">{{ v(f, 'porLugar') }}</td>
           </tr>
         </tbody>
       </table>

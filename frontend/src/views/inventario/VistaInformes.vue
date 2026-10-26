@@ -167,7 +167,7 @@ onMounted(cargarEstado);
           </span>
           <button type="button" class="b-btn chico" :class="s.estado === 'listo' ? 'secundario' : 'primario'" @click="abrir(s)">{{ ACCION[s.estado] }}</button>
         </li>
-        <li v-if="!lugares.length" class="b-vacio col-span-full">Ningún servicio en este estado.</li>
+        <li v-if="!lugares.length" class="b-vacio col-span-full">Ninguno.</li>
       </ul>
     </template>
 
@@ -225,7 +225,7 @@ onMounted(cargarEstado);
                 <span v-if="diferenciaEntradas(r)" class="dif">{{ diferenciaEntradas(r) > 0 ? '+' : '' }}{{ miles(diferenciaEntradas(r)) }}</span>
               </td>
             </tr>
-            <tr v-if="!visibles.length"><td colspan="8" class="b-vacio">Este servicio no ha recibido traslados. Elija «Todos» para capturar cualquier insumo.</td></tr>
+            <tr v-if="!visibles.length"><td colspan="8" class="b-vacio">Sin traslados este mes.</td></tr>
           </tbody>
         </table>
       </div>

@@ -88,7 +88,7 @@ async function enviar() {
     }, nuevaClaveIdempotencia());
     // Bodega la imprime en el formulario al despacharla, con lo autorizado:
     // el encargado puede pedir desde el celular sin impresora.
-    aviso.value = `Requisición N.º ${r.requisicion.id} enviada a bodega con ${aEnviar.value.length} ${aEnviar.value.length === 1 ? 'renglón' : 'renglones'}. Bodega la imprime al despacharla; usted la firma al recibir.`;
+    aviso.value = `Requisición enviada: ${aEnviar.value.length} ${aEnviar.value.length === 1 ? 'producto' : 'productos'}.`;
     lineas.value = [];
     borrador.limpiar();
     await cargarMias();
@@ -255,12 +255,12 @@ onMounted(async () => {
       <div class="tareas">
         <button type="button" class="tarea azul" @click="ir('pedido')">
           <span class="ic"><Icono nombre="trasladar" :tamano="46" /></span>
-          <span class="txt"><b>Hacer requisición</b><small>Ya va llena con lo que necesita; usted corrige y la envía</small></span>
+          <span class="txt"><b>Hacer requisición</b></span>
           <span v-if="pendientes" class="pend azul">{{ pendientes }} en bodega</span>
         </button>
         <button type="button" class="tarea marino" @click="ir('informe')">
           <span class="ic"><Icono nombre="hojaCalculo" :tamano="46" /></span>
-          <span class="txt"><b>Informe del mes</b><small>Lo que entregó en {{ nombreMes(PERIODOS[0]) }}</small></span>
+          <span class="txt"><b>Informe del mes</b><small>{{ nombreMes(PERIODOS[0]) }}</small></span>
         </button>
       </div>
 
@@ -278,23 +278,16 @@ onMounted(async () => {
               <RouterLink :to="`/imprimir/requisicion/${r.id}`" target="_blank" class="b-btn chico secundario"><Icono nombre="imprimir" :tamano="16" /> Imprimir</RouterLink>
             </li>
           </ul>
-          <p v-else class="b-vacio">Todavía no ha hecho requisiciones.</p>
+          <p v-else class="b-vacio">Sin requisiciones.</p>
         </div>
       </section>
     </template>
 
     <!-- ================= Requisición ya llena ================= -->
     <template v-else-if="ver === 'pedido'">
-      <div class="explica mt-4">
-        <Icono nombre="informacion" :tamano="22" :grosor="2.2" />
-        <p>
-          Va llena con lo que le falta para tener <b>{{ sugerencia?.nivelMaximoMeses ?? 2 }} meses</b>, según lo que entregó en sus últimos informes.
-          Corrija la cantidad, quite lo que no necesita o agregue otro insumo.
-        </p>
-      </div>
       <div class="rejilla mt-4">
         <AvisoBorrador v-if="borrador.recuperado.value && lineas.length" class="col-span-full" texto="Se recuperó la requisición que dejó a medias." @descartar="empezarDeNuevo" />
-        <EditorPedido v-model="lineas" :errores="erroresRenglon" :catalogo="catalogo" :nuevo-renglon="nuevoRenglon" :columnas="COLUMNAS" vacio="Nada sugerido según sus informes." />
+        <EditorPedido v-model="lineas" :errores="erroresRenglon" :catalogo="catalogo" :nuevo-renglon="nuevoRenglon" :columnas="COLUMNAS" />
         <aside class="tarjeta">
           <h2>Firmas</h2>
           <div><label for="sol" class="b-etiqueta">Solicita</label><input id="sol" v-model="cabecera.solicitante" class="b-campo" /></div>
@@ -303,7 +296,6 @@ onMounted(async () => {
           <button type="button" class="b-btn primario enviar" :disabled="enviando || !aEnviar.length || cabecera.solicitante.trim().length < 3 || !ubicacion" @click="enviar">
             <Icono nombre="trasladar" :tamano="22" /> {{ enviando ? 'Enviando…' : `Enviar a bodega (${aEnviar.length})` }}
           </button>
-          <p class="nota">Bodega la imprime en la Requisición Despacho de Almacén (FOR-ASB-01) cuando la despacha.</p>
         </aside>
       </div>
     </template>
@@ -317,7 +309,7 @@ onMounted(async () => {
         <label class="flex items-center gap-2 text-sm font-semibold"><input v-model="soloLosMios" type="checkbox" /> Solo lo que manejo</label>
       </div>
       <p v-if="informe?.informe" class="mt-2 text-sm font-semibold text-apagado">
-        Enviado el {{ new Date(informe.informe.capturadoEn).toLocaleDateString('es-GT') }}<template v-if="informe.informe.revisado"> · revisado por bodega</template>. Puede corregirlo y volver a enviarlo.
+        Enviado el {{ new Date(informe.informe.capturadoEn).toLocaleDateString('es-GT') }}<template v-if="informe.informe.revisado"> · revisado por bodega</template>
       </p>
 
       <form v-if="informe" class="mt-3" @submit.prevent="guardarInforme">
@@ -325,7 +317,7 @@ onMounted(async () => {
           <Icono nombre="buscar" :tamano="20" />
           <input v-model="buscarInsumo" type="search" placeholder="Buscar producto" aria-label="Buscar producto" />
         </label>
-        <p class="avance">{{ llenos }} de {{ visibles.length }} productos llenos · lo escrito se guarda en este teléfono hasta enviarlo</p>
+        <p class="avance">{{ llenos }} de {{ visibles.length }} productos llenos</p>
 
         <ul class="productos">
           <li v-for="(r, i) in visibles" :key="r.insumoId" class="producto" :class="{ lleno: lleno(r) }">
@@ -348,7 +340,7 @@ onMounted(async () => {
                 <input v-model="r.saldoInformado" type="text" inputmode="numeric" :placeholder="String(Math.max(0, saldo(r)))" :class="{ difiere: difiere(r) }" />
               </label>
             </div>
-            <p v-if="difiere(r)" class="prod-aviso">Contó {{ miles(entero(r.saldoInformado)) }} y debería tener {{ miles(saldo(r)) }}: bodega lo revisará con usted.</p>
+            <p v-if="difiere(r)" class="prod-aviso">Contado {{ miles(entero(r.saldoInformado)) }} · según el sistema {{ miles(saldo(r)) }}</p>
           </li>
           <li v-if="!visibles.length" class="b-vacio">{{ buscarInsumo ? 'Ningún producto con ese nombre.' : 'Bodega aún no le ha despachado nada. Quite «Solo lo que manejo» para informar cualquier producto.' }}</li>
         </ul>

@@ -147,7 +147,7 @@ function celda(r, c) {
   <section>
     <PasosCierre :estado="{ bres: ESTADO[estado] }">
       <template #acciones>
-        <RouterLink :to="`/inventario/pedir-ddriss?periodo=${cierre.periodo}`" class="b-btn primario"><Icono nombre="trasladar" :tamano="20" /> Hacer requisición a la DDRISS</RouterLink>
+        <RouterLink :to="`/inventario/pedir-ddriss?periodo=${cierre.periodo}`" class="b-btn primario"><Icono nombre="trasladar" :tamano="20" /> Requisición</RouterLink>
         <RouterLink :to="vista === 'servicio' ? `/imprimir/balance/${cierre.periodo}` : `/imprimir/bres/${cierre.periodo}`" target="_blank" class="b-btn secundario"><Icono nombre="imprimir" :tamano="20" /> {{ vista === 'servicio' ? 'Imprimir balance' : 'Imprimir' }}</RouterLink>
         <button type="button" class="b-btn secundario" @click="excel"><Icono nombre="hojaCalculo" :tamano="20" /> Excel</button>
         <button v-if="!cerrado" type="button" class="b-btn primario" :disabled="enviando" @click="generar">{{ guardado ? 'Volver a generar' : 'Generar BRES' }}</button>
@@ -171,7 +171,7 @@ function celda(r, c) {
     </div>
 
     <div v-if="datos?.serviciosSinInforme" class="b-aviso atencion mt-4 items-center justify-between">
-      <span>{{ datos.serviciosSinInforme }} {{ datos.serviciosSinInforme === 1 ? 'servicio no ha enviado' : 'servicios no han enviado' }} su informe: su entregado cuenta como cero.</span>
+      <span>Sin consumo capturado: {{ datos.serviciosSinInforme }} {{ datos.serviciosSinInforme === 1 ? 'puesto' : 'puestos' }} (cuentan como cero)</span>
       <RouterLink to="/inventario/informes" class="b-btn secundario chico">Capturar</RouterLink>
     </div>
 
@@ -189,7 +189,7 @@ function celda(r, c) {
           <option v-for="(c, clave) in CATEGORIA" :key="clave" :value="clave">{{ c.nombre }}</option>
         </select>
         <button type="button" class="chip-pedir-filtro" :class="{ on: soloPedir }" :aria-pressed="soloPedir" @click="soloPedir = !soloPedir">
-          Solo lo que hay que pedir <b>{{ totales.pedir }}</b>
+          Por pedir <b>{{ totales.pedir }}</b>
         </button>
         <div class="b-segmentado" role="radiogroup" aria-label="Vista">
           <button v-for="v in [['bres', 'BRES'], ['servicio', 'Por servicio']]" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="vista = v[0]">{{ v[1] }}</button>

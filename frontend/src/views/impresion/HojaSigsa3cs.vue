@@ -52,6 +52,7 @@ const anio = computed(() => route.query.desde?.slice(0, 4) ?? '');
 
 <template>
   <div v-if="datos" class="tres-cs hoja-propia">
+    <div class="no-imprimir controles"><button type="button" class="boton-primario" @click="imprimir">Imprimir</button></div>
     <section v-for="(hoja, h) in hojas" :key="h" class="hoja" :class="h > 0 ? 'salto' : ''">
       <header class="encabezado">
         <div>
@@ -159,7 +160,6 @@ const anio = computed(() => route.query.desde?.slice(0, 4) ?? '');
       </table>
       <p class="pagina">Hoja {{ h + 1 }} de {{ hojas.length }} · {{ datos.renglones.length }} consultas · del {{ datos.desde }} al {{ datos.hasta }}</p>
     </section>
-    <div class="no-imprimir controles"><button type="button" class="boton-primario" @click="imprimir">Imprimir</button></div>
   </div>
   <p v-else-if="error" class="p-8 text-red-700">{{ error }}</p>
   <p v-else class="p-8">Preparando el SIGSA-3CS…</p>

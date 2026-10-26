@@ -77,6 +77,19 @@ const DATOS = [
 const paginas = computed(() => props.hojas);
 const tamanoPx = (pt) => `${pt * ESCALA_TEXTO}pt`;
 
+/*
+ * El nombre del insumo, tan grande como quepa en su casilla (68.5 x 5.9 mm):
+ * hasta 9 pt en una línea; si es largo, baja a 7.5 pt y usa dos líneas (dos
+ * líneas de 7.5 pt con interlineado 1.1 miden 5.8 mm). Un carácter de Arial
+ * mide en promedio 0.55 de la letra.
+ */
+const ANCHO_NOMBRE = BORDES[1] - BORDES[0] - 2; // mm, sin el relleno
+function tamanoNombre(nombre) {
+  const largo = Math.max(1, String(nombre ?? '').length);
+  const enUnaLinea = ANCHO_NOMBRE / (largo * 0.55 * 0.3528);
+  return `${Math.min(9, Math.max(7.5, enUnaLinea)).toFixed(1)}pt`;
+}
+
 // El tamaño de página se fija mientras esta vista está abierta: oficio
 // horizontal y sin márgenes (los márgenes ya están en las posiciones). Una
 // página con nombre no la respetan todos los navegadores al imprimir.
@@ -105,7 +118,7 @@ onBeforeUnmount(() => estiloPagina?.remove());
 
       <!-- Renglones -->
       <template v-for="(r, i) in hoja" :key="r.insumoId">
-        <span class="celda izquierda medio nombre" :style="[celda(0, i), { fontSize: tamanoPx(7) }]">{{ r.vacio ? '' : r.nombreFormulario }}</span>
+        <span class="celda izquierda medio nombre" :style="[celda(0, i), { fontSize: tamanoNombre(r.nombreFormulario) }]">{{ r.vacio ? '' : r.nombreFormulario }}</span>
         <template v-if="!r.vacio">
           <span
             v-for="(clave, c) in DATOS"

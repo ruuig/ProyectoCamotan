@@ -76,7 +76,7 @@ async function solicitar() {
       ...(f.numeroTarjeta ? { numeroTarjeta: f.numeroTarjeta } : {}),
       ...(f.precioUnitario ? { precioUnitario: Number(f.precioUnitario) } : {}),
     });
-    aviso.value = `Oficio ${r.oficio.correlativo} creado. Necesita la autorización del director.`;
+    aviso.value = `Oficio ${r.oficio.correlativo} creado.`;
     solicitando.value = false;
     await cargar();
   } catch (fallo) {
@@ -220,7 +220,7 @@ onMounted(cargar);
               <button type="button" class="b-btn peligro chico" @click="elegirLote(l)">Solicitar</button>
             </li>
           </ul>
-          <p v-else class="b-vacio">No hay lotes vencidos, dañados ni retirados con existencia.</p>
+          <p v-else class="b-vacio">Nada por dar de baja.</p>
         </section>
       </div>
 

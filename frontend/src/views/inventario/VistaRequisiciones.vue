@@ -266,13 +266,12 @@ onMounted(() => {
         </button>
       </nav>
       <AtenderPedido v-if="abiertaPedido" :id="abiertaPedido" class="mt-3" @listo="pedidoListo" />
-      <p v-else-if="!porAtender.length" class="b-vacio">No hay requisiciones por despachar.</p>
+      <p v-else-if="!porAtender.length" class="b-vacio">Sin requisiciones por despachar.</p>
     </div>
 
     <!-- Entregar sin pedido -->
     <div v-if="vista === 'nueva'" class="rejilla mt-5">
       <form class="space-y-4" @submit.prevent="entregar">
-        <AvisoBorrador v-if="borrador.recuperado.value && renglones.length" texto="Se recuperó la entrega que dejó a medias." @descartar="empezarDeNuevo" />
         <div class="grid gap-3 sm:grid-cols-12">
           <div class="sm:col-span-5">
             <label for="lugar" class="b-etiqueta">Se entrega a</label>
@@ -324,7 +323,7 @@ onMounted(() => {
           <button type="button" class="b-btn secundario" :disabled="!elegido || !entero(cantidad)" @click="agregarInsumo"><Icono nombre="agregar" :tamano="18" /> Agregar</button>
         </div>
         <details class="text-sm">
-          <summary class="cursor-pointer font-semibold text-apagado">Equipo u otro artículo que no está en el catálogo</summary>
+          <summary class="cursor-pointer font-semibold text-apagado">Artículo sin catálogo</summary>
           <div class="agregar mt-2">
             <input v-model="libre.descripcion" placeholder="Descripción: marca, modelo, Inv. No., SICOIN, valor" aria-label="Descripción" class="b-campo min-w-[16rem] flex-1" />
             <input v-model="libre.unidadMedida" placeholder="Unidad" aria-label="Unidad de medida" class="b-campo w-[120px]" />
@@ -335,7 +334,7 @@ onMounted(() => {
 
         <div class="b-tabla-marco">
           <table class="b-tabla">
-            <thead><tr><th class="n">No.</th><th>Descripción del artículo <span class="no-imprime">· lote (no se imprime)</span></th><th>Unidad</th><th class="n">Cantidad</th><th class="n">En bodega</th><th /></tr></thead>
+            <thead><tr><th class="n">No.</th><th>Descripción del artículo</th><th>Unidad</th><th class="n">Cantidad</th><th class="n">En bodega</th><th /></tr></thead>
             <tbody>
               <tr v-for="(r, i) in renglones" :key="i">
                 <td class="n">{{ i + 1 }}</td>
@@ -362,13 +361,13 @@ onMounted(() => {
                 <td class="n" :class="r.enBodega != null && r.enBodega < entero(r.cantidad) ? 'falta' : ''">{{ r.enBodega == null ? '—' : miles(r.enBodega) }}</td>
                 <td class="n"><button type="button" class="quitar" aria-label="Quitar" @click="renglones.splice(i, 1)"><Icono nombre="cerrar" :tamano="16" /></button></td>
               </tr>
-              <tr v-if="!renglones.length"><td colspan="6" class="b-vacio">Agregue lo que se entrega.</td></tr>
+              <tr v-if="!renglones.length"><td colspan="6" class="b-vacio">Sin productos.</td></tr>
             </tbody>
           </table>
         </div>
         <p v-if="noAlcanza.length" class="b-aviso atencion text-sm">No alcanza en bodega: {{ noAlcanza.map((r) => r.descripcion).join(', ') }}.</p>
         <div class="flex flex-wrap gap-2">
-          <input v-model="nueva.observaciones" maxlength="1000" placeholder="Observaciones: Procedente donación OPS/OMS…" aria-label="Observaciones" class="b-campo min-w-[12rem] flex-1" />
+          <input v-model="nueva.observaciones" maxlength="1000" placeholder="Observaciones" aria-label="Observaciones" class="b-campo min-w-[12rem] flex-1" />
           <button type="submit" class="b-btn primario" :disabled="enviando || !renglones.length || !nueva.ubicacionId || noAlcanza.length > 0">
             <Icono nombre="imprimir" :tamano="20" /> {{ enviando ? 'Registrando…' : 'Entregar e imprimir' }}
           </button>
@@ -409,7 +408,7 @@ onMounted(() => {
     <!-- Entregadas -->
     <div v-if="vista === 'registradas'" class="rejilla-lista mt-5">
       <div>
-        <label class="mb-2 flex items-center gap-2 text-sm font-semibold"><input v-model="soloSinNumero" type="checkbox" /> Solo las que no tienen número de formulario</label>
+        <label class="mb-2 flex items-center gap-2 text-sm font-semibold"><input v-model="soloSinNumero" type="checkbox" /> Sin número de formulario</label>
         <div class="b-tabla-marco lista">
           <table class="b-tabla">
             <thead><tr><th>No.</th><th>Fecha</th><th>Se entregó a</th><th>Solicitante</th><th class="n">Renglones</th><th class="n">Unidades</th><th /></tr></thead>

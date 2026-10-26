@@ -77,7 +77,7 @@ const delExcel = computed(() => datos.value?.fuente === 'excel');
       </div>
 
       <div class="mt-3 flex items-center justify-between gap-3">
-        <span class="text-sm font-bold text-apagado">{{ filas.length }} insumos<template v-if="delExcel"> · cifras del Excel del centro</template></span>
+        <span class="text-sm font-bold text-apagado">{{ filas.length }} insumos<template v-if="delExcel"> · del Excel</template></span>
         <div class="b-segmentado" role="radiogroup" aria-label="Insumos">
           <button v-for="o in [[true, 'Con existencia o movimiento'], [false, 'Todos']]" :key="String(o[0])" type="button" role="radio" :aria-checked="soloMovimiento === o[0]" :class="soloMovimiento === o[0] ? 'on' : ''" @click="soloMovimiento = o[0]">{{ o[1] }}</button>
         </div>

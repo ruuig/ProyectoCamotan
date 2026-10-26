@@ -158,6 +158,8 @@
   padding: 0 1.5cm;
   font-family: Arial, Helvetica, sans-serif;
 }
+/* Hojas en carta horizontal (BRES en hoja blanca, balance): más anchas en pantalla. */
+.hoja-impresion.hoja-apaisada { max-width: 11in; }
 .hoja-impresion .marco-impresion { width: 100%; border-collapse: collapse; }
 .hoja-impresion .marco-impresion > thead > tr > td,
 .hoja-impresion .marco-impresion > tfoot > tr > td,

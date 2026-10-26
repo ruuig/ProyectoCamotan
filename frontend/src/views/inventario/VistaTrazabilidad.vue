@@ -178,7 +178,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
             </button>
           </li>
         </ul>
-        <p v-else-if="textoPaciente.trim().length >= 2" class="resultados vacia">Nadie con ese nombre ha recibido medicamentos.</p>
+        <p v-else-if="textoPaciente.trim().length >= 2" class="resultados vacia">Sin entregas.</p>
       </div>
       <div v-else class="relative w-full sm:w-[420px]">
         <label class="b-buscar block">
@@ -208,11 +208,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
 
     <!-- ===== Por paciente ===== -->
     <template v-if="modo === 'paciente'">
-      <div v-if="!delPaciente" class="b-panel inicio mt-5">
-        <Icono nombre="pacientes" :tamano="48" :grosor="1.4" class="text-[#94A3B8]" />
-        <p class="text-lg font-bold text-tinta">Busque a la persona para ver qué lotes recibió</p>
-      </div>
-      <template v-else>
+      <template v-if="delPaciente">
         <div class="ficha-paciente mt-5">
           <span class="ic-paciente"><Icono nombre="pacientes" :tamano="26" /></span>
           <div class="min-w-0 flex-1">
@@ -224,7 +220,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
           <div v-if="delPaciente.conRetiroActivo" class="cifra-paciente rojo"><b>{{ delPaciente.conRetiroActivo }}</b><span>en retiro</span></div>
         </div>
 
-        <p v-if="!delPaciente.entregas.length" class="b-vacio">No ha recibido medicamentos.</p>
+        <p v-if="!delPaciente.entregas.length" class="b-vacio">Sin entregas.</p>
         <section v-for="(g, i) in porConsulta" :key="i" class="b-panel consulta-traza mt-3">
           <header class="b-panel-cabeza">
             <div>
@@ -251,12 +247,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
     </template>
 
     <template v-else>
-    <div v-if="!datos" class="b-panel inicio mt-5">
-      <Icono nombre="trazabilidad" :tamano="48" :grosor="1.4" class="text-[#94A3B8]" />
-      <p class="text-lg font-bold text-tinta">Busque un lote por su número o por el nombre del insumo</p>
-    </div>
-
-    <template v-else>
+    <template v-if="datos">
       <div v-if="datos.retiroActivo" class="b-aviso error mt-4 items-center justify-between">
         <span>Bajo retiro sanitario · {{ datos.retiroActivo.referencia }}</span>
         <RouterLink :to="`/inventario/retiros/${datos.retiroActivo.id}`" class="b-btn peligro chico">Ver retiro</RouterLink>
@@ -365,7 +356,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
             </span>
             <b class="tabular-nums text-tinta">{{ p.sentido === 'a_farmacia' ? '' : '−' }}{{ miles(p.cantidad) }}</b>
           </li>
-          <li v-if="!datos.pasosFarmacia?.length" class="b-vacio">Este lote no ha pasado a la farmacia.</li>
+          <li v-if="!datos.pasosFarmacia?.length" class="b-vacio">Sin paso a farmacia.</li>
         </ul>
 
         <ul v-else-if="detalle === 'servicios'" class="lista">
@@ -379,7 +370,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
             </span>
             <b class="tabular-nums text-tinta">{{ miles(g.cantidad) }}</b>
           </li>
-          <li v-if="!porServicio.length" class="b-vacio">Este lote no se ha trasladado a ningún servicio.</li>
+          <li v-if="!porServicio.length" class="b-vacio">Sin traslados.</li>
         </ul>
 
         <ul v-else-if="detalle === 'pacientes'" class="lista">
@@ -392,7 +383,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
             </span>
             <b class="tabular-nums text-tinta">{{ miles(p.cantidad) }}</b>
           </li>
-          <li v-if="!datos.pacientes.length" class="b-vacio">Este lote no se ha entregado a pacientes.</li>
+          <li v-if="!datos.pacientes.length" class="b-vacio">Sin entregas.</li>
         </ul>
 
         <ol v-else class="lista">

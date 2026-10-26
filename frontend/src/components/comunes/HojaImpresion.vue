@@ -52,6 +52,15 @@ onMounted(() => {
 
 <template>
   <div class="hoja-impresion mx-auto bg-white text-slate-900">
+    <!-- Controles: no salen en el papel -->
+    <div class="no-imprimir mb-4 flex gap-3 border-b border-slate-200 pb-4">
+      <button type="button" class="boton-primario" @click="imprimir">
+        Imprimir
+      </button>
+      <button type="button" class="boton-secundario" @click="volver">
+        Volver
+      </button>
+    </div>
     <!--
       La hoja se imprime sin márgenes de página (así el navegador no agrega el
       enlace, la fecha ni el título). El margen lo dan estas filas vacías, que
@@ -100,14 +109,5 @@ onMounted(() => {
       </td></tr></tbody>
     </table>
 
-    <!-- Controles: no salen en el papel -->
-    <div class="no-imprimir mt-6 flex gap-3 border-t border-slate-200 pt-4">
-      <button type="button" class="boton-primario" @click="imprimir">
-        Imprimir
-      </button>
-      <button type="button" class="boton-secundario" @click="volver">
-        Volver
-      </button>
-    </div>
   </div>
 </template>

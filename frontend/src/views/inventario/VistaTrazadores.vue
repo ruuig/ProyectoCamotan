@@ -37,7 +37,7 @@ async function cargar() {
 watch([formato, periodo], cargar);
 onMounted(cargar);
 
-const FUENTE = { cerrado: 'BRES cerrado', borrador: 'BRES en borrador', en_curso: 'Mes en curso: existencia de hoy' };
+const FUENTE = { cerrado: 'BRES cerrado', borrador: 'BRES en borrador', en_curso: 'Existencia de hoy' };
 const mesCorto = (p) => nombrePeriodo(p).slice(0, 3);
 
 /* Para cuántos meses alcanza: el mismo color que el semáforo del BRES. */
@@ -75,7 +75,7 @@ const alto = (m) => `${Math.max(6, Math.min(100, ((m ?? 0) / 6) * 100))}%`;
   <section>
     <header class="b-cabecera">
       <div>
-        <p class="b-antetitulo">Bodega · informe a la DDRISS</p>
+        <p class="b-antetitulo">Bodega</p>
         <h1 class="b-titulo">Trazadores</h1>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -109,15 +109,15 @@ const alto = (m) => `${Math.max(6, Math.min(100, ((m ?? 0) / 6) * 100))}%`;
         <template v-for="s in secciones" :key="s.titulo">
           <div class="seccion">{{ s.titulo }}</div>
           <div class="fila cabeza">
-            <span class="n">No.</span><span>Producto</span><span class="n">Promedio al mes</span><span class="n">Existencia</span><span class="n">Alcanza</span>
-            <span class="historia-cab">Cómo va <small>{{ datos.mesesHistoria.map(mesCorto).join(' · ') }}</small></span>
+            <span class="n">No.</span><span>Producto</span><span class="n">Promedio mensual</span><span class="n">Existencia</span><span class="n">Meses</span>
+            <span class="historia-cab">Últimos 6 meses <small>{{ datos.mesesHistoria.map(mesCorto).join(' · ') }}</small></span>
           </div>
           <div v-for="r in s.renglones" :key="r.clave" class="fila" :class="{ apagada: !r.maneja }">
             <span class="n no">{{ r.no }}</span>
             <span class="producto">
               <b>{{ r.texto }}</b>
               <small v-if="r.maneja && r.productos.length" class="catalogo">{{ r.productos.join(' + ') }}</small>
-              <small v-else class="catalogo">No se maneja en el centro: sale vacío</small>
+              <small v-else class="catalogo">No se maneja</small>
             </span>
             <span class="n">{{ r.maneja ? miles(Math.round(r.pmdr ?? 0)) : '' }}</span>
             <span class="n fuerte">{{ r.maneja ? miles(r.existencia ?? 0) : '' }}</span>

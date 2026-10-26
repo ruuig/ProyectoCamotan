@@ -241,7 +241,7 @@ onMounted(cargar);
                 </button>
               </div>
             </div>
-            <p v-if="!insumosVisibles.length" class="b-vacio">Busque el insumo o el lote de la alerta.</p>
+            <p v-if="!insumosVisibles.length" class="b-vacio">Sin resultados.</p>
           </div>
         </div>
       </div>

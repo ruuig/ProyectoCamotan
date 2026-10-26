@@ -92,7 +92,7 @@ onMounted(async () => {
         </div>
         <SelectorMes v-if="modo === 'mes'" v-model="periodo" />
         <input v-else-if="modo === 'desde'" v-model="desde" type="date" aria-label="Desde" class="b-campo w-[180px]" />
-        <RouterLink :to="enlaceTodos" target="_blank" class="b-btn secundario chico"><Icono nombre="imprimir" :tamano="16" /> Imprimir todos los que se movieron</RouterLink>
+        <RouterLink :to="enlaceTodos" target="_blank" class="b-btn secundario chico"><Icono nombre="imprimir" :tamano="16" /> Imprimir todos</RouterLink>
       </div>
     </header>
 
@@ -180,7 +180,7 @@ onMounted(async () => {
               <td class="n">{{ m.renglones }}</td>
               <td class="n fuerte">{{ miles(m.saldo) }}</td>
             </tr>
-            <tr v-if="!movidos.length"><td colspan="4" class="b-vacio">No hubo movimientos en ese tramo.</td></tr>
+            <tr v-if="!movidos.length"><td colspan="4" class="b-vacio">Sin movimientos.</td></tr>
           </tbody>
         </table>
       </div>

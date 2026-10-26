@@ -75,19 +75,14 @@ function creado(insumo) {
 const faltaTodo = computed(() => filas.value.reduce((s, g) => s + Math.max(0, g.falta - llego(g)), 0));
 const listo = computed(() => conLlegada.value.length > 0 && !incompletos.value.length);
 
-/** «Llegó completo»: pone lo que falta en el primer lote de ese producto. */
+/** «Completo»: pone lo que falta en el primer lote de ese producto. */
 function completo(g) {
   g.lotes[0].cantidad = String(g.falta - g.lotes.slice(1).reduce((s, l) => s + entero(l.cantidad), 0));
   g.revisado = true;
   g.abierto = false;
 }
-/** «No llegó»: queda revisado y pendiente en la requisición. */
-function noLlego(g) {
-  g.lotes = [{ numeroLote: '', fechaVence: '', cantidad: '' }];
-  g.revisado = true;
-  g.abierto = false;
-}
-function otraCantidad(g, evento) {
+/** «Incompleto»: se anota cuánto vino (0 si no vino nada); lo demás queda pendiente. */
+function incompleto(g, evento) {
   g.revisado = true;
   g.abierto = true;
   const tarjeta = evento.target.closest('.producto');
@@ -114,7 +109,7 @@ async function registrar() {
         : { id: g.id, cantidad: llego(g) })),
     }, nuevaClaveIdempotencia());
     const total = conLlegada.value.reduce((s, g) => s + llego(g), 0);
-    emit('aviso', `Recibido: ${miles(total)} unidades de ${conLlegada.value.length} productos.${faltaTodo.value && !cerrar.value ? ` Quedan ${miles(faltaTodo.value)} unidades pendientes en esta requisición.` : ''}`);
+    emit('aviso', `Recibido: ${miles(total)} unidades, ${conLlegada.value.length} productos.${faltaTodo.value && !cerrar.value ? ` Pendiente: ${miles(faltaTodo.value)} unidades.` : ''}`);
     borrador.limpiar();
     elegida.value = null;
     filas.value = [];
@@ -156,10 +151,10 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
     <template v-else>
       <div class="cabeza">
         <div>
+          <button type="button" class="b-btn secundario chico mb-2" @click="elegida = null"><Icono nombre="volver" :tamano="16" :grosor="2.4" /> Volver</button>
           <h2 class="paso-titulo">Requisición {{ elegida.numero ? `N.º ${textoNumero(elegida)}` : `del ${fecha(elegida.fechaSolicitud)}` }}</h2>
-          <p class="sub">{{ elegida.almacen }} · anote cuánto llegó de cada producto, con su lote y vencimiento</p>
+          <p class="sub">{{ elegida.almacen }}</p>
         </div>
-        <button type="button" class="b-btn chico secundario" @click="elegida = null">Elegir otra</button>
       </div>
 
       <div class="avance">
@@ -177,8 +172,7 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
             <span class="marca"><Icono :nombre="llego(g) ? 'correcto' : 'cerrar'" :tamano="18" :grosor="3" /></span>
             <span class="min-w-0 flex-1">
               <b class="nombre">{{ g.descripcion }}</b>
-              <small v-if="llego(g)">Llegaron {{ miles(llego(g)) }} {{ g.unidadMedida }}<template v-if="conLote(g)"> · lote {{ g.lotes.map((l) => l.numeroLote).filter(Boolean).join(', ') }}</template></small>
-              <small v-else>No llegó · queda pendiente</small>
+              <small>{{ llego(g) >= g.falta ? 'Completo' : 'Incompleto' }} · {{ miles(llego(g)) }}<template v-if="llego(g) < g.falta"> de {{ miles(g.falta) }}</template> {{ g.unidadMedida }}<template v-if="conLote(g) && llego(g)"> · lote {{ g.lotes.map((l) => l.numeroLote).filter(Boolean).join(', ') }}</template></small>
             </span>
             <span class="editar"><Icono nombre="lapiz" :tamano="16" /></span>
           </button>
@@ -187,22 +181,21 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
             <div class="info">
               <b class="nombre">{{ g.descripcion }}</b>
               <p v-if="!g.insumoId" class="libre">
-                No está en el sistema.
-                <button type="button" @click="creandoPara = g">Crearlo para que entre a existencias</button>
+                Sin catálogo
+                <button type="button" @click="creandoPara = g">Crear producto</button>
               </p>
-              <p v-else-if="g.creado" class="libre creado">Producto creado: anote el lote y el vencimiento.</p>
-              <p class="pidio">Faltan <b>{{ miles(g.falta) }}</b> {{ g.unidadMedida }}<template v-if="g.cantidadDespachada"> · ya llegaron {{ miles(g.cantidadDespachada) }}</template></p>
+              <p v-else-if="g.creado" class="libre creado">Producto creado</p>
+              <p class="pidio">Pedido <b>{{ miles(g.falta) }}</b> {{ g.unidadMedida }}<template v-if="g.cantidadDespachada"> · recibido antes {{ miles(g.cantidadDespachada) }}</template></p>
             </div>
 
             <div v-if="!g.revisado" class="decidir">
-              <button type="button" class="b-btn exito grande" @click="completo(g)"><Icono nombre="correcto" :tamano="20" /> Llegó completo</button>
-              <button type="button" class="b-btn secundario grande" @click="otraCantidad(g, $event)"><Icono nombre="lapiz" :tamano="18" /> Otra cantidad</button>
-              <button type="button" class="b-btn secundario grande no" @click="noLlego(g)"><Icono nombre="cerrar" :tamano="18" /> No llegó</button>
+              <button type="button" class="b-btn exito grande" @click="completo(g)"><Icono nombre="correcto" :tamano="20" /> Completo</button>
+              <button type="button" class="b-btn secundario grande" @click="incompleto(g, $event)"><Icono nombre="lapiz" :tamano="18" /> Incompleto</button>
             </div>
 
             <div v-else class="lotes">
               <div v-for="(l, k) in g.lotes" :key="k" class="lote">
-                <label class="cant"><span>Llegó</span><input v-model="l.cantidad" inputmode="numeric" placeholder="0" class="b-campo num" /></label>
+                <label class="cant"><span>Cantidad</span><input v-model="l.cantidad" inputmode="numeric" placeholder="0" class="b-campo num" /></label>
                 <template v-if="conLote(g)">
                   <label class="nlote"><span>Lote</span><input v-model="l.numeroLote" maxlength="60" class="b-campo font-mono" :required="Boolean(entero(l.cantidad))" /></label>
                   <label class="vence"><span>Vence</span><input v-model="l.fechaVence" type="date" class="b-campo" :required="Boolean(entero(l.cantidad))" /></label>
@@ -212,7 +205,7 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
               <div class="acciones-lote">
                 <button v-if="conLote(g)" type="button" class="b-btn chico secundario" @click="g.lotes.push({ numeroLote: '', fechaVence: '', cantidad: '' })"><Icono nombre="agregar" :tamano="16" /> Otro lote</button>
                 <button type="button" class="b-btn chico primario" :disabled="faltaDato(g)" @click="g.abierto = false"><Icono nombre="correcto" :tamano="16" /> Listo</button>
-                <span v-if="llego(g) > g.falta" class="exceso">Llegó más de lo que faltaba</span>
+                <span v-if="llego(g) > g.falta" class="exceso">Más de lo pedido</span>
               </div>
             </div>
           </template>
@@ -223,11 +216,11 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
       <div class="pie">
         <label v-if="faltaTodo > 0 && conLlegada.length" class="cerrar">
           <input v-model="cerrar" type="checkbox" />
-          Ya no va a llegar lo que falta ({{ miles(faltaTodo) }}): cerrar la requisición
+          Cerrar la requisición (pendiente {{ miles(faltaTodo) }})
         </label>
-        <p v-if="incompletos.length" class="falta-dato">Falta el lote o el vencimiento de {{ incompletos.length }} producto(s).</p>
+        <p v-if="incompletos.length" class="falta-dato">Sin lote o vencimiento: {{ incompletos.length }}</p>
         <button type="button" class="b-btn primario registrar" :disabled="enviando || !listo" @click="registrar">
-          <Icono nombre="recibir" :tamano="22" /> {{ enviando ? 'Registrando…' : `Registrar lo que llegó (${conLlegada.length})` }}
+          <Icono nombre="recibir" :tamano="22" /> {{ enviando ? 'Registrando…' : `Registrar (${conLlegada.length})` }}
         </button>
       </div>
     </template>
@@ -274,9 +267,8 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
 .solo input { width: 20px; height: 20px; }
 .barra { height: 10px; border-radius: 6px; background: #E5E9F0; overflow: hidden; }
 .barra span { display: block; height: 100%; background: #1A8F57; transition: width 0.2s; }
-.decidir { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-content: center; }
+.decidir { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-content: center; }
 .grande { min-height: 52px; font-size: 16px; border-radius: 14px; }
-.decidir .no { color: #A83232; }
 .producto.nollego { border-color: #F1C6C6; background: #FFF8F8; }
 .producto.plegado { padding: 0; grid-template-columns: 1fr; }
 .linea { display: flex; width: 100%; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; }
@@ -300,7 +292,6 @@ onMounted(() => cargar().catch((f) => emit('error', f.message)));
   .lote .nlote { grid-column: 1 / -1; }
   .decidir { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .grande { font-size: 15px; padding-left: 8px; padding-right: 8px; }
-  .decidir .exito { grid-column: 1 / -1; }
   .lote .b-campo { font-size: 16px; min-height: 48px; }
   .producto { padding: 12px; }
   .pie { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }

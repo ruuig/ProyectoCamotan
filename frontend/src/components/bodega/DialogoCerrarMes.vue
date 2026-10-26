@@ -41,8 +41,8 @@ async function siguiente() {
           <li>No se puede deshacer.</li>
         </ul>
         <footer>
-          <button type="button" class="b-btn secundario" @click="emit('cancelar')">No, todavía no</button>
-          <button type="button" class="b-btn primario" @click="siguiente">Sí, quiero cerrarlo</button>
+          <button type="button" class="b-btn secundario" @click="emit('cancelar')">Cancelar</button>
+          <button type="button" class="b-btn primario" @click="siguiente">Cerrar el mes</button>
         </footer>
       </template>
 

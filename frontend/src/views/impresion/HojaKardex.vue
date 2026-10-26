@@ -190,9 +190,6 @@ onMounted(async () => {
     <label class="flex items-center gap-1"><input v-model="guias" type="checkbox" /> Ver casillas</label>
     <label class="flex items-center gap-1"><input v-model="anotarReclamar" type="checkbox" /> Anotar faltantes por reclamar</label>
     <button type="button" class="ml-auto rounded bg-black px-3 py-1.5 font-bold text-white" @click="imprimir">Imprimir</button>
-    <p class="w-full text-xs text-slate-600">
-      Tarjeta en papel oficio horizontal. Las casillas punteadas solo se ven aquí. Para el reverso, voltee la tarjeta y elija "Solo reverso".
-    </p>
   </div>
   <p v-if="datos && !paginas.length" class="no-imprimir p-6 text-center">No hay movimientos para imprimir.</p>
 
@@ -234,7 +231,8 @@ onMounted(async () => {
 .der { justify-content: flex-end; }
 .izq { justify-content: flex-start; }
 .abajo { align-items: flex-end; padding-bottom: 0.5mm; }
-.chica { font-size: 8pt; }
+/* La fecha cabe completa en su columna de 20 mm con 10 pt. */
+.chica { font-size: 10pt; }
 .arial { font-family: Arial, sans-serif; font-size: 10pt; }
 .con-guias .celda { outline: 1px dashed #CBD5E1; outline-offset: -1px; }
 @media print {

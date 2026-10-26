@@ -53,6 +53,22 @@ export default {
   estadoInformes: (periodo) => http.get(`/bodega/informes?${consulta({ periodo })}`),
   informe: (ubicacionId, periodo) => http.get(`/bodega/informes/${ubicacionId}/${periodo}`),
   guardarInforme: (ubicacionId, periodo, datos) => http.put(`/bodega/informes/${ubicacionId}/${periodo}`, datos),
+  // Excel del consumo de cada territorio: el «pedazo» del balance de sus lugares.
+  territorios: () => http.get('/bodega/territorios'),
+  async bajarExcelConsumo(periodo, territorio) {
+    const url = await http.descargarArchivo(`/bodega/consumo/excel?${consulta({ periodo, territorioId: territorio?.id })}`);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Consumo ${periodo}${territorio ? ` - Territorio ${territorio.numero} ${territorio.encargado}` : ''}.xlsx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  },
+  subirExcelConsumo(periodo, archivo) {
+    // Algunos equipos no le ponen tipo al .xlsx: se manda con el suyo.
+    const tipo = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    const conTipo = archivo.type === tipo ? archivo : new File([archivo], archivo.name, { type: tipo });
+    return http.subirArchivo(`/bodega/consumo/excel?${consulta({ periodo })}`, conTipo);
+  },
   revisarInforme: (ubicacionId, periodo, observacion) =>
     http.post(`/bodega/informes/${ubicacionId}/${periodo}/revisar`, { observacion }),
 

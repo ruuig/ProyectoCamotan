@@ -149,6 +149,38 @@ async function cargarInforme() {
   }
 }
 watch([periodo, () => ubicacion.value?.id], () => { if (ver.value === 'informe') cargarInforme(); });
+
+// El Excel de su territorio (todos sus lugares), como el que le daba la bodega.
+const bajandoExcel = ref(false);
+async function bajarExcel() {
+  bajandoExcel.value = true;
+  error.value = '';
+  try {
+    await bodega.bajarExcelConsumo(periodo.value);
+  } catch (fallo) {
+    error.value = fallo.message;
+  } finally {
+    bajandoExcel.value = false;
+  }
+}
+const subiendoExcel = ref(false);
+async function subirExcel(evento) {
+  const archivo = evento.target.files?.[0];
+  evento.target.value = '';
+  if (!archivo) return;
+  subiendoExcel.value = true;
+  error.value = '';
+  aviso.value = '';
+  try {
+    const r = await bodega.subirExcelConsumo(periodo.value, archivo);
+    aviso.value = `Cargado: ${r.lugares.map((l) => `${l.nombre} (${l.renglones})`).join(', ')}`;
+    await cargarInforme();
+  } catch (fallo) {
+    error.value = fallo.message;
+  } finally {
+    subiendoExcel.value = false;
+  }
+}
 watch(ver, (v) => {
   error.value = '';
   if (v === 'informe' && !informe.value) cargarInforme();
@@ -306,7 +338,14 @@ onMounted(async () => {
         <div class="b-segmentado" role="radiogroup" aria-label="Mes">
           <button v-for="p in PERIODOS" :key="p" type="button" role="radio" :aria-checked="periodo === p" :class="periodo === p ? 'on' : ''" @click="periodo = p">{{ nombreMes(p) }}</button>
         </div>
-        <label class="flex items-center gap-2 text-sm font-semibold"><input v-model="soloLosMios" type="checkbox" /> Solo lo que manejo</label>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="b-btn secundario chico" :disabled="bajandoExcel" @click="bajarExcel"><Icono nombre="descargar" :tamano="16" /> {{ bajandoExcel ? 'Preparando…' : 'Bajar Excel' }}</button>
+          <label class="b-btn secundario chico cursor-pointer" :class="{ 'opacity-60': subiendoExcel }">
+            <Icono nombre="recibir" :tamano="16" /> {{ subiendoExcel ? 'Cargando…' : 'Subir Excel' }}
+            <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only" :disabled="subiendoExcel" @change="subirExcel" />
+          </label>
+          <label class="flex items-center gap-2 text-sm font-semibold"><input v-model="soloLosMios" type="checkbox" /> Solo lo que manejo</label>
+        </div>
       </div>
       <p v-if="informe?.informe" class="mt-2 text-sm font-semibold text-apagado">
         Enviado el {{ new Date(informe.informe.capturadoEn).toLocaleDateString('es-GT') }}<template v-if="informe.informe.revisado"> · revisado por bodega</template>

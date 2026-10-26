@@ -27,6 +27,7 @@ model Establecimiento {
   creadoEn     DateTime @default(now()) @map("creado_en")
 
   usuarios                  Usuario[]
+  territorios               Territorio[]
   configLogistica           ConfiguracionLogistica?
   demandaNoAtendida         DemandaNoAtendida[]
   inventariosFisicos        InventarioFisico[]
@@ -1092,8 +1093,11 @@ model Ubicacion {
   orden             Int      @default(0)
   activo            Boolean  @default(true)
   creadoEn          DateTime @default(now()) @map("creado_en")
+  // Territorio al que pertenece: su encargado informa y pide por todos sus lugares.
+  territorioId      Int?     @map("territorio_id")
 
   establecimiento Establecimiento   @relation(fields: [establecimientoId], references: [id])
+  territorio      Territorio?       @relation(fields: [territorioId], references: [id], onDelete: SetNull)
   traslados       Traslado[]
   informes        InformeServicio[]
   requisiciones   Requisicion[]
@@ -1101,6 +1105,22 @@ model Ubicacion {
 
   @@unique([establecimientoId, nombre], map: "ubicacion_nombre_unico")
   @@map("ubicacion")
+}
+
+/// Territorio del municipio: un encargado responde por varios centros y
+/// puestos (sus lugares). Con él baja y sube el Excel del consumo del mes.
+model Territorio {
+  id                Int     @id @default(autoincrement())
+  establecimientoId Int     @map("establecimiento_id")
+  numero            Int
+  encargado         String
+  activo            Boolean @default(true)
+
+  establecimiento Establecimiento @relation(fields: [establecimientoId], references: [id])
+  ubicaciones     Ubicacion[]
+
+  @@unique([establecimientoId, numero], map: "territorio_numero_unico")
+  @@map("territorio")
 }
 
 model Traslado {

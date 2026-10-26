@@ -16,6 +16,7 @@ const { errorDestino, errorLotes, registrarTraslado } = require('../services/tra
 const { enUbicacion } = require('../services/inventario.service');
 const bresService = require('../services/bres.service');
 const trazadores = require('../services/trazadores.service');
+const consumoExcel = require('../services/consumoExcel.service');
 const { kardexDe, encabezadoKardex } = require('../services/kardex.service');
 
 const ETIQUETA_TIPO_UBICACION = {
@@ -705,6 +706,56 @@ async function kardex(req, res) {
   res.json({ periodo: periodo ?? null, ubicacion, encabezado: await encabezadoKardex(req.usuario.establecimientoId, ubicacion), tarjetas });
 }
 
+// --- Excel del consumo de cada territorio -----------------------------------------
+
+/** Territorios con sus lugares. El encargado de servicio ve solo el suyo. */
+async function territorios(req, res) {
+  const lista = await consumoExcel.territorios(req.usuario.establecimientoId);
+  if (req.usuario.rol !== 'servicio') return res.json({ territorios: lista });
+  const propio = await consumoExcel.territorioDeUsuario(req.usuario);
+  res.json({ territorios: lista.filter((t) => t.id === propio) });
+}
+
+/** El territorio que puede manejar quien pide: el indicado, o el suyo si es encargado. */
+async function territorioPedido(req) {
+  if (req.usuario.rol !== 'servicio') {
+    if (!req.query.territorioId) throw Object.assign(new Error('Indique el territorio'), { status: 400, codigo: 'sin_territorio', mensaje: 'Indique el territorio' });
+    return Number(req.query.territorioId);
+  }
+  const propio = await consumoExcel.territorioDeUsuario(req.usuario);
+  if (!propio) throw Object.assign(new Error('Su centro o puesto no tiene territorio asignado'), { status: 409, codigo: 'sin_territorio', mensaje: 'Su centro o puesto no tiene territorio asignado' });
+  return propio;
+}
+
+/** Descarga el Excel del consumo del mes de un territorio, ya llenado con lo que sabe el sistema. */
+async function excelConsumo(req, res) {
+  const territorioId = await territorioPedido(req);
+  const { libro, nombre } = await consumoExcel.libroDelTerritorio(req.usuario.establecimientoId, territorioId, req.query.periodo);
+  await req.bitacora({ accion: 'exportar', entidad: 'reporte_servicio', detalle: `Excel de consumo ${req.query.periodo}, territorio ${territorioId}` });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}`);
+  await libro.xlsx.write(res);
+  res.end();
+}
+
+/** Sube el Excel llenado: queda como el informe del mes de cada lugar. */
+async function subirExcelConsumo(req, res, next) {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return next({ status: 400, codigo: 'archivo_vacio', mensaje: 'No llegó ningún archivo' });
+  let permitidos = null;
+  if (req.usuario.rol === 'servicio') {
+    const propio = await territorioPedido(req);
+    const lugares = await prisma.ubicacion.findMany({ where: { territorioId: propio }, select: { id: true } });
+    permitidos = new Set(lugares.map((u) => u.id));
+  }
+  const r = await consumoExcel.cargarLibro(req.usuario.establecimientoId, req.body, req.query.periodo, req.usuario.id, permitidos);
+  await req.bitacora({
+    accion: 'actualizar',
+    entidad: 'reporte_servicio',
+    detalle: `Consumo ${req.query.periodo} desde Excel: ${r.lugares.map((l) => `${l.nombre} (${l.renglones})`).join(', ')}`,
+  });
+  res.json(r);
+}
+
 /** Informe de trazadores del mes (por defecto, el mes en curso). */
 async function trazador(req, res) {
   const local = new Date(Date.now() - 6 * 3600000);
@@ -713,6 +764,9 @@ async function trazador(req, res) {
 }
 
 module.exports = {
+  territorios,
+  excelConsumo,
+  subirExcelConsumo,
   trazador,
   kardex,
   cambiarUbicacionFisica,

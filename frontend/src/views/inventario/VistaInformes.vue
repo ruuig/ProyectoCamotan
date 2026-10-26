@@ -8,9 +8,13 @@ import { estiloCategoria, miles } from '../../components/bodega/diseno/PiezasBod
 import { cierre } from '../../dominio/bodega';
 
 /**
- * Paso 1 del cierre: el informe mensual de cada puesto y centro comunitario.
+ * Consumo de puestos: el informe mensual de cada puesto y centro comunitario.
  * Las entradas vienen de los traslados de la bodega; se captura lo entregado,
  * lo no entregado y el saldo que manda el servicio. Enter baja de fila.
+ *
+ * Los lugares van agrupados por territorio. De cada territorio se baja su
+ * Excel (el pedazo del balance de sus lugares) para mandárselo al encargado; el
+ * Excel llenado se sube y queda cargado el informe de cada lugar.
  */
 const estado = ref(null);
 const elegido = ref(null);
@@ -21,11 +25,47 @@ const aviso = ref('');
 const guardando = ref(false);
 const observacionRevision = ref('');
 
+const territorios = ref([]);
 async function cargarEstado() {
   try {
-    estado.value = await bodega.estadoInformes(cierre.periodo);
+    const [e, t] = await Promise.all([bodega.estadoInformes(cierre.periodo), bodega.territorios().catch(() => ({ territorios: [] }))]);
+    estado.value = e;
+    territorios.value = t.territorios;
   } catch (fallo) {
     error.value = fallo.message;
+  }
+}
+
+/* --- Excel de cada territorio --------------------------------------------------- */
+const bajando = ref(null);
+async function bajarExcel(t) {
+  error.value = '';
+  bajando.value = t.id;
+  try {
+    await bodega.bajarExcelConsumo(cierre.periodo, t);
+  } catch (fallo) {
+    error.value = fallo.message;
+  } finally {
+    bajando.value = null;
+  }
+}
+const subiendo = ref(false);
+const resultado = ref(null);
+async function subir(evento) {
+  const archivo = evento.target.files?.[0];
+  evento.target.value = '';
+  if (!archivo) return;
+  error.value = '';
+  aviso.value = '';
+  resultado.value = null;
+  subiendo.value = true;
+  try {
+    resultado.value = await bodega.subirExcelConsumo(cierre.periodo, archivo);
+    await cargarEstado();
+  } catch (fallo) {
+    error.value = fallo.message;
+  } finally {
+    subiendo.value = false;
   }
 }
 
@@ -72,6 +112,19 @@ const lugares = computed(() => ['diferencia', 'pendiente', 'listo']
   .flatMap((e) => grupos.value[e].map((s) => ({ ...s, estado: e })))
   .filter((s) => filtroEstado.value === 'todos' || s.estado === filtroEstado.value)
   .sort((x, y) => ORDEN[x.estado] - ORDEN[y.estado]));
+// Los lugares de cada territorio; los que no tienen, al final.
+const porTerritorio = computed(() => {
+  const grupos = territorios.value.map((t) => {
+    const ids = new Set(t.ubicaciones.map((u) => u.id));
+    const suyos = lugares.value.filter((s) => ids.has(s.ubicacionId));
+    const listos = servicios.value.filter((s) => ids.has(s.ubicacionId) && s.informado).length;
+    return { ...t, lugares: suyos, listos, total: ids.size };
+  }).filter((t) => t.total > 0 && t.lugares.length);
+  const conTerritorio = new Set(territorios.value.flatMap((t) => t.ubicaciones.map((u) => u.id)));
+  const sueltos = lugares.value.filter((s) => !conTerritorio.has(s.ubicacionId));
+  if (sueltos.length) grupos.push({ id: null, numero: null, encargado: 'Sin territorio', lugares: sueltos, listos: null, total: sueltos.length });
+  return grupos;
+});
 
 const visibles = computed(() => (form.value?.renglones ?? []).filter((r) => alcance.value === 'todos' || r.maneja || r.entregado || r.noEntregado));
 
@@ -129,7 +182,31 @@ onMounted(cargarEstado);
 
 <template>
   <section>
-    <PasosCierre />
+    <PasosCierre>
+      <template #acciones>
+        <label v-if="!form" class="b-btn primario subir" :class="{ ocupado: subiendo }">
+          <Icono nombre="recibir" :tamano="20" /> {{ subiendo ? 'Cargando…' : 'Subir Excel' }}
+          <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only" :disabled="subiendo" @change="subir" />
+        </label>
+      </template>
+    </PasosCierre>
+
+    <!-- Lo que se cargó del Excel -->
+    <section v-if="resultado" class="cargado mt-4" aria-live="polite">
+      <header>
+        <b>Cargado {{ resultado.lugares.length }} {{ resultado.lugares.length === 1 ? 'lugar' : 'lugares' }}</b>
+        <button type="button" class="cerrar-cargado" aria-label="Cerrar" @click="resultado = null"><Icono nombre="cerrar" :tamano="16" :grosor="2.4" /></button>
+      </header>
+      <ul>
+        <li v-for="l in resultado.lugares" :key="l.ubicacionId">
+          <span class="min-w-0 flex-1">{{ l.nombre }}</span>
+          <span>{{ l.renglones }} productos</span>
+          <span v-if="l.diferencias" class="text-[#B7710A]">{{ l.diferencias }} sin cuadrar</span>
+        </li>
+      </ul>
+      <p v-if="resultado.lugaresNoReconocidos.length" class="no-rec">Lugares no reconocidos: {{ resultado.lugaresNoReconocidos.join(', ') }}</p>
+      <p v-if="resultado.noReconocidos.length" class="no-rec">Productos no reconocidos ({{ resultado.noReconocidos.length }}): {{ resultado.noReconocidos.slice(0, 8).join(', ') }}<template v-if="resultado.noReconocidos.length > 8">…</template></p>
+    </section>
 
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
     <p v-if="aviso" class="b-aviso ok mt-4" aria-live="polite">{{ aviso }}</p>
@@ -157,18 +234,31 @@ onMounted(cargarEstado);
         </div>
       </div>
 
-      <ul class="lugares mt-3">
-        <li v-for="s in lugares" :key="s.ubicacionId" class="lugar">
-          <span class="min-w-0 flex-1">
-            <span class="block truncate font-semibold text-tinta">{{ s.nombre }}</span>
-            <small v-if="s.estado === 'diferencia'" class="text-[#B7710A]">{{ s.diferencias }} {{ s.diferencias === 1 ? 'insumo' : 'insumos' }} sin cuadrar</small>
-            <small v-else-if="s.estado === 'pendiente'">Sin informe</small>
-            <small v-else>{{ new Date(s.capturadoEn).toLocaleDateString('es-GT') }} · {{ s.capturadoPor }}</small>
-          </span>
-          <button type="button" class="b-btn chico" :class="s.estado === 'listo' ? 'secundario' : 'primario'" @click="abrir(s)">{{ ACCION[s.estado] }}</button>
-        </li>
-        <li v-if="!lugares.length" class="b-vacio col-span-full">Ninguno.</li>
-      </ul>
+      <div class="territorios mt-3">
+        <section v-for="t in porTerritorio" :key="t.id ?? 'sin'" class="territorio">
+          <header class="territorio-cabeza">
+            <span class="min-w-0 flex-1">
+              <b><template v-if="t.numero">Territorio {{ t.numero }} · </template>{{ t.encargado }}</b>
+              <small v-if="t.listos !== null">{{ t.listos }} de {{ t.total }}</small>
+            </span>
+            <button v-if="t.id" type="button" class="b-btn secundario chico" :disabled="bajando === t.id" @click="bajarExcel(t)">
+              <Icono nombre="descargar" :tamano="16" /> {{ bajando === t.id ? 'Preparando…' : 'Excel' }}
+            </button>
+          </header>
+          <ul class="lugares">
+            <li v-for="s in t.lugares" :key="s.ubicacionId" class="lugar">
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-semibold text-tinta">{{ s.nombre }}</span>
+                <small v-if="s.estado === 'diferencia'" class="text-[#B7710A]">{{ s.diferencias }} {{ s.diferencias === 1 ? 'insumo' : 'insumos' }} sin cuadrar</small>
+                <small v-else-if="s.estado === 'pendiente'">Sin informe</small>
+                <small v-else>{{ new Date(s.capturadoEn).toLocaleDateString('es-GT') }} · {{ s.capturadoPor }}</small>
+              </span>
+              <button type="button" class="b-btn chico" :class="s.estado === 'listo' ? 'secundario' : 'primario'" @click="abrir(s)">{{ ACCION[s.estado] }}</button>
+            </li>
+          </ul>
+        </section>
+        <p v-if="!porTerritorio.length" class="b-vacio">Ninguno.</p>
+      </div>
     </template>
 
     <!-- Captura de un servicio -->
@@ -256,8 +346,23 @@ onMounted(cargarEstado);
 .barra .ok { background: #22A06B; }
 .barra .rev { background: #E8930C; }
 .barra .pen { background: #CBD5E1; }
-.lugares { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; max-height: max(320px, calc(100vh - 500px)); overflow-y: auto; border-top: 2px solid #E2E8F0; }
-@media (max-width: 900px) { .lugares { grid-template-columns: 1fr; } }
+.territorios { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 1000px) { .territorios { grid-template-columns: 1fr; } }
+.territorio { border: 2px solid #E5E9F0; border-radius: 16px; background: #fff; overflow: hidden; }
+.territorio-cabeza { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #F1F5F9; }
+.territorio-cabeza b { display: block; font-size: 15px; font-weight: 900; color: #14244A; }
+.territorio-cabeza small { font-size: 12.5px; font-weight: 700; color: #64748B; }
+.lugares { display: grid; padding: 0 12px; }
+.lugares .lugar:last-child { border-bottom: 0; }
+.subir { cursor: pointer; }
+.subir.ocupado { opacity: .6; pointer-events: none; }
+.cargado { padding: 12px 16px; border: 2px solid #9BD3B5; border-radius: 16px; background: #F6FCF8; }
+.cargado header { display: flex; align-items: center; justify-content: space-between; }
+.cargado header b { font-size: 15px; font-weight: 900; color: #145C3C; }
+.cargado ul { display: grid; gap: 2px; margin-top: 6px; }
+.cargado li { display: flex; gap: 12px; font-size: 14px; font-weight: 700; color: #1E293B; }
+.cerrar-cargado { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: #64748B; }
+.no-rec { margin-top: 6px; font-size: 13px; font-weight: 700; color: #8A4B00; }
 .lugar { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 4px; border-bottom: 1px solid #EEF2F6; }
 .lugar small { display: block; font-size: 12px; font-weight: 600; color: #64748B; }
 .captura { max-height: max(380px, calc(100vh - 420px)); }

@@ -268,6 +268,25 @@ router.post(
 // --- Hoy: lo pendiente ---------------------------------------------------------------
 router.get('/hoy', deBodega, validar(z.object({ kardexDesde: fecha.optional() }), 'query'), asincrono(hoy));
 
+// --- Excel del consumo de cada territorio -----------------------------------------
+// Bodega baja y sube el de cualquier territorio; el encargado, solo el suyo.
+const conTerritorio = autorizar('admin', 'bodega', 'servicio');
+const EXCEL = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+router.get('/territorios', conTerritorio, asincrono(bodega.territorios));
+router.get(
+  '/consumo/excel',
+  conTerritorio,
+  validar(z.object({ periodo, territorioId: id.optional() }), 'query'),
+  asincrono(bodega.excelConsumo),
+);
+router.post(
+  '/consumo/excel',
+  conTerritorio,
+  validar(z.object({ periodo }), 'query'),
+  express.raw({ type: [EXCEL, 'application/octet-stream'], limit: '15mb' }),
+  asincrono(bodega.subirExcelConsumo),
+);
+
 // --- Informes de los servicios ---------------------------------------------------
 router.get('/informes', deBodega, validar(z.object({ periodo: periodo.optional() }), 'query'), asincrono(bodega.estadoInformes));
 const parametrosInforme = z.object({ ubicacionId: id, periodo });

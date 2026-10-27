@@ -133,7 +133,7 @@ const opciones = computed(() => ({
     <div v-if="!datos.dibujable" class="py-8 text-center">
       <p class="cifra-indicador">{{ datos.totalActual }}</p>
       <p class="mt-2 text-apagado">
-        Se necesita al menos una semana de registros para ver la tendencia
+        Faltan registros (mínimo una semana)
       </p>
     </div>
 

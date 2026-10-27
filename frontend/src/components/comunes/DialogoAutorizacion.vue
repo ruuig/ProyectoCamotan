@@ -62,8 +62,8 @@ function confirmar() {
       <div>
         <h2 class="font-semibold text-slate-800">{{ propia ? 'Confirme con su contraseña' : 'Autorización del director' }}</h2>
         <p class="text-slate-500">
-          <template v-if="propia">Para {{ operacion }}, escriba la contraseña con la que entró.</template>
-          <template v-else>Para {{ operacion }} se requiere la autorización del director, aunque ya tenga sesión abierta.</template>
+          <template v-if="propia">Contraseña para {{ operacion }}</template>
+          <template v-else>Autorización del director para {{ operacion }}</template>
         </p>
       </div>
 

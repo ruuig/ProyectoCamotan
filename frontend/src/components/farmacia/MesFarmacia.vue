@@ -205,7 +205,7 @@ async function cancelar(p) {
           <h2 id="titulo-resumen">Pedido a bodega</h2>
           <p>{{ aPedir.length }} medicamentos · {{ miles(totalUnidades) }} unidades</p>
           <!-- Una requisición al mes: si ya salió una, que se note antes de mandar otra. -->
-          <p v-if="delMes" class="ya-hay">Ya hay una requisición del {{ fecha(delMes.fechaSolicitud) }} ({{ ESTADO[delMes.estado] ?? delMes.estado }}). Esta sería otra más.</p>
+          <p v-if="delMes" class="ya-hay">Ya hay una requisición del {{ fecha(delMes.fechaSolicitud) }} ({{ ESTADO[delMes.estado] ?? delMes.estado }})</p>
         </header>
         <ul class="resumen">
           <li v-for="f in aPedir" :key="f.insumoId">

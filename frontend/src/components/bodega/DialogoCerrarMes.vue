@@ -37,7 +37,7 @@ async function siguiente() {
       <template v-if="paso === 1">
         <ul class="efectos">
           <li>Las cifras del BRES y del balance de {{ props.mes }} quedan fijas.</li>
-          <li>Lo que se corrija después entra al mes siguiente como ajuste.</li>
+          <li>Las correcciones posteriores entran al mes siguiente como ajuste.</li>
           <li>No se puede deshacer.</li>
         </ul>
         <footer>

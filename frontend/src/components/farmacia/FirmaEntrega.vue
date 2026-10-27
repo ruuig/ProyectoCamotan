@@ -160,7 +160,7 @@ onMounted(() => nextTick(prepararLienzo));
         </div>
         <div v-else-if="modo === 'huella'" class="b-aviso atencion items-center">
           <Icono nombre="alerta" :tamano="20" />
-          <span>Lector de huellas no conectado. Mientras tanto, use la opción «En papel»: huella con tinta en la hoja impresa.</span>
+          <span>Lector de huellas no conectado · use «En papel»</span>
         </div>
         <p v-else class="b-aviso ok">Firma o huella con tinta en la hoja SIGSA-4 impresa.</p>
 

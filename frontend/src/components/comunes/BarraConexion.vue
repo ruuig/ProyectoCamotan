@@ -20,7 +20,7 @@ onMounted(() => sync.iniciarEscucha());
       <p class="flex items-center gap-2 font-medium">
         <Icono :nombre="sync.enLinea ? 'actualizar' : 'sinConexion'" :tamano="17" />
         <span v-if="!sync.enLinea">
-          Sin conexión. Los registros se guardan en este equipo y se envian al volver la red.
+          Sin conexión · se guarda en este equipo y se envía al volver la red
         </span>
         <span v-else>
           {{ sync.pendientes.length }} operación(es) pendiente(s) de envio.

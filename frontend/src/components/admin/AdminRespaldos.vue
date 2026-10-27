@@ -136,7 +136,7 @@ onMounted(cargar);
             </div>
           </div>
           <p class="text-sm text-apagado">
-            Use una hora en que el servidor esté encendido. Al pasar de {{ config.conservar }} respaldos se borra el más viejo.
+            Se conservan {{ config.conservar }} respaldos; el más viejo se borra.
           </p>
         </template>
 

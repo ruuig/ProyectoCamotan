@@ -152,7 +152,7 @@ onUnmounted(() => clearInterval(temporizador));
 
     <p v-if="error" role="alert" class="b-aviso error mt-4">{{ error }}</p>
     <p v-if="desdeCache" role="status" class="b-aviso mt-4">
-      Sin conexión. Está viendo la lista de hace {{ minutosDeAntiguedad }} minuto(s).
+      Sin conexión · lista de hace {{ minutosDeAntiguedad }} min
     </p>
 
     <div v-if="datos" class="rejilla mt-5">
@@ -219,7 +219,7 @@ onUnmounted(() => clearInterval(temporizador));
             </div>
             <form v-if="cancelando === siguiente.id" class="confirmar" @submit.prevent="cancelar(siguiente.id)">
               <label :for="`motivo-${siguiente.id}`" class="font-extrabold text-[#8C2323]">¿Por qué se cancela la atención de {{ siguiente.paciente.nombreCompleto }}?</label>
-              <p class="mt-1 font-semibold text-slate-600">Sale de la cola. Queda registrado quién la canceló y por qué.</p>
+              <p class="mt-1 font-semibold text-slate-600">Sale de la cola con su motivo.</p>
               <input :id="`motivo-${siguiente.id}`" v-model="motivoCancelacion" minlength="5" required placeholder="Ej.: se abrió por error" class="b-campo mt-2 w-full" />
               <div class="mt-3 flex flex-wrap gap-2">
                 <button type="submit" class="b-btn rojo" :disabled="motivoCancelacion.trim().length < 5">Sí, cancelar atención</button>
@@ -277,7 +277,7 @@ onUnmounted(() => clearInterval(temporizador));
                 </div>
                 <form v-if="cancelando === e.id" class="confirmar" @submit.prevent="cancelar(e.id)">
                   <label :for="`motivo-${e.id}`" class="font-extrabold text-[#8C2323]">¿Por qué se cancela la atención de {{ e.paciente.nombreCompleto }}?</label>
-                  <p class="mt-1 font-semibold text-slate-600">Sale de la cola. Queda registrado quién la canceló y por qué.</p>
+                  <p class="mt-1 font-semibold text-slate-600">Sale de la cola con su motivo.</p>
                   <input :id="`motivo-${e.id}`" v-model="motivoCancelacion" minlength="5" required placeholder="Ej.: se abrió por error" class="b-campo mt-2 w-full" />
                   <div class="mt-3 flex flex-wrap gap-2">
                     <button type="submit" class="b-btn rojo" :disabled="motivoCancelacion.trim().length < 5">Sí, cancelar atención</button>
@@ -321,7 +321,7 @@ onUnmounted(() => clearInterval(temporizador));
         <div v-if="anteriores.length" class="aviso-lado neutro anteriores">
           <button type="button" class="flex w-full items-start gap-2 text-left" :aria-expanded="verAnteriores" @click="verAnteriores = !verAnteriores">
             <Icono nombre="informacion" :tamano="18" :grosor="2.2" />
-            <span>{{ anteriores.length }} {{ anteriores.length === 1 ? 'quedó' : 'quedaron' }} en espera de otro día. No entran a la cola: ya se fueron. Ver y cerrar</span>
+            <span>{{ anteriores.length }} {{ anteriores.length === 1 ? 'quedó' : 'quedaron' }} de otro día. Ver y cerrar</span>
           </button>
           <template v-if="verAnteriores">
             <ul>

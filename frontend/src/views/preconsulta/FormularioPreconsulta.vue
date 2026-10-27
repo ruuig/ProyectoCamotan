@@ -319,8 +319,7 @@ onMounted(async () => {
         <div>
           <p class="text-lg font-semibold text-slate-800">Guardada en este equipo</p>
           <p class="mt-1 text-slate-600">
-            No hay conexión. Se enviara sola al volver la red. El puntaje Z y las alertas se
-            calcularan al enviarse.
+            Sin conexión: se envía al volver la red.
           </p>
           <button
             type="button"
@@ -365,8 +364,7 @@ onMounted(async () => {
               Se marcó {{ seleccionados.length }} signo(s) de peligro
             </p>
             <p class="mt-1 text-slate-700">
-              Las fichas oficiales indican tomar signos vitales, estabilizar, registrar y
-              llenar la boleta de referencia.
+              Signos vitales, estabilizar, registrar y boleta de referencia.
             </p>
             <RouterLink
               :to="`/imprimir/referencia/${$route.params.id}`"
@@ -494,7 +492,7 @@ onMounted(async () => {
       <!-- Pueblo: solo si falta en la ficha -->
       <div v-if="faltaPueblo" class="tarjeta p-5">
         <h2 class="panel-titulo">Pueblo</h2>
-        <p class="mb-3 text-sm text-apagado">Falta en su ficha y el SIGSA lo pide. Pregúntelo una vez; queda guardado.</p>
+        <p class="mb-3 text-sm text-apagado">Dato que pide el SIGSA; queda en la ficha.</p>
         <div class="pueblos" role="radiogroup" aria-label="Pueblo">
           <button v-for="o in OPCIONES_PUEBLO" :key="o.clave" type="button" role="radio" :aria-checked="puebloElegido === o.clave" :class="{ on: puebloElegido === o.clave }" @click="puebloElegido = puebloElegido === o.clave ? '' : o.clave">{{ o.texto }}</button>
         </div>
@@ -644,7 +642,7 @@ onMounted(async () => {
           </span>
         </h2>
         <p class="mb-3 text-slate-500">
-          Marque todo lo que observe: cada signo sube la prioridad según su nivel.
+          Cada signo sube la prioridad.
         </p>
 
         <div class="grid gap-2 sm:grid-cols-2">

@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
             <label v-if="!soloVer" class="explique">
               <input v-model="orientado" type="checkbox" />
               <span class="caja"><Icono nombre="correcto" :tamano="20" :grosor="3" /></span>
-              Le expliqué cómo tomarlos, cuándo vuelve y cuándo regresar de inmediato
+              Explicado: cómo tomarlos, próxima cita y cuándo regresar
             </label>
             <p v-else-if="hoja.orientadoEn" class="explicado"><Icono nombre="correcto" :tamano="18" :grosor="2.6" /> Se le explicó al entregar</p>
           </section>

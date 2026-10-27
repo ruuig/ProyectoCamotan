@@ -239,7 +239,7 @@ onMounted(() => { cargarSemana(); cargarMes(); });
         <div>
           <span class="b-antetitulo">Consolidados</span>
           <h1 class="b-titulo mt-1">Lo que se entrega al distrito</h1>
-          <p class="intro">Cada documento con quién lo prepara, cuándo se corta y si ya está listo. Aquí se revisa y se imprime; se llena en su módulo.</p>
+          
         </div>
       </header>
 
@@ -251,7 +251,7 @@ onMounted(() => { cargarSemana(); cargarMes(); });
           <div>
             <span class="cuando" :style="estiloTono('accion')"><Icono nombre="reloj" :tamano="16" :grosor="2.4" /> Cada semana</span>
             <h2>SIGSA 3C/S · Registro diario de consulta</h2>
-            <p class="porque">Se corta el sábado de cada semana epidemiológica y se entrega al distrito, que lo digita. Va uno por responsable: cada quien firma lo que atendió.</p>
+            <p class="porque">Corte: sábado de cada semana epidemiológica · uno por responsable</p>
           </div>
           <div class="selector" role="group" aria-label="Semana">
             <button type="button" aria-label="Semana anterior" @click="moverSemana(-1)"><Icono nombre="volver" :tamano="20" :grosor="2.2" /></button>
@@ -292,7 +292,7 @@ onMounted(() => { cargarSemana(); cargarMes(); });
           <div>
             <span class="cuando" :style="estiloTono('atencion')"><Icono nombre="hojaCalculo" :tamano="16" :grosor="2.4" /> Cada mes</span>
             <h2 class="first-letter:uppercase">Cierre de {{ nombreMes }} · {{ listosMes }} de {{ documentosMes.length }} listos</h2>
-            <p class="porque">Se cortan el último día del mes. El Área de Salud consolida los primeros días del mes siguiente.</p>
+            <p class="porque">Corte: último día del mes</p>
           </div>
           <div class="selector" role="group" aria-label="Mes">
             <button type="button" aria-label="Mes anterior" @click="moverMes(-1)"><Icono nombre="volver" :tamano="20" :grosor="2.2" /></button>
@@ -345,7 +345,7 @@ onMounted(() => { cargarSemana(); cargarMes(); });
         <header class="bloque-cabeza">
           <div>
             <h2>Se imprimen desde cada registro</h2>
-            <p class="porque">No son entregas del mes: salen cuando ocurre el hecho, desde su pantalla.</p>
+            <p class="porque">Cuando ocurre el hecho</p>
           </div>
         </header>
         <div class="otros">

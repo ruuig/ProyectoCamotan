@@ -137,7 +137,6 @@ onUnmounted(() => {
   <section class="mx-auto max-w-3xl space-y-5">
     <div>
       <h1 class="titulo-pagina">Preconsulta</h1>
-      <p class="text-apagado">Toque un paciente para tomarle los signos vitales.</p>
     </div>
 
     <p v-if="error" role="alert" class="aviso aviso-urgente">
@@ -194,7 +193,7 @@ onUnmounted(() => {
       </ul>
 
       <p v-else-if="buscar.trim().length >= 2" class="px-4 py-3 text-apagado">
-        Sin coincidencias. Revise la escritura.
+        Sin coincidencias.
       </p>
     </div>
 
@@ -296,7 +295,7 @@ onUnmounted(() => {
 
       <div v-if="verAnalisis" class="border-t border-linea p-relleno">
         <p class="mb-3 text-sm text-apagado">
-          Promedio de los últimos 30 días. Sirve para decidir a qué hora reforzar preconsulta.
+          Promedio de los últimos 30 días
         </p>
         <GraficaBarras
           :datos="llegadas"
@@ -304,7 +303,7 @@ onUnmounted(() => {
           unidad="llegadas"
           preposicion="a las"
           descripcion-destacado="la hora con más llegadas"
-          mensaje-vacio="Aún no hay suficientes registros para ver el patrón de llegadas."
+          mensaje-vacio="Faltan registros."
         />
       </div>
     </div>

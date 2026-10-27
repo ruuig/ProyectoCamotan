@@ -198,7 +198,7 @@ defineExpose({ hayCambios, progreso });
           v-if="bloqueado(c.clave)"
           class="inline-flex rounded-control bg-linea-suave px-3 py-2 font-bold text-tinta-2"
         >
-          Registrado. Solo el personal médico ve el contenido.
+          Registrado · solo lo ve el personal médico
         </p>
 
         <div v-else-if="['siNo', 'siNoEspecifique', 'siNoNumero'].includes(c.tipo)" class="flex flex-wrap items-center gap-3">
@@ -332,7 +332,7 @@ defineExpose({ hayCambios, progreso });
         v-if="pendientesSiNo > 0"
         type="button"
         class="boton-secundario"
-        title="Pone en No las preguntas Sí/No que siguen sin registrar. Los datos sensibles se responden uno por uno."
+        title="Las preguntas Sí/No sin registrar quedan en No"
         @click="marcarResto"
       >
         Marcar el resto como No ({{ pendientesSiNo }})

@@ -326,7 +326,7 @@ onUnmounted(() => clearInterval(temporizador));
               </p>
               <p v-if="otros(e).length" class="truncate text-xs font-semibold text-slate-500">{{ otros(e).map((f) => f.etiqueta).join(' · ') }}</p>
             </div>
-            <span class="shrink-0 tabular-nums" :class="e.excedido ? 'font-bold text-urgente-700' : 'text-slate-500'" :title="e.excedido ? 'Pasó el tiempo máximo de su nivel' : ''">
+            <span class="shrink-0 tabular-nums" :class="e.excedido ? 'font-bold text-urgente-700' : 'text-slate-500'" :title="e.excedido ? 'Tiempo máximo excedido' : ''">
               {{ textoEspera(e.minutosEsperando) }}
             </span>
           </li>

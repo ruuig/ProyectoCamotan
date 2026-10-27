@@ -119,7 +119,7 @@ async function cancelar(r) {
           </template>
         </div>
       </template>
-      <p v-if="!visibles.length" class="b-vacio">Todavía no ha hecho requisiciones. Se hacen desde Requisición.</p>
+      <p v-if="!visibles.length" class="b-vacio">Sin requisiciones.</p>
     </div>
   </div>
 </template>

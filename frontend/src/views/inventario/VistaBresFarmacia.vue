@@ -133,7 +133,7 @@ async function guardar() {
         ...Object.fromEntries(CAMPOS.map((c) => [c, numero(valores[r.insumoId][c])])),
       })),
     });
-    aviso.value = `Se guardó ${nombrePeriodo(periodo.value)}. Ya cuenta para el promedio de los meses que siguen.`;
+    aviso.value = `Guardado: ${nombrePeriodo(periodo.value)}.`;
     await cargar();
   } catch (fallo) {
     error.value = fallo.message;

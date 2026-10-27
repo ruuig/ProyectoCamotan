@@ -144,7 +144,7 @@ onMounted(() => { cargar(); logo.cargar(); });
             <label for="e-distrito" class="b-etiqueta">Distrito de Salud</label>
             <input id="e-distrito" v-model="est.distritoSalud" maxlength="120" :placeholder="est.municipio" class="b-campo" />
           </div>
-          <p class="c12 -mt-2 text-sm text-apagado">Van en el encabezado de los formularios SIGSA. Si se dejan vacíos, se usan el departamento y el municipio.</p>
+          <p class="c12 -mt-2 text-sm text-apagado">Encabezado de los formularios SIGSA. Vacío: departamento y municipio.</p>
           <div class="c4">
             <label for="e-tipo" class="b-etiqueta">Tipo</label>
             <select id="e-tipo" v-model="est.tipo" class="b-campo">

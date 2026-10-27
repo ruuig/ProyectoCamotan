@@ -167,7 +167,7 @@ async function guardar() {
             </label>
 
             <p v-if="bloqueado(c.clave)" class="inline-flex rounded-control bg-linea-suave px-3 py-2 font-bold text-tinta-2">
-              Registrado. Solo el personal médico ve el contenido.
+              Registrado · solo lo ve el personal médico
             </p>
 
             <div v-else-if="c.tipo === 'siNo' || c.tipo === 'siNoEspecifique'" class="flex flex-wrap items-center gap-3">

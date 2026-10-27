@@ -117,7 +117,7 @@ onMounted(cargar);
       <section class="b-form-seccion">
         <header>
           <h2>Semáforo de vencimientos</h2>
-          <p>Meses que faltan para que venza un lote.</p>
+          <p>Meses antes del vencimiento</p>
         </header>
         <div class="b-rejilla">
           <div class="c4">
@@ -162,7 +162,7 @@ onMounted(cargar);
       <section class="b-form-seccion">
         <header>
           <h2>Reparto</h2>
-          <p>Entre cuántos lugares se divide la existencia para saber cuánto le toca a cada uno.</p>
+          <p>Lugares de reparto</p>
         </header>
         <div class="b-rejilla">
           <div class="c4">
@@ -170,7 +170,7 @@ onMounted(cargar);
             <div class="unidad"><input id="lugares" v-model.number="p.lugaresReparto" type="number" min="1" max="200" required class="b-campo num" /><span>lugares</span></div>
           </div>
           <p class="c8 self-end text-sm text-apagado">
-            Saldo actual ÷ {{ p.lugaresReparto }}, como en el inventario de cierre. Lo de los lugares que no son servicios se queda en bodega.
+            Saldo actual ÷ {{ p.lugaresReparto }}
           </p>
         </div>
       </section>
@@ -183,7 +183,7 @@ onMounted(cargar);
           <input v-model="p.provisional" type="checkbox" />
           <span>
             <b>Valores provisionales</b>
-            <small>Las cifras que salen de ellos se marcan como pendientes hasta que el Área de Salud los confirme.</small>
+            <small>Pendientes hasta que los confirme el Área de Salud</small>
           </span>
         </label>
       </section>

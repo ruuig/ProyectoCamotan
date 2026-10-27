@@ -327,7 +327,7 @@ function cambiarTamano(paso) {
           <button
             type="button"
             class="boton-completa hidden sm:inline-flex"
-            :title="completa ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa: más espacio para trabajar'"
+            :title="completa ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'"
             @click="alternarPantallaCompleta"
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

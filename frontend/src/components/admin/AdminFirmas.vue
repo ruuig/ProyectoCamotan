@@ -148,7 +148,7 @@ onMounted(cargar);
       <header class="b-panel-cabeza">
         <div>
           <h2 class="b-panel-titulo">Formularios SIGSA</h2>
-          <p class="mt-1 text-sm text-apagado">Responsable de la información: quien genera la hoja. El cargo debe ser de la lista oficial del SIGSA para que cuente en la producción por tipo de personal (SIGSA 6).</p>
+          <p class="mt-1 text-sm text-apagado">Responsable de la información: quien genera la hoja.</p>
         </div>
       </header>
       <div class="b-tabla-marco !rounded-none !border-0">

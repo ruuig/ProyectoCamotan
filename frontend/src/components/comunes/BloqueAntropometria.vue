@@ -80,12 +80,12 @@ onMounted(cargar);
     </p>
 
     <p v-if="edadMeses > 60" class="text-slate-500">
-      Los patrones de crecimiento de la OMS cubren de 0 a 60 meses. Este paciente ya los supera.
+      Fuera de los patrones de la OMS (0 a 60 meses).
     </p>
 
     <template v-else-if="mediciones.length === 0">
       <p class="text-slate-500">
-        Sin mediciones registradas. Se generan solas al registrar peso y talla en preconsulta.
+        Sin mediciones.
       </p>
     </template>
 
@@ -116,7 +116,7 @@ onMounted(cargar);
       <div v-else class="tarjeta border-l-4 border-l-slate-300 px-4 py-3">
         <p class="font-medium text-slate-900">Sin clasificación</p>
         <p class="text-slate-600">
-          No hay ningún indicador con puntaje Z calculado para esta medición.
+          Sin puntaje Z.
         </p>
       </div>
 

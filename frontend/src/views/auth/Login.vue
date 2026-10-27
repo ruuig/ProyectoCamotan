@@ -150,7 +150,7 @@ async function enviar() {
               placeholder="000000"
               class="entrada sin-icono text-center font-mono text-2xl tracking-[0.5em]"
             />
-            <p class="mt-2 text-sm text-tinta">Abra su aplicación de autenticación e ingrese los 6 dígitos.</p>
+            <p class="mt-2 text-sm text-tinta">Código de 6 dígitos de la aplicación de autenticación</p>
           </div>
 
           <p v-if="error" role="alert" class="falla">

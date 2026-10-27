@@ -146,10 +146,6 @@ onMounted(async () => {
     <label class="ml-3 flex items-center gap-1"><input v-model="conCantidades" type="checkbox" @change="cambiarCantidades" /> Imprimir autorizada y despachada</label>
     <label class="flex items-center gap-1"><input v-model="guias" type="checkbox" /> Ver casillas</label>
     <button type="button" class="ml-auto rounded bg-black px-3 py-1.5 font-bold text-white" @click="imprimir">Imprimir</button>
-    <p class="w-full text-xs text-slate-600">
-      Ponga el formulario FOR-ASB-01 en la bandeja (papel oficio). Las casillas punteadas solo se ven aquí, no salen impresas.
-      La primera vez pruebe en una hoja normal contra la luz y ajuste; el ajuste queda guardado en este equipo.
-    </p>
   </div>
 
   <!-- hoja-propia: lo único que sale en el papel (style-impresion.css oculta lo demás). -->

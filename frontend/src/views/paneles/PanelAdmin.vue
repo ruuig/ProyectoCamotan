@@ -221,7 +221,7 @@ onBeforeUnmount(() => clearInterval(reloj));
         <header class="cabeza">
           <div>
             <h2>Atenciones {{ periodo === 'semana' ? 'por día' : 'por semana' }}</h2>
-            <p class="porque">Cuánta gente llega y cuánta llega grave: con esto se reparte el personal.</p>
+            
           </div>
           <span class="total">{{ totalBarras }} {{ panel?.periodo?.etiqueta ? `· ${panel.periodo.etiqueta}` : '' }}</span>
         </header>
@@ -262,7 +262,7 @@ onBeforeUnmount(() => clearInterval(reloj));
             <Anillo :valor="cod.codificadas" :de="cod.atendidas || 1" :color="cod.codificadas < cod.atendidas ? '#E8930C' : '#22A06B'" :tamano="56" :texto="cod.atendidas ? undefined : '—'" />
             <div class="min-w-0 flex-1">
               <b>Diagnósticos con CIE-10</b>
-              <small>{{ cod.codificadas }} de {{ cod.atendidas }} consultas {{ enPeriodo }}. El SIGSA rechaza lo que no lleva código.</small>
+              <small>{{ cod.codificadas }} de {{ cod.atendidas }} consultas {{ enPeriodo }}</small>
             </div>
           </div>
           <button v-if="pendientes.length" type="button" class="b-btn chico secundario w-full" :aria-expanded="verCodificar" @click="verCodificar = !verCodificar">
@@ -291,7 +291,7 @@ onBeforeUnmount(() => clearInterval(reloj));
         <header class="cabeza">
           <div>
             <h2>Lotes en bodega por vencimiento</h2>
-            <p class="porque">Lo vencido se da de baja con oficio; lo de menos de 12 meses se entrega primero.</p>
+            
           </div>
         </header>
         <Dona v-if="semaforo" :partes="partesSemaforo" :centro="lotesConFecha" bajo-centro="lotes" />
@@ -303,7 +303,7 @@ onBeforeUnmount(() => clearInterval(reloj));
         <header class="cabeza">
           <div>
             <h2>De qué se enferman</h2>
-            <p class="porque">Diagnósticos más frecuentes del mes. Un repunte puede ser un brote: se avisa al distrito.</p>
+            <p class="porque">Diagnósticos más frecuentes del mes</p>
           </div>
         </header>
         <ul v-if="diagnosticos.length" class="diag">
@@ -327,7 +327,7 @@ onBeforeUnmount(() => clearInterval(reloj));
         <header class="cabeza">
           <div>
             <h2>Insumos que más faltan</h2>
-            <p class="porque">Agotados en bodega o bajo el mínimo, primero los que más se consumen: son los que dejan más pacientes sin tratamiento.</p>
+            <p class="porque">Agotados o bajo el mínimo, por consumo</p>
           </div>
           <RouterLink to="/inventario/productos" class="ver">Ver existencias</RouterLink>
         </header>
@@ -354,7 +354,7 @@ onBeforeUnmount(() => clearInterval(reloj));
         <header class="cabeza">
           <div>
             <h2>Comunidades sin atención</h2>
-            <p class="porque">Con pacientes inscritos y sin consultas recientes: candidatas a una jornada o visita.</p>
+            <p class="porque">Sin consultas recientes</p>
           </div>
         </header>
         <ul class="comunidades">

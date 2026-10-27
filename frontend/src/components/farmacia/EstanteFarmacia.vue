@@ -96,7 +96,7 @@ async function guardarLote() {
       fechaVence: nuevoLote.fechaVence,
       cantidad: entero(nuevoLote.cantidad),
     }, nuevaClaveIdempotencia());
-    emit('aviso', `${r.insumo}: ${miles(r.cantidad)} quedaron en el lote ${r.numeroLote}. Ya se pueden entregar.`);
+    emit('aviso', `${r.insumo}: ${miles(r.cantidad)} en el lote ${r.numeroLote}.`);
     poniendo.value = null;
     emit('recargar');
   } catch (fallo) {

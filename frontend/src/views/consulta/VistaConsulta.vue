@@ -460,7 +460,7 @@ async function cerrar() {
     await agregarReceta();
     if (error.value) return;
   } else if (busquedaReceta.value.trim()) {
-    error.value = `«${busquedaReceta.value.trim()}» quedó escrito en la receta sin elegirlo: elíjalo de la lista o bórrelo.`;
+    error.value = `«${busquedaReceta.value.trim()}» no está elegido de la lista.`;
     return;
   }
 
@@ -711,7 +711,7 @@ onMounted(() => {
             </div>
           </dl>
           <p class="border-t border-linea px-relleno py-3 text-sm text-apagado">
-            Los datos de una consulta cerrada ya no se editan. Una corrección queda registrada aparte, con su motivo.
+            Consulta cerrada · las correcciones quedan aparte, con su motivo
           </p>
         </article>
 
@@ -726,7 +726,7 @@ onMounted(() => {
               <div>
                 <label for="mc" class="etiqueta-campo"><abbr title="Motivo de consulta" class="no-underline">MC</abbr> · Motivo de consulta</label>
                 <textarea id="mc" v-model="hoja.motivoConsulta" rows="2" maxlength="500" class="campo" />
-                <p class="mt-1 text-sm text-apagado">Viene de preconsulta; puede precisarlo.</p>
+                <p class="mt-1 text-sm text-apagado">Desde preconsulta</p>
               </div>
 
               <div>
@@ -744,7 +744,7 @@ onMounted(() => {
                 <legend class="etiqueta-campo flex w-full flex-wrap items-baseline justify-between gap-2">
                   <span><abbr title="Impresión clínica" class="no-underline">IC</abbr> · Impresión clínica (diagnóstico) y CIE-10</span>
                   <span class="text-sm font-normal normal-case tracking-normal text-apagado">
-                    Busque por nombre, código o sinónimo. Sin código, queda pendiente de codificar.
+                    Nombre, código o sinónimo · sin código queda pendiente de codificar
                   </span>
                 </legend>
                 <div class="space-y-3">
@@ -1042,7 +1042,7 @@ onMounted(() => {
               <Icono nombre="correcto" :tamano="19" />
               {{ guardando ? 'Cerrando…' : 'Cerrar consulta' }}
             </button>
-            <p class="text-sm text-apagado">Lo escrito se guarda en este equipo mientras la consulta está abierta.</p>
+            <p class="text-sm text-apagado">Se guarda en este equipo</p>
           </div>
         </form>
       </div>

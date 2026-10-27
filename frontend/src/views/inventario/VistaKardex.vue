@@ -107,7 +107,7 @@ onMounted(async () => {
         </div>
         <BuscadorInsumo v-else :insumos="insumos" placeholder="Buscar producto" @elegir="elegir" />
       </div>
-      <label v-if="tarjeta && !deFarmacia" class="interruptor" title="Anota en Observaciones lo que llegó de menos y falta reclamar">
+      <label v-if="tarjeta && !deFarmacia" class="interruptor" title="Faltantes por reclamar en Observaciones">
         <input v-model="anotarReclamar" type="checkbox" />
         <span class="pista" aria-hidden="true" />
         Anotar faltantes por reclamar

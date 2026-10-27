@@ -186,7 +186,7 @@ async function guardar(confirmarDuplicado = false, llenarFicha = conFicha.value)
     <!-- Ya registrado: la ficha completa, toda abierta para llenarla aquí -->
     <template v-if="registrado">
       <div class="b-aviso ok mt-5 flex-wrap items-center justify-between gap-2">
-        <span>{{ registrado.nombres }} {{ registrado.apellidos }} quedó registrado. Llene la ficha; cada sección se guarda con su botón.</span>
+        <span>{{ registrado.nombres }} {{ registrado.apellidos }} registrado.</span>
         <RouterLink :to="`/pacientes/${registrado.id}`" class="b-btn primario chico">Terminar e ir al expediente</RouterLink>
       </div>
       <div class="mt-4">

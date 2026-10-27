@@ -11,7 +11,6 @@ import { ETAPAS } from '../../dominio/etapas';
 import { textoEspera } from '../../dominio/espera';
 import { estiloTono, miles } from '../../components/bodega/diseno/PiezasBodega';
 import Icono from '../../components/comunes/Icono.vue';
-import CodificarCie from '../../components/consulta/CodificarCie.vue';
 import TarjetaCifra from '../../components/paneles/TarjetaCifra.vue';
 import Dona from '../../components/paneles/Dona.vue';
 import Anillo from '../../components/paneles/Anillo.vue';
@@ -34,7 +33,6 @@ const cierreMes = ref({});
 const semaforo = ref(null);
 const error = ref('');
 const cargando = ref(true);
-const verCodificar = ref(false);
 
 const hora = Number(new Intl.DateTimeFormat('es-GT', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Guatemala' }).format(new Date()));
 const saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
@@ -173,10 +171,6 @@ const pasosCierre = computed(() => {
 const listos = computed(() => pasosCierre.value.filter((p) => p.listo).length);
 const cod = computed(() => panel.value?.codificacion ?? { atendidas: 0, codificadas: 0 });
 const pendientes = computed(() => panel.value?.pendientesDeCodificar ?? []);
-function quitarCodificada(id) {
-  panel.value.pendientesDeCodificar = panel.value.pendientesDeCodificar.filter((a) => a.id !== id);
-  panel.value.codificacion.codificadas += 1;
-}
 
 const diagnosticos = computed(() => panel.value?.diagnosticos?.lista ?? []);
 const comunidades = computed(() => panel.value?.comunidades?.lista ?? []);
@@ -265,13 +259,7 @@ onBeforeUnmount(() => clearInterval(reloj));
               <small>{{ cod.codificadas }} de {{ cod.atendidas }} consultas {{ enPeriodo }}</small>
             </div>
           </div>
-          <button v-if="pendientes.length" type="button" class="b-btn chico secundario w-full" :aria-expanded="verCodificar" @click="verCodificar = !verCodificar">
-            {{ verCodificar ? 'Cerrar' : `Codificar ${pendientes.length} pendientes` }}
-          </button>
         </div>
-        <ul v-if="verCodificar" class="codificar">
-          <CodificarCie v-for="a in pendientes" :key="a.id" :atencion="a" @codificada="quitarCodificada" />
-        </ul>
       </section>
 
       <!-- Etapas de vida -->
@@ -412,8 +400,6 @@ onBeforeUnmount(() => clearInterval(reloj));
 .codif { display: grid; gap: 10px; padding: 12px; border-radius: 16px; background: var(--t-fondo); }
 .codif b { display: block; font-size: 15px; font-weight: 900; color: #14244A; }
 .codif small { font-size: 13px; font-weight: 600; color: var(--t-tinta); }
-.codificar { max-height: 360px; overflow-y: auto; border-top: 2px solid #EEF2F6; }
-.codificar :deep(li) { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid #F1F5F9; }
 
 .diag { display: grid; gap: 10px; }
 .diag li { display: flex; align-items: center; gap: 10px; min-width: 0; }

@@ -99,8 +99,7 @@ router.patch(
 // Completar el CIE-10 de una consulta ya cerrada.
 router.patch(
   '/:id/codificacion',
-  // El director también completa códigos pendientes desde su panel.
-  autorizar.conAdmin('admin', 'medico'),
+  medicos,
   validar(esquemas.parametroId, 'params'),
   validar(esquemas.codificacion),
   asincrono(consulta.codificar),

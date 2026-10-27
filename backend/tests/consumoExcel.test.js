@@ -171,6 +171,35 @@ describe('Excel del consumo por territorio', () => {
     }
   });
 
+  it('bodega sube el balance completo: todos los lugares y post-consulta, y el BRES lo toma', async () => {
+    const r = await bod(request(app).get(`/api/v1/bodega/balance/${PERIODO}/excel`))
+      .buffer(true).parse((res, cb) => { const partes = []; res.on('data', (d) => partes.push(d)); res.on('end', () => cb(null, Buffer.concat(partes))); });
+    expect(r.status).toBe(200);
+    const libro = await libroDe(r.body);
+    const hoja = libro.worksheets[0];
+    const f = primeraFila(hoja);
+    // POST CONSULTA es el primer bloque (columna 3); el siguiente es un puesto o centro.
+    expect(hoja.getCell(3, 3).value).toBe('POST CONSULTA');
+    const lugar = hoja.getCell(3, 9).value;
+    hoja.getCell(f, 5).value = 9; // post-consulta: entregado
+    hoja.getCell(f, 6).value = 2; // post-consulta: no entregado
+    hoja.getCell(f, 11).value = 5; // el lugar: entregado
+    const s = await bod(request(app).post(`/api/v1/bodega/consumo/excel?periodo=${PERIODO}&completo=true`))
+      .set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .send(Buffer.from(await libro.xlsx.writeBuffer()));
+    expect(s.status).toBe(200);
+    expect(s.body.lugaresNoReconocidos).toEqual([]);
+    const centro = await prisma.ubicacion.findFirst({ where: { tipo: 'centro_salud' } });
+    expect(s.body.lugares.some((l) => l.ubicacionId === centro.id)).toBe(true);
+    expect(s.body.lugares.some((l) => l.nombre.toUpperCase() === String(lugar).toUpperCase())).toBe(true);
+
+    // El BRES toma lo que la farmacia informó en papel.
+    const b = (await bod(request(app).get(`/api/v1/bodega/balance?periodo=${PERIODO}`))).body;
+    const nombre = hoja.getCell(f, 2).value;
+    const fila = b.filas.find((x) => [x.nombre, x.formaFarmaceutica, x.concentracion].filter(Boolean).join(' ') === nombre);
+    expect([fila.postConsulta.entregado, fila.postConsulta.noEntregado]).toEqual([9, 2]);
+  });
+
   it('el encargado de servicio solo baja el de su territorio', async () => {
     const enc = await prisma.usuario.findFirst({ where: { rol: 'servicio', activo: true, ubicacion: { territorioId: { not: null } } } });
     if (!enc) return;

@@ -312,6 +312,9 @@ const texto = (valor) => (valor && typeof valor === 'object' ? valor.richText?.m
  * El archivo es de un territorio y trae todos sus lugares juntos. Cada bloque
  * se reconoce por el nombre; si le cambiaron el nombre, por su posición dentro
  * del territorio (el mismo orden con que se descargó).
+ *
+ * Sin territorio (territorioId null) es el balance completo del mes, como lo
+ * lleva la bodega: todos los lugares y post-consulta, cada uno por su nombre.
  */
 async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territorioId) {
   const libro = new ExcelJS.Workbook();
@@ -330,8 +333,10 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
   if (delArchivo && delArchivo !== periodo) throw fallo(409, 'otro_mes', `El Excel es de ${hoja.name} y se está cargando ${nombreHoja(periodo)}`);
 
   const ubicaciones = await prisma.ubicacion.findMany({ where: { establecimientoId, activo: true } });
+  const completo = territorioId == null;
+  const informan = (x) => datos.esServicioQueInforma(x) || (completo && x.tipo === 'centro_salud');
   const porClave = new Map();
-  for (const u of ubicaciones.filter(datos.esServicioQueInforma)) {
+  for (const u of ubicaciones.filter(informan)) {
     porClave.set(clave(u.nombre), u);
     if (NOMBRE_EN_BALANCE[u.nombre]) porClave.set(clave(NOMBRE_EN_BALANCE[u.nombre]), u);
   }
@@ -342,16 +347,19 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
   for (let c = 1; c <= Math.max(filaTitulos.cellCount, 400); c += 1) {
     if (clave(texto(filaTitulos.getCell(c).value)) !== 'saldoanterior') continue;
     const nombre = [0, 1, 2, 3, 4, 5].map((j) => texto(hoja.getRow(3).getCell(c + j).value)).find(Boolean) ?? '';
+    // Los totales del balance (B a M) no son un lugar.
+    if (/^totales?$/i.test(nombre)) continue;
     todos.push({ c, nombre, u: porClave.get(clave(nombre)) });
   }
   if (!todos.length) throw fallo(400, 'sin_bloques', 'El Excel no tiene ningún bloque con «Saldo anterior» en la fila 4');
 
   const delTerritorio = ubicaciones
-    .filter((x) => x.territorioId === territorioId && datos.esServicioQueInforma(x))
+    .filter((x) => (completo || x.territorioId === territorioId) && informan(x))
     .sort((a, b) => a.orden - b.orden || a.id - b.id);
   if (!delTerritorio.length) throw fallo(409, 'sin_lugares', 'Ese territorio no tiene centros ni puestos asignados');
   const suyo = new Set(delTerritorio.map((u) => u.id));
-  const mismoOrden = todos.length === delTerritorio.length;
+  // En el balance completo solo por nombre: el orden de las columnas varía.
+  const mismoOrden = !completo && todos.length === delTerritorio.length;
   const bloques = [];
   const lugaresNoReconocidos = [];
   todos.forEach((b, k) => {
@@ -361,21 +369,27 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
     if (bloques.some((x) => x.u.id === u.id)) { lugaresNoReconocidos.push(`${b.nombre} (repetido)`); return; }
     bloques.push({ c: b.c, u });
   });
-  if (!bloques.length) throw fallo(400, 'sin_lugares', 'No se reconoció ningún centro o puesto del territorio en la fila 3 del Excel');
+  if (!bloques.length) throw fallo(400, 'sin_lugares', `No se reconoció ningún centro o puesto${completo ? '' : ' del territorio'} en la fila 3 del Excel`);
 
   // Insumos por su nombre y por los nombres con que aparecen en los Excel.
   const [insumos, alias] = await Promise.all([
-    prisma.insumo.findMany({ where: { establecimientoId }, select: { id: true, nombreGenerico: true } }),
+    prisma.insumo.findMany({ where: { establecimientoId }, select: { id: true, nombreGenerico: true, formaFarmaceutica: true, concentracion: true } }),
     prisma.insumoAlias.findMany({ where: { insumo: { establecimientoId } }, select: { insumoId: true, aliasNormalizado: true } }),
   ]);
   const insumoDe = new Map(insumos.map((i) => [clave(i.nombreGenerico), i.id]));
+  // Como lo escribe el balance que baja el sistema: nombre, forma y concentración.
+  for (const i of insumos) {
+    const largo = clave([i.nombreGenerico, i.formaFarmaceutica, i.concentracion].filter(Boolean).join(' '));
+    if (!insumoDe.has(largo)) insumoDe.set(largo, i.id);
+  }
   for (const a of alias) insumoDe.set(a.aliasNormalizado.replace(/\s+/g, ''), a.insumoId);
   const secciones = new Set([...SECCIONES.map((s) => clave(s.titulo)), clave('AGREGADOS EN EL SISTEMA')]);
 
   // Lo que la bodega entregó al territorio: lo que el encargado sume en las
   // entradas de un lugar, sobre lo que la bodega le entregó directo, es lo
   // que le dio de eso.
-  const reparto = await datos.repartoDelTerritorio(establecimientoId, territorioId, periodo);
+  const territoriosDe = [...new Set(bloques.map(({ u }) => u.territorioId).filter((t) => t != null))];
+  const repartos = new Map(await Promise.all(territoriosDe.map(async (t) => [t, await datos.repartoDelTerritorio(establecimientoId, t, periodo)])));
   const formularios = new Map(await Promise.all(bloques.map(async ({ u }) => {
     const form = await datos.formularioInforme(establecimientoId, u.id, periodo);
     return [u.id, new Map(form.renglones.map((x) => [x.insumoId, x]))];
@@ -393,12 +407,13 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
     for (const { c, u } of bloques) {
       const entregado = Math.max(0, Math.round(numeroDe(r.getCell(c + 2).value) ?? 0));
       const noEntregado = Math.max(0, Math.round(numeroDe(r.getCell(c + 3).value) ?? 0));
-      // Si el saldo siguiente se escribió a mano (sin fórmula), es lo que contó el servicio.
+      // Si el saldo siguiente se escribió a mano (sin fórmula), es lo que contó el
+      // servicio. En el balance completo es la cifra calculada: no se toma.
       const saldo = r.getCell(c + 4).value;
-      const saldoInformado = typeof saldo === 'number' ? Math.max(0, Math.round(saldo)) : null;
+      const saldoInformado = !completo && typeof saldo === 'number' ? Math.max(0, Math.round(saldo)) : null;
       let entradasTerritorio;
       const entradas = numeroDe(r.getCell(c + 1).value);
-      if (reparto.get(insumoId)?.entregado && entradas !== null) {
+      if (repartos.get(u.territorioId)?.get(insumoId)?.entregado && entradas !== null) {
         entradasTerritorio = Math.max(0, Math.round(entradas) - (formularios.get(u.id).get(insumoId)?.entradasBodega ?? 0));
       }
       if (entregado || noEntregado || saldoInformado !== null || entradasTerritorio !== undefined) {
@@ -415,9 +430,14 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
   }
   // Lo que el encargado recibió para el territorio y no aparece repartido.
   const nombres = new Map(insumos.map((i) => [i.id, i.nombreGenerico]));
-  const sinRepartir = [...await datos.repartoDelTerritorio(establecimientoId, territorioId, periodo)]
-    .filter(([, r]) => r.entregado !== r.repartido)
-    .map(([insumoId, r]) => ({ insumoId, nombre: nombres.get(insumoId), entregado: r.entregado, repartido: r.repartido }));
+  const sinRepartir = [];
+  for (const t of territoriosDe) {
+    const numero = completo ? (await prisma.territorio.findUnique({ where: { id: t }, select: { numero: true } }))?.numero : null;
+    for (const [insumoId, r] of await datos.repartoDelTerritorio(establecimientoId, t, periodo)) {
+      if (r.entregado === r.repartido) continue;
+      sinRepartir.push({ insumoId, nombre: numero ? `${nombres.get(insumoId)} (territorio ${numero})` : nombres.get(insumoId), entregado: r.entregado, repartido: r.repartido });
+    }
+  }
   return { periodo, lugares, noReconocidos, lugaresNoReconocidos, sinRepartir };
 }
 

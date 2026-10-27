@@ -110,16 +110,25 @@ async function noEntregadoCentro(establecimientoId, desde, hasta) {
 
 // --- Servicios ----------------------------------------------------------------------
 
-/** Traslados a servicios antes de una fecha, con su fecha, ubicacion e insumo. */
+/**
+ * Traslados a servicios antes de una fecha, con su fecha, ubicacion e insumo.
+ * Lo que la bodega pasa a la farmacia cuenta como traslado a post-consulta:
+ * cuando la farmacia informa en papel, son sus entradas.
+ */
 async function trasladosHasta(establecimientoId, hasta) {
   const filas = await prisma.movimientoInsumo.findMany({
-    where: { tipo: 'traslado', NOT: { trasladoId: null }, registradoEn: { lt: hasta }, lote: { insumo: { establecimientoId } } },
-    select: { cantidad: true, registradoEn: true, lote: { select: { insumoId: true } }, traslado: { select: { ubicacionId: true } } },
+    where: {
+      OR: [{ tipo: 'traslado' }, { tipo: 'paso_farmacia', ubicacion: 'farmacia' }],
+      NOT: { trasladoId: null },
+      registradoEn: { lt: hasta },
+      lote: { insumo: { establecimientoId } },
+    },
+    select: { tipo: true, cantidad: true, registradoEn: true, lote: { select: { insumoId: true } }, traslado: { select: { ubicacionId: true } } },
   });
   return filas.map((m) => ({
     ubicacionId: m.traslado.ubicacionId,
     insumoId: m.lote.insumoId,
-    cantidad: -m.cantidad,
+    cantidad: m.tipo === 'traslado' ? -m.cantidad : m.cantidad,
     periodo: periodoDe(new Date(new Date(m.registradoEn).getTime() - 6 * 3600000)),
   }));
 }
@@ -562,7 +571,21 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
 
     // Post-consulta: si el mes viene del Excel, sus seis cifras tal cual.
     let postConsulta;
-    if (postImportado) {
+    // Farmacia que informa en papel (bodega lo pasa): sus cifras del informe.
+    const enPapel = informePost && !postImportado ? informado.get(clave2(centro.id, i.id)) : null;
+    if (informePost && !postImportado) {
+      const f = enPapel
+        ? filaInforme({ saldoAnterior: enPapel.saldoAnterior, entradas: enPapel.entradas, entregado: enPapel.entregado, noEntregado: enPapel.noEntregado })
+        : filaInforme({ saldoAnterior: arranque.saldoAnterior.get(clave2(centro.id, i.id)) ?? 0, entradas: arranque.entradas.get(clave2(centro.id, i.id)) ?? 0 });
+      postConsulta = {
+        saldoAnterior: f.saldoAnterior,
+        entradas: f.entradas,
+        entregado: f.entregado,
+        noEntregado: f.noEntregado,
+        saldoSiguiente: f.saldoSiguiente,
+        promedio: promedio((d) => (d.centro.get(i.id) ?? 0) + (d.porServicio.get(clave2(centro.id, i.id)) ?? 0)),
+      };
+    } else if (postImportado) {
       const rp = postImportado.get(i.id);
       postConsulta = {
         saldoAnterior: rp?.saldoAnterior ?? 0,

@@ -70,6 +70,41 @@ async function subir(evento, t) {
   }
 }
 
+/*
+ * El balance completo del mes, como lo lleva la bodega: lo que los lugares y
+ * la farmacia entregan en papel se pasa a un solo Excel y se sube de una vez.
+ */
+const subiendoBalance = ref(false);
+async function bajarBalance() {
+  error.value = '';
+  try {
+    const url = await bodega.excelBalance(cierre.periodo, 'alfabetico');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `balance-${cierre.periodo}.xlsx`;
+    a.click();
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
+async function subirBalance(evento) {
+  const archivo = evento.target.files?.[0];
+  evento.target.value = '';
+  if (!archivo) return;
+  error.value = '';
+  aviso.value = '';
+  resultado.value = null;
+  subiendoBalance.value = true;
+  try {
+    resultado.value = await bodega.subirExcelConsumo(cierre.periodo, archivo, null, true);
+    await cargarEstado();
+  } catch (fallo) {
+    error.value = `Balance: ${fallo.message}`;
+  } finally {
+    subiendoBalance.value = false;
+  }
+}
+
 async function abrir(s) {
   error.value = '';
   aviso.value = '';
@@ -229,6 +264,13 @@ onMounted(cargarEstado);
           <button v-for="o in FILTROS" :key="o.clave" type="button" role="radio" :aria-checked="filtroEstado === o.clave" :class="filtroEstado === o.clave ? 'on' : ''" @click="filtroEstado = o.clave">
             {{ o.texto }} <span class="tabular-nums text-apagado">{{ o.clave === 'todos' ? servicios.length : grupos[o.clave].length }}</span>
           </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="b-btn secundario chico" @click="bajarBalance"><Icono nombre="descargar" :tamano="16" /> Bajar balance</button>
+          <label class="subir b-btn primario chico cursor-pointer" :class="{ 'opacity-60': subiendoBalance }">
+            <Icono nombre="recibir" :tamano="16" /> {{ subiendoBalance ? 'Cargando…' : 'Subir balance completo' }}
+            <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only" :disabled="subiendoBalance" @change="subirBalance" />
+          </label>
         </div>
       </div>
 

@@ -250,7 +250,8 @@ async function estadoInformes(req, res) {
 async function obtenerInforme(req, res, next) {
   const form = await datos.formularioInforme(req.usuario.establecimientoId, Number(req.params.ubicacionId), req.params.periodo);
   if (!form) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Servicio no encontrado' });
-  if (!datos.esServicioQueInforma(form.ubicacion)) {
+  // Post-consulta también: cuando la farmacia informa en papel, bodega lo pasa.
+  if (!datos.esServicioQueInforma(form.ubicacion) && form.ubicacion.tipo !== 'centro_salud') {
     return next({ status: 400, codigo: 'no_informa', mensaje: 'Esa ubicación no envía informe mensual' });
   }
   res.json(form);
@@ -746,6 +747,7 @@ async function territorios(req, res) {
 /** El territorio que puede manejar quien pide: el indicado, o el suyo si es encargado. */
 async function territorioPedido(req) {
   if (req.usuario.rol !== 'servicio') {
+    if (req.query.completo === 'true') return null;
     if (!req.query.territorioId) throw Object.assign(new Error('Indique el territorio'), { status: 400, codigo: 'sin_territorio', mensaje: 'Indique el territorio' });
     return Number(req.query.territorioId);
   }

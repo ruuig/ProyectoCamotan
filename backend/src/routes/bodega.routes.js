@@ -296,7 +296,8 @@ router.get(
 router.post(
   '/consumo/excel',
   conTerritorio,
-  validar(z.object({ periodo, territorioId: id.optional() }), 'query'),
+  // completo: el balance del mes con todos los lugares y post-consulta (bodega).
+  validar(z.object({ periodo, territorioId: id.optional(), completo: z.enum(['true']).optional() }), 'query'),
   express.raw({ type: [EXCEL, 'application/octet-stream'], limit: '15mb' }),
   asincrono(bodega.subirExcelConsumo),
 );

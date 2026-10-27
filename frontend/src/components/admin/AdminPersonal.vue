@@ -59,7 +59,7 @@ async function cargar() {
   try {
     const [u, l] = await Promise.all([http.get('/admin/usuarios'), bodega.ubicaciones().catch(() => ({ ubicaciones: [] }))]);
     usuarios.value = u.usuarios;
-    lugares.value = l.ubicaciones.filter((x) => x.tipo !== 'bodega');
+    lugares.value = l.ubicaciones.filter((x) => x.tipo !== 'bodega' && x.tipo !== 'territorio');
   } catch (fallo) {
     error.value = fallo.message;
   }

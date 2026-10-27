@@ -28,7 +28,7 @@ async function autenticar(req, res, next) {
   // Se relee el usuario en cada peticion a proposito: si el director desactiva
   // a alguien, su token vigente debe dejar de servir de inmediato y no seguir
   // valido hasta que expire.
-  const usuario = await prisma.usuario.findUnique({ where: { id: carga.sub } });
+  const usuario = await prisma.usuario.findUnique({ where: { id: carga.sub }, include: { ubicacion: { select: { territorioId: true } } } });
 
   if (!usuario || !usuario.activo) {
     return next({
@@ -38,7 +38,8 @@ async function autenticar(req, res, next) {
     });
   }
 
-  req.usuario = usuarioPublico(usuario);
+  // El territorio de su centro o puesto: el encargado pide por todos sus lugares.
+  req.usuario = { ...usuarioPublico(usuario), territorioId: usuario.ubicacion?.territorioId ?? null };
   next();
 }
 

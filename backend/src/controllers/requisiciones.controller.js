@@ -57,9 +57,14 @@ async function choqueDeNumeros(establecimientoId, idPropio, numero, descripcione
 const esFarmacia = (req) => req.usuario.rol === 'farmacia';
 // El encargado de un centro o puesto solo ve y pide para su ubicación.
 const esServicio = (req) => req.usuario.rol === 'servicio';
+/** El encargado pide por cualquier lugar de su territorio, o por todo el territorio. */
+const deSuTerritorio = (req, ubicacion) => req.usuario.territorioId != null && ubicacion.territorioId === req.usuario.territorioId;
+const delEncargado = (req) => (req.usuario.territorioId != null
+  ? { OR: [{ ubicacionId: req.usuario.ubicacionId ?? 0 }, { ubicacion: { territorioId: req.usuario.territorioId } }] }
+  : { ubicacionId: req.usuario.ubicacionId ?? 0 });
 const permitida = (req, ubicacion) => {
   if (esFarmacia(req)) return ubicacion?.tipo === 'centro_salud';
-  if (esServicio(req)) return Boolean(ubicacion) && ubicacion.id === req.usuario.ubicacionId;
+  if (esServicio(req)) return Boolean(ubicacion) && (ubicacion.id === req.usuario.ubicacionId || deSuTerritorio(req, ubicacion));
   return true;
 };
 /** Farmacia y los encargados solo manejan sus pedidos hacia la bodega. */
@@ -182,7 +187,7 @@ async function listar(req, res) {
   if (req.query.ubicacionId) where.ubicacionId = req.query.ubicacionId;
   if (req.query.direccion) where.direccion = req.query.direccion;
   if (esFarmacia(req)) Object.assign(where, { ubicacion: { tipo: 'centro_salud' }, direccion: 'servicio' });
-  if (esServicio(req)) Object.assign(where, { ubicacionId: req.usuario.ubicacionId ?? 0, direccion: 'servicio' });
+  if (esServicio(req)) Object.assign(where, { ...delEncargado(req), direccion: 'servicio' });
   if (req.query.periodo) {
     const { desde, hasta } = limitesDePeriodo(req.query.periodo);
     where.fechaSolicitud = { gte: desde, lt: hasta };
@@ -283,12 +288,12 @@ async function solicitante(req) {
     if (!bodega) return { error: { status: 409, codigo: 'sin_bodega', mensaje: 'El centro no tiene bodega registrada' } };
     return { ubicacion: bodega };
   }
-  const ubicacionId = esServicio(req) ? req.usuario.ubicacionId : req.body.ubicacionId;
+  const ubicacionId = esServicio(req) ? (req.body.ubicacionId ?? req.usuario.ubicacionId) : req.body.ubicacionId;
   const ubicacion = await prisma.ubicacion.findFirst({ where: { id: ubicacionId ?? 0, establecimientoId } });
   const falla = errorDestino(ubicacion);
   if (falla) return { error: { ...falla, mensaje: 'Las requisiciones son de la farmacia del centro, de los puestos de salud y de los centros comunitarios' } };
   if (!permitida(req, ubicacion)) {
-    return { error: { status: 403, codigo: 'sin_permiso', mensaje: esServicio(req) ? 'Solo puede pedir para su centro o puesto' : 'Farmacia solo registra las requisiciones de la farmacia' } };
+    return { error: { status: 403, codigo: 'sin_permiso', mensaje: esServicio(req) ? 'Solo puede pedir para los lugares de su territorio' : 'Farmacia solo registra las requisiciones de la farmacia' } };
   }
   return { ubicacion };
 }
@@ -698,7 +703,7 @@ async function solicitantes(req, res) {
     where: {
       establecimientoId: req.usuario.establecimientoId,
       direccion: 'servicio',
-      ...(esServicio(req) ? { ubicacionId: req.usuario.ubicacionId ?? 0 } : {}),
+      ...(esServicio(req) ? delEncargado(req) : {}),
     },
     orderBy: { registradaEn: 'desc' },
     distinct: ['ubicacionId'],
@@ -712,7 +717,7 @@ async function solicitantes(req, res) {
  * al nivel máximo según sus informes. El encargado solo pide para el suyo.
  */
 async function sugerida(req, res, next) {
-  const ubicacionId = esServicio(req) ? req.usuario.ubicacionId : req.query.ubicacionId;
+  const ubicacionId = esServicio(req) ? (req.query.ubicacionId ?? req.usuario.ubicacionId) : req.query.ubicacionId;
   const s = await sugerenciaServicio(req.usuario.establecimientoId, ubicacionId ?? 0);
   if (!s || !permitida(req, s.ubicacion)) return next(NO_ENCONTRADA);
   res.json(s);

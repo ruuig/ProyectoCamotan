@@ -199,6 +199,10 @@ onMounted(cargarEstado);
         </li>
       </ul>
       <p v-if="resultado.lugaresNoReconocidos.length" class="no-rec">Lugares no reconocidos: {{ resultado.lugaresNoReconocidos.join(', ') }}</p>
+      <p v-if="resultado.sinRepartir?.length" class="no-rec">
+        Entregado al territorio que no aparece repartido:
+        {{ resultado.sinRepartir.slice(0, 6).map((x) => `${x.nombre} (${miles(x.entregado - x.repartido)})`).join(', ') }}<template v-if="resultado.sinRepartir.length > 6">…</template>
+      </p>
       <p v-if="resultado.noReconocidos.length" class="no-rec">Productos no reconocidos ({{ resultado.noReconocidos.length }}): {{ resultado.noReconocidos.slice(0, 8).join(', ') }}<template v-if="resultado.noReconocidos.length > 8">…</template></p>
     </section>
 

@@ -10,9 +10,9 @@ const { descontarDeLote, pasarEntreUbicaciones } = require('./movimientos.servic
 
 /** null si se puede trasladar ahi; si no, el error para la respuesta. */
 function errorDestino(ubicacion) {
-  const valido = ubicacion?.tipo === 'centro_salud' || ubicacion?.tipo === 'unidad_interna' || (ubicacion && esServicioQueInforma(ubicacion));
+  const valido = ['centro_salud', 'unidad_interna', 'territorio'].includes(ubicacion?.tipo) || (ubicacion && esServicioQueInforma(ubicacion));
   if (!ubicacion || !ubicacion.activo || !valido) {
-    return { status: 400, codigo: 'destino_invalido', mensaje: 'Se entrega a la farmacia, a las unidades del centro, a puestos de salud y a centros comunitarios activos' };
+    return { status: 400, codigo: 'destino_invalido', mensaje: 'Se entrega a la farmacia, a las unidades del centro, a puestos de salud, a centros comunitarios y a territorios activos' };
   }
   return null;
 }

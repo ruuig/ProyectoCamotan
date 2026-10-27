@@ -251,7 +251,8 @@ async function evaluarCalendario(establecimientoId, ahora) {
         establecimientoId,
         activo: true,
         tipo: { in: ['puesto_salud', 'centro_comunitario'] },
-        traslados: { some: {} },
+        // Recibió directo o por su territorio (el encargado le reparte).
+        OR: [{ traslados: { some: {} } }, { territorio: { ubicaciones: { some: { tipo: 'territorio', traslados: { some: {} } } } } }],
         informes: { none: { periodo } },
       },
       select: { id: true, nombre: true },

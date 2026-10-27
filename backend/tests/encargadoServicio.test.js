@@ -16,6 +16,7 @@ let tokenFarmacia;
 let tokenEncargado;
 let propio;
 let ajeno;
+let vecino;
 let insumo;
 
 const con = (t) => (p) => p.set('Authorization', `Bearer ${t}`);
@@ -27,7 +28,10 @@ beforeAll(async () => {
   [tokenAdmin, tokenBodega, tokenFarmacia] = (await Promise.all([login('admin'), login('bodega'), login('farmacia')])).map((r) => r.token);
   const u = (await con(tokenBodega)(request(app).get('/api/v1/bodega/ubicaciones'))).body.ubicaciones;
   const lugares = u.filter((x) => x.tipo === 'puesto_salud' || x.tipo === 'centro_comunitario');
-  [propio, ajeno] = lugares;
+  // propio: el suyo. vecino: otro de su territorio. ajeno: de otro territorio.
+  propio = lugares.find((x) => x.territorioId && lugares.some((y) => y.id !== x.id && y.territorioId === x.territorioId)) ?? lugares[0];
+  vecino = lugares.find((x) => x.id !== propio.id && x.territorioId === propio.territorioId);
+  ajeno = lugares.find((x) => x.territorioId !== propio.territorioId);
   insumo = (await con(tokenBodega)(request(app).post('/api/v1/insumos')).send({
     nombreGenerico: `${MARCA} Paracetamol`, categoria: 'medicamentos', presentacion: 'tableta', unidadMedida: 'unidad',
   })).body.insumo;
@@ -69,25 +73,34 @@ describe('requisiciones del encargado', () => {
     expect(r.status).toBe(200);
     expect(r.body.ubicacion.id).toBe(propio.id);
     expect(r.body.catalogo.some((c) => c.insumoId === insumo.id)).toBe(true);
-    // Aunque pida la de otro lugar, recibe la suya.
+    // La de otro lugar de su territorio, sí; la de otro territorio, no.
+    if (vecino) {
+      const delVecino = await con(tokenEncargado)(request(app).get(`/api/v1/bodega/requisiciones/sugerida?ubicacionId=${vecino.id}`));
+      expect(delVecino.body.ubicacion.id).toBe(vecino.id);
+    }
     const otra = await con(tokenEncargado)(request(app).get(`/api/v1/bodega/requisiciones/sugerida?ubicacionId=${ajeno.id}`));
-    expect(otra.body.ubicacion.id).toBe(propio.id);
+    expect(otra.status).toBe(404);
   });
 
-  it('crea la requisición siempre para su ubicación', async () => {
-    const r = await con(tokenEncargado)(request(app).post('/api/v1/bodega/requisiciones')).send({
-      ubicacionId: ajeno.id, fechaSolicitud: hoy(), solicitante: 'Encargada de Prueba',
+  it('crea la requisición para su lugar, otro de su territorio o el territorio; no para otro territorio', async () => {
+    const pedir = (ubicacionId) => con(tokenEncargado)(request(app).post('/api/v1/bodega/requisiciones')).send({
+      ubicacionId, fechaSolicitud: hoy(), solicitante: 'Encargada de Prueba',
       renglones: [{ insumoId: insumo.id, cantidadSolicitada: 12 }],
     });
+    const r = await pedir(undefined);
     expect(r.status).toBe(201);
     expect(r.body.requisicion.ubicacion.id).toBe(propio.id);
     creada = r.body.requisicion;
+    expect((await pedir(ajeno.id)).status).toBe(403);
+    if (vecino) expect((await pedir(vecino.id)).body.requisicion.ubicacion.id).toBe(vecino.id);
+    const t = (await con(tokenEncargado)(request(app).get('/api/v1/bodega/territorios'))).body.territorios[0];
+    if (t?.destinoId) expect((await pedir(t.destinoId)).body.requisicion.ubicacion.tipo).toBe('territorio');
   });
 
-  it('solo ve las de su ubicación', async () => {
+  it('solo ve las de su territorio', async () => {
     const r = await con(tokenEncargado)(request(app).get('/api/v1/bodega/requisiciones'));
     expect(r.status).toBe(200);
-    expect(r.body.requisiciones.every((x) => x.ubicacion === propio.nombre)).toBe(true);
+    expect(r.body.requisiciones.some((x) => x.ubicacion === ajeno.nombre)).toBe(false);
     expect(r.body.requisiciones.some((x) => x.id === creada.id)).toBe(true);
   });
 

@@ -23,6 +23,13 @@ function leerCsv(texto) {
   });
 }
 
+async function asegurarDestino(tx, establecimientoId, t) {
+  const nombre = `Territorio ${t.numero} · ${t.encargado}`;
+  const destino = await tx.ubicacion.findFirst({ where: { territorioId: t.id, tipo: 'territorio' } });
+  if (destino) await tx.ubicacion.update({ where: { id: destino.id }, data: { nombre, activo: true } });
+  else await tx.ubicacion.create({ data: { establecimientoId, nombre, tipo: 'territorio', orden: 900 + t.numero, territorioId: t.id } });
+}
+
 async function main() {
   const filas = leerCsv(fs.readFileSync(ruta, 'utf8'));
   const est = await prisma.establecimiento.findFirst({ orderBy: { id: 'asc' } });
@@ -39,13 +46,15 @@ async function main() {
         update: { encargado: f.encargado, activo: true },
       });
       // Los lugares que ya no son de este territorio quedan libres.
-      await tx.ubicacion.updateMany({ where: { territorioId: t.id }, data: { territorioId: null } });
+      await tx.ubicacion.updateMany({ where: { territorioId: t.id, tipo: { not: 'territorio' } }, data: { territorioId: null } });
       const lugares = f.lugares ? f.lugares.split('|').map((x) => x.trim()).filter(Boolean) : [];
       for (const nombre of lugares) {
         const u = porNombre.get(nombre);
         if (!u) { noEncontrados.push(`${numero}: ${nombre}`); continue; }
         await tx.ubicacion.update({ where: { id: u.id }, data: { territorioId: t.id } });
       }
+      // El territorio como destino de la bodega: le entrega al encargado y él reparte.
+      if (lugares.length) await asegurarDestino(tx, est.id, t);
       console.log(`Territorio ${numero} · ${f.encargado} · ${lugares.length} lugares`);
     }
   });

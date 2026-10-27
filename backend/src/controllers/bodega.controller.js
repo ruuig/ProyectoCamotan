@@ -37,7 +37,7 @@ const periodoActual = () => {
 async function listarUbicaciones(req, res) {
   const lista = await datos.ubicaciones(req.usuario.establecimientoId, { soloActivas: req.query.todas !== 'true' });
   res.json({
-    ubicaciones: lista.map((u) => ({ ...u, tipoEtiqueta: ETIQUETA_TIPO_UBICACION[u.tipo], informa: datos.esServicioQueInforma(u) })),
+    ubicaciones: lista.map((u) => ({ ...u, tipoEtiqueta: ETIQUETA_TIPO_UBICACION[u.tipo] ?? (u.tipo === 'territorio' ? 'Territorio' : 'Unidad del centro'), informa: datos.esServicioQueInforma(u) })),
     tipos: Object.entries(ETIQUETA_TIPO_UBICACION).map(([valor, etiqueta]) => ({ valor, etiqueta })),
   });
 }

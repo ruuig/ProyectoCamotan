@@ -51,23 +51,48 @@ async function cargarMias() {
 const lineas = ref([]);
 const cabecera = reactive({ solicitante: auth.usuario?.nombre ?? '', jefe: '', observaciones: '' });
 const enviando = ref(false);
-const borrador = usarBorrador('requisicion-servicio', { lineas, cabecera }, { vacio: (d) => !d.lineas.length });
+// Para quién se pide: su lugar (null), otro lugar de su territorio o todo el
+// territorio junto (bodega le entrega a él y él reparte).
+const para = ref(null);
+const territorio = ref(null);
+const sugerenciaPara = ref(null);
+const sugPedido = computed(() => (para.value && sugerenciaPara.value?.ubicacion?.id === para.value ? sugerenciaPara.value : sugerencia.value));
+const opcionesPara = computed(() => {
+  const t = territorio.value;
+  if (!t) return [];
+  return [
+    ...(t.destinoId ? [{ id: t.destinoId, nombre: 'Todo el territorio' }] : []),
+    ...t.ubicaciones,
+  ];
+});
+const borrador = usarBorrador('requisicion-servicio', { lineas, cabecera, para }, { vacio: (d) => !d.lineas.length });
 borrador.recuperar();
 function empezarDeNuevo() { borrador.limpiar(); llenar(); }
+async function elegirPara(id) {
+  error.value = '';
+  try {
+    const propio = id === sugerencia.value?.ubicacion?.id;
+    sugerenciaPara.value = propio ? null : await bodega.sugerida(id);
+    para.value = propio ? null : id;
+    llenar();
+  } catch (fallo) {
+    error.value = fallo.message;
+  }
+}
 
 // Columnas de cada renglón: lo que tiene el puesto y lo que entrega al mes.
 const COLUMNAS = ['Tiene', 'Entrega / mes'];
 const conDetalle = (r) => ({ ...r, datos: [miles(r.tiene), miles(r.demandaMensual)] });
 function llenar() {
-  lineas.value = (sugerencia.value?.renglones ?? [])
+  lineas.value = (sugPedido.value?.renglones ?? [])
     .filter((r) => r.sugerido > 0)
     .map((r) => ({ ...conDetalle(r), cantidad: String(r.sugerido) }));
 }
-const catalogo = computed(() => (sugerencia.value?.catalogo ?? []).map((c) => ({ id: c.insumoId, nombreGenerico: c.nombre, codigoInterno: '' })));
+const catalogo = computed(() => (sugPedido.value?.catalogo ?? []).map((c) => ({ id: c.insumoId, nombreGenerico: c.nombre, codigoInterno: '' })));
 /** Renglón nuevo para el editor: con lo que tiene y lo que entrega, si se sabe. */
 function nuevoRenglon(i) {
-  const base = sugerencia.value.renglones.find((r) => r.insumoId === i.id)
-    ?? { ...sugerencia.value.catalogo.find((c) => c.insumoId === i.id), demandaMensual: 0, tiene: 0, sugerido: 0 };
+  const base = sugPedido.value.renglones.find((r) => r.insumoId === i.id)
+    ?? { ...sugPedido.value.catalogo.find((c) => c.insumoId === i.id), demandaMensual: 0, tiene: 0, sugerido: 0 };
   return { ...conDetalle(base), cantidad: '' };
 }
 const erroresRenglon = ref({});
@@ -79,17 +104,20 @@ async function enviar() {
   enviando.value = true;
   try {
     const r = await bodega.crearRequisicion({
-      ubicacionId: ubicacion.value.id,
+      ubicacionId: sugPedido.value.ubicacion.id,
       fechaSolicitud: hoy(),
       solicitante: cabecera.solicitante.trim(),
       jefe: cabecera.jefe.trim() || null,
       observaciones: cabecera.observaciones.trim() || null,
       renglones: aEnviar.value.map(renglonPedido),
     }, nuevaClaveIdempotencia());
-    // Bodega la imprime en el formulario al despacharla, con lo autorizado:
-    // el encargado puede pedir desde el celular sin impresora.
+    // Bodega la imprime en el formulario al despacharla. El encargado se lleva
+    // una copia en hoja normal para pasarla a mano al formulario.
     aviso.value = `Requisición enviada: ${aEnviar.value.length} ${aEnviar.value.length === 1 ? 'producto' : 'productos'}.`;
+    window.open(`/imprimir/pedido/${r.requisicion.id}`, '_blank');
     lineas.value = [];
+    para.value = null;
+    sugerenciaPara.value = null;
     borrador.limpiar();
     await cargarMias();
     ir('inicio');
@@ -173,7 +201,8 @@ async function subirExcel(evento) {
   aviso.value = '';
   try {
     const r = await bodega.subirExcelConsumo(periodo.value, archivo);
-    aviso.value = `Cargado: ${r.lugares.map((l) => `${l.nombre} (${l.renglones})`).join(', ')}`;
+    const sinRepartir = r.sinRepartir?.length ? ` Sin repartir de lo entregado al territorio: ${r.sinRepartir.map((x) => `${x.nombre} (${x.entregado - x.repartido})`).join(', ')}.` : '';
+    aviso.value = `Cargado: ${r.lugares.map((l) => `${l.nombre} (${l.renglones})`).join(', ')}.${sinRepartir}`;
     await cargarInforme();
   } catch (fallo) {
     error.value = fallo.message;
@@ -257,8 +286,11 @@ function bajar(e, i) {
 
 onMounted(async () => {
   try {
-    const [s] = await Promise.all([bodega.sugerida(), cargarMias()]);
+    const [s, t] = await Promise.all([bodega.sugerida(), bodega.territorios().catch(() => ({ territorios: [] })), cargarMias()]);
     sugerencia.value = s;
+    territorio.value = t.territorios[0] ?? null;
+    // Lo que se dejó a medias para otro lugar sigue con ese lugar.
+    if (para.value) sugerenciaPara.value = await bodega.sugerida(para.value);
     if (ver.value === 'pedido' && !lineas.value.length) llenar();
     if (ver.value === 'informe') cargarInforme();
   } catch (fallo) {
@@ -302,12 +334,12 @@ onMounted(async () => {
           <ul v-if="mias.length" class="mias">
             <li v-for="r in mias.slice(0, 12)" :key="r.id" class="mia" :style="estiloTono(ESTADO[r.estado]?.tono ?? 'neutro')">
               <span class="min-w-0 flex-1">
-                <b>{{ fecha(r.fechaSolicitud) }}<template v-if="r.numero"> · N.º {{ textoNumero(r) }}</template> · {{ r.renglones }} {{ r.renglones === 1 ? 'renglón' : 'renglones' }}</b>
+                <b><template v-if="r.unidadSeccion !== ubicacion?.nombre">{{ r.unidadSeccion }} · </template>{{ fecha(r.fechaSolicitud) }}<template v-if="r.numero"> · N.º {{ textoNumero(r) }}</template> · {{ r.renglones }} {{ r.renglones === 1 ? 'renglón' : 'renglones' }}</b>
                 <small>{{ ESTADO[r.estado]?.texto ?? r.estado }}<template v-if="r.estado === 'anulada' && r.motivoAnulacion"> · {{ r.motivoAnulacion }}</template></small>
                 <small v-if="['despachada', 'parcial', 'recibida'].includes(r.estado) && r.despachado < r.solicitado">Llegaron {{ miles(r.despachado) }} de {{ miles(r.solicitado) }}</small>
               </span>
               <button v-if="r.estado === 'solicitada'" type="button" class="b-btn chico secundario" :disabled="cancelando === r.id" @click="cancelar(r)">Cancelar</button>
-              <RouterLink :to="`/imprimir/requisicion/${r.id}`" target="_blank" class="b-btn chico secundario"><Icono nombre="imprimir" :tamano="16" /> Imprimir</RouterLink>
+              <RouterLink :to="`/imprimir/pedido/${r.id}`" target="_blank" class="b-btn chico secundario"><Icono nombre="imprimir" :tamano="16" /> Imprimir</RouterLink>
             </li>
           </ul>
           <p v-else class="b-vacio">Sin requisiciones.</p>
@@ -319,6 +351,16 @@ onMounted(async () => {
     <template v-else-if="ver === 'pedido'">
       <div class="rejilla mt-4">
         <AvisoBorrador v-if="borrador.recuperado.value && lineas.length" class="col-span-full" texto="Se recuperó la requisición que dejó a medias." @descartar="empezarDeNuevo" />
+        <div v-if="opcionesPara.length > 1" class="col-span-full flex flex-wrap items-center gap-3">
+          <span class="b-etiqueta m-0">Pedir para</span>
+          <div class="b-segmentado flex-wrap" role="radiogroup" aria-label="Pedir para">
+            <button
+              v-for="o in opcionesPara" :key="o.id" type="button" role="radio"
+              :aria-checked="sugPedido?.ubicacion?.id === o.id" :class="sugPedido?.ubicacion?.id === o.id ? 'on' : ''"
+              @click="elegirPara(o.id)"
+            >{{ o.nombre }}</button>
+          </div>
+        </div>
         <EditorPedido v-model="lineas" :errores="erroresRenglon" :catalogo="catalogo" :nuevo-renglon="nuevoRenglon" :columnas="COLUMNAS" />
         <aside class="tarjeta">
           <h2>Firmas</h2>

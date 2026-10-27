@@ -1088,7 +1088,8 @@ model Ubicacion {
   id                Int      @id @default(autoincrement())
   establecimientoId Int      @map("establecimiento_id")
   nombre            String
-  tipo              String // bodega|centro_salud|puesto_salud|centro_comunitario|unidad_interna
+  // territorio: la bodega le entrega al encargado y él reparte entre sus lugares.
+  tipo              String // bodega|centro_salud|puesto_salud|centro_comunitario|unidad_interna|territorio
   comunidad         String?
   orden             Int      @default(0)
   activo            Boolean  @default(true)
@@ -1244,6 +1245,8 @@ model InformeServicioRenglon {
   saldoAnterior      Int      @map("saldo_anterior")
   entradas           Int
   entradasInformadas Int?     @map("entradas_reportadas")
+  // Lo que el encargado le dio de lo que la bodega entregó a su territorio.
+  entradasTerritorio Int      @default(0) @map("entradas_territorio")
   entregado          Int      @default(0)
   noEntregado        Int      @default(0) @map("no_entregado")
   saldoSiguiente     Int      @map("saldo_siguiente")

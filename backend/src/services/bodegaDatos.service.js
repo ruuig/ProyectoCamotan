@@ -197,7 +197,11 @@ async function formularioInforme(establecimientoId, ubicacionId, periodo) {
     // entradas: esos meses no tienen traslados en el sistema.
     const delExcel = informe?.importado && previo;
     const saldoAnterior = delExcel ? previo.saldoAnterior : (arranque.saldoAnterior.get(k) ?? 0);
-    const entradas = delExcel ? previo.entradas : (arranque.entradas.get(k) ?? 0);
+    const entradasBodega = delExcel ? previo.entradas : (arranque.entradas.get(k) ?? 0);
+    // Lo que el encargado le dio de lo que la bodega entregó a su territorio:
+    // eso solo lo sabe él y lo dice en su informe.
+    const entradasTerritorio = delExcel ? 0 : (previo?.entradasTerritorio ?? 0);
+    const entradas = entradasBodega + entradasTerritorio;
     if (saldoAnterior || entradas) maneja.add(i.id);
     return {
       insumoId: i.id,
@@ -207,6 +211,8 @@ async function formularioInforme(establecimientoId, ubicacionId, periodo) {
       unidadEntrega: i.unidadEntrega,
       categoria: i.categoria,
       maneja: maneja.has(i.id),
+      entradasBodega,
+      entradasTerritorio,
       ...filaInforme({
         saldoAnterior,
         entradas,
@@ -243,20 +249,22 @@ async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglon
   for (const r of renglones) {
     const b = base.get(r.insumoId);
     if (!b) continue;
+    // Sin dato nuevo de lo repartido, se queda lo que ya había dicho.
+    const entradasTerritorio = r.entradasTerritorio ?? b.entradasTerritorio;
     const f = filaInforme({
       saldoAnterior: b.saldoAnterior,
-      entradas: b.entradas,
+      entradas: b.entradasBodega + entradasTerritorio,
       entregado: r.entregado ?? 0,
       noEntregado: r.noEntregado ?? 0,
       saldoInformado: r.saldoInformado,
       entradasInformadas: r.entradasInformadas,
     });
-    filas.push({ insumoId: r.insumoId, ...f });
+    filas.push({ insumoId: r.insumoId, ...f, entradasTerritorio });
   }
   // Los insumos que no se tocaron pero tienen movimiento quedan con su saldo.
   for (const b of form.renglones) {
     if (!filas.some((f) => f.insumoId === b.insumoId) && (b.saldoAnterior || b.entradas)) {
-      filas.push({ insumoId: b.insumoId, ...filaInforme({ saldoAnterior: b.saldoAnterior, entradas: b.entradas }) });
+      filas.push({ insumoId: b.insumoId, ...filaInforme({ saldoAnterior: b.saldoAnterior, entradas: b.entradas }), entradasTerritorio: b.entradasTerritorio });
     }
   }
 
@@ -277,6 +285,7 @@ async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglon
         saldoAnterior: f.saldoAnterior,
         entradas: f.entradas,
         entradasInformadas: f.entradasInformadas,
+        entradasTerritorio: f.entradasTerritorio ?? 0,
         entregado: f.entregado,
         noEntregado: f.noEntregado,
         saldoSiguiente: f.saldoSiguiente,
@@ -286,6 +295,36 @@ async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglon
   });
 
   return { renglones: filas.length, diferencias };
+}
+
+/**
+ * Lo que la bodega entregó a un territorio y lo que el encargado ya repartió
+ * entre sus lugares (lo que dicen sus informes), por insumo, hasta el fin del
+ * periodo. La diferencia la tiene el encargado sin repartir o sin informar.
+ */
+async function repartoDelTerritorio(establecimientoId, territorioId, periodo) {
+  const destino = await prisma.ubicacion.findFirst({ where: { establecimientoId, territorioId, tipo: 'territorio' } });
+  if (!destino) return new Map();
+  const { hasta } = limitesDePeriodo(periodo);
+  const [movimientos, repartido] = await Promise.all([
+    prisma.movimientoInsumo.findMany({
+      where: { tipo: 'traslado', registradoEn: { lt: hasta }, traslado: { is: { ubicacionId: destino.id } } },
+      select: { cantidad: true, registradoEn: true, lote: { select: { insumoId: true } } },
+    }),
+    prisma.informeServicioRenglon.findMany({
+      where: { entradasTerritorio: { gt: 0 }, informe: { periodo: { lte: periodo }, ubicacion: { territorioId } } },
+      select: { insumoId: true, entradasTerritorio: true },
+    }),
+  ]);
+  const salida = new Map();
+  const de = (id) => salida.get(id) ?? salida.set(id, { entregadoMes: 0, entregado: 0, repartido: 0 }).get(id);
+  for (const m of movimientos) {
+    const f = de(m.lote.insumoId);
+    f.entregado -= m.cantidad;
+    if (periodoDe(new Date(new Date(m.registradoEn).getTime() - 6 * 3600000)) === periodo) f.entregadoMes -= m.cantidad;
+  }
+  for (const r of repartido) de(r.insumoId).repartido += r.entradasTerritorio;
+  return salida;
 }
 
 /** Que servicios ya informaron el mes y cuales faltan. */
@@ -660,6 +699,7 @@ function periodoDelPedido(diaCorte, ahora = new Date()) {
 async function sugerenciaServicio(establecimientoId, ubicacionId, ahora = new Date()) {
   const ubicacion = await prisma.ubicacion.findFirst({ where: { id: ubicacionId, establecimientoId } });
   if (!ubicacion) return null;
+  if (ubicacion.tipo === 'territorio') return sugerenciaTerritorio(establecimientoId, ubicacion, ahora);
   const params = parametrosBres(await configuracion(establecimientoId));
   const actual = periodoDe(ahora);
   const periodos = ultimosPeriodos(periodoAnterior(actual), params.mesesPromedio);
@@ -693,6 +733,35 @@ async function sugerenciaServicio(establecimientoId, ubicacionId, ahora = new Da
   // Todo el catálogo, para agregar algo que el centro no ha manejado.
   const catalogo = form.renglones.map((r) => ({ insumoId: r.insumoId, nombre: [r.nombre, r.concentracion].filter(Boolean).join(' '), unidad: r.unidadEntrega }));
   return { ubicacion, periodos, nivelMaximoMeses: params.nivelMaximoMeses, renglones, catalogo };
+}
+
+/**
+ * Lo de todos los lugares del territorio junto, menos lo que el encargado
+ * todavía tiene sin repartir de entregas anteriores.
+ */
+async function sugerenciaTerritorio(establecimientoId, ubicacion, ahora) {
+  const lugares = (await prisma.ubicacion.findMany({ where: { establecimientoId, territorioId: ubicacion.territorioId, activo: true } }))
+    .filter(esServicioQueInforma);
+  const [partes, reparto] = await Promise.all([
+    Promise.all(lugares.map((l) => sugerenciaServicio(establecimientoId, l.id, ahora))),
+    repartoDelTerritorio(establecimientoId, ubicacion.territorioId, periodoDe(ahora)),
+  ]);
+  const junto = new Map();
+  for (const p of partes) {
+    for (const r of p.renglones) {
+      const j = junto.get(r.insumoId) ?? { ...r, demandaMensual: 0, tiene: 0, sugerido: 0 };
+      j.demandaMensual = Math.round((j.demandaMensual + r.demandaMensual) * 10) / 10;
+      j.tiene += r.tiene;
+      j.sugerido += r.sugerido;
+      junto.set(r.insumoId, j);
+    }
+  }
+  const renglones = [...junto.values()].map((r) => {
+    const sinRepartir = Math.max(0, (reparto.get(r.insumoId)?.entregado ?? 0) - (reparto.get(r.insumoId)?.repartido ?? 0));
+    return { ...r, tiene: r.tiene + sinRepartir, sugerido: Math.max(0, r.sugerido - sinRepartir) };
+  });
+  const params = parametrosBres(await configuracion(establecimientoId));
+  return { ubicacion, periodos: partes[0]?.periodos ?? [], nivelMaximoMeses: params.nivelMaximoMeses, renglones, catalogo: partes[0]?.catalogo ?? [] };
 }
 
 /**
@@ -757,4 +826,5 @@ module.exports = {
   demandaMunicipal,
   balance,
   promedioPorServicio,
+  repartoDelTerritorio,
 };

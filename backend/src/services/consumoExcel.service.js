@@ -37,9 +37,16 @@ async function territorios(establecimientoId) {
   const lista = await prisma.territorio.findMany({
     where: { establecimientoId, activo: true },
     orderBy: { numero: 'asc' },
-    include: { ubicaciones: { where: { activo: true }, orderBy: [{ orden: 'asc' }, { id: 'asc' }], select: { id: true, nombre: true } } },
+    include: { ubicaciones: { where: { activo: true }, orderBy: [{ orden: 'asc' }, { id: 'asc' }], select: { id: true, nombre: true, tipo: true } } },
   });
-  return lista.map((t) => ({ id: t.id, numero: t.numero, encargado: t.encargado, ubicaciones: t.ubicaciones }));
+  // destinoId: el territorio como destino de la bodega (el encargado reparte).
+  return lista.map((t) => ({
+    id: t.id,
+    numero: t.numero,
+    encargado: t.encargado,
+    destinoId: t.ubicaciones.find((u) => u.tipo === 'territorio')?.id ?? null,
+    ubicaciones: t.ubicaciones.filter((u) => u.tipo !== 'territorio').map(({ id, nombre }) => ({ id, nombre })),
+  }));
 }
 
 /** El territorio de un encargado de servicio: el de su centro o puesto. */
@@ -142,10 +149,11 @@ async function libroDelTerritorio(establecimientoId, territorioId, periodo) {
   const lugares = t.ubicaciones.filter(datos.esServicioQueInforma);
   if (!lugares.length) throw fallo(409, 'sin_lugares', `El territorio ${t.numero} no tiene centros ni puestos asignados`);
 
-  const [filas, formularios, promedio] = await Promise.all([
+  const [filas, formularios, promedio, reparto] = await Promise.all([
     filasDelBalance(establecimientoId),
     Promise.all(lugares.map((u) => datos.formularioInforme(establecimientoId, u.id, periodo))),
     promedios(lugares.map((u) => u.id), periodo),
+    datos.repartoDelTerritorio(establecimientoId, t.id, periodo),
   ]);
   const deLugar = formularios.map((f) => new Map(f.renglones.map((r) => [r.insumoId, r])));
 
@@ -238,8 +246,9 @@ async function libroDelTerritorio(establecimientoId, territorioId, periodo) {
           celda.numFmt = '#,##0';
           celda.font = j === 4 ? LETRA.saldo : LETRA.dato;
           if (RELLENO_DATO[j]) celda.fill = relleno(RELLENO_DATO[j]);
-          // Lo que llena el encargado: solo números enteros, cero o más.
-          if (j === 2 || j === 3) {
+          // Lo que llena el encargado: solo números enteros, cero o más. Las
+          // entradas también, por si reparte lo que la bodega le dio al territorio.
+          if (j >= 1 && j <= 3) {
             celda.dataValidation = {
               type: 'whole', operator: 'greaterThanOrEqual', formulae: [0], allowBlank: true,
               showErrorMessage: true, errorTitle: 'Cantidad', error: 'Escriba un número entero, sin decimales.',
@@ -250,7 +259,41 @@ async function libroDelTerritorio(establecimientoId, territorioId, periodo) {
     }
     fila += 1;
   }
+  hojaDelReparto(libro, filas, reparto);
   return { libro, nombre: `Consumo ${nombreHoja(periodo)} - Territorio ${t.numero} ${t.encargado}.xlsx` };
+}
+
+/**
+ * Si la bodega le entregó al territorio (no a cada lugar), una hoja más con lo
+ * que recibió el encargado: lo que le da a cada lugar lo suma en sus «Entradas».
+ */
+function hojaDelReparto(libro, filas, reparto) {
+  const conReparto = filas.filter((f) => f.insumo && reparto.get(f.insumo.id)?.entregado);
+  if (!conReparto.length) return;
+  const hoja = libro.addWorksheet('Entregado al territorio', { views: [{ state: 'frozen', ySplit: 3 }] });
+  hoja.getColumn(1).width = 49;
+  [2, 3].forEach((c) => { hoja.getColumn(c).width = 18; });
+  hoja.getCell('A1').value = 'Lo que la bodega le entregó al territorio. Lo que le dio a cada lugar, súmelo en sus «Entradas».';
+  hoja.getCell('A1').font = { name: 'Arial', size: 11, bold: true, color: { argb: COLOR.titulo } };
+  ['Producto', 'Entregado este mes', 'Sin repartir'].forEach((texto, j) => {
+    const celda = hoja.getCell(3, j + 1);
+    celda.value = texto;
+    celda.font = LETRA.encabezado;
+    celda.fill = relleno(COLOR.nombreLugar);
+    celda.border = BORDES;
+    celda.alignment = { horizontal: 'center', wrapText: true };
+  });
+  conReparto.forEach((f, k) => {
+    const r = reparto.get(f.insumo.id);
+    const valores = [f.insumo.nombreGenerico, r.entregadoMes, Math.max(0, r.entregado - r.repartido)];
+    valores.forEach((v, j) => {
+      const celda = hoja.getCell(4 + k, j + 1);
+      celda.value = v;
+      celda.font = LETRA.dato;
+      celda.border = BORDES;
+      if (j) celda.numFmt = '#,##0';
+    });
+  });
 }
 
 /** Número de una celda de Excel: valor, resultado de fórmula o texto con número. */
@@ -329,6 +372,15 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
   for (const a of alias) insumoDe.set(a.aliasNormalizado.replace(/\s+/g, ''), a.insumoId);
   const secciones = new Set([...SECCIONES.map((s) => clave(s.titulo)), clave('AGREGADOS EN EL SISTEMA')]);
 
+  // Lo que la bodega entregó al territorio: lo que el encargado sume en las
+  // entradas de un lugar, sobre lo que la bodega le entregó directo, es lo
+  // que le dio de eso.
+  const reparto = await datos.repartoDelTerritorio(establecimientoId, territorioId, periodo);
+  const formularios = new Map(await Promise.all(bloques.map(async ({ u }) => {
+    const form = await datos.formularioInforme(establecimientoId, u.id, periodo);
+    return [u.id, new Map(form.renglones.map((x) => [x.insumoId, x]))];
+  })));
+
   const porLugar = new Map(bloques.map((b) => [b.u.id, []]));
   const noReconocidos = [];
   for (let f = PRIMERA_FILA; f <= hoja.rowCount; f += 1) {
@@ -344,7 +396,14 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
       // Si el saldo siguiente se escribió a mano (sin fórmula), es lo que contó el servicio.
       const saldo = r.getCell(c + 4).value;
       const saldoInformado = typeof saldo === 'number' ? Math.max(0, Math.round(saldo)) : null;
-      if (entregado || noEntregado || saldoInformado !== null) porLugar.get(u.id).push({ insumoId, entregado, noEntregado, saldoInformado });
+      let entradasTerritorio;
+      const entradas = numeroDe(r.getCell(c + 1).value);
+      if (reparto.get(insumoId)?.entregado && entradas !== null) {
+        entradasTerritorio = Math.max(0, Math.round(entradas) - (formularios.get(u.id).get(insumoId)?.entradasBodega ?? 0));
+      }
+      if (entregado || noEntregado || saldoInformado !== null || entradasTerritorio !== undefined) {
+        porLugar.get(u.id).push({ insumoId, entregado, noEntregado, saldoInformado, entradasTerritorio });
+      }
     }
   }
 
@@ -354,7 +413,12 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
     const r = await datos.guardarInforme(establecimientoId, u.id, periodo, { renglones, observacion: 'Cargado desde Excel' }, usuarioId);
     lugares.push({ ubicacionId: u.id, nombre: u.nombre, renglones: renglones.length, diferencias: r?.diferencias ?? 0 });
   }
-  return { periodo, lugares, noReconocidos, lugaresNoReconocidos };
+  // Lo que el encargado recibió para el territorio y no aparece repartido.
+  const nombres = new Map(insumos.map((i) => [i.id, i.nombreGenerico]));
+  const sinRepartir = [...await datos.repartoDelTerritorio(establecimientoId, territorioId, periodo)]
+    .filter(([, r]) => r.entregado !== r.repartido)
+    .map(([insumoId, r]) => ({ insumoId, nombre: nombres.get(insumoId), entregado: r.entregado, repartido: r.repartido }));
+  return { periodo, lugares, noReconocidos, lugaresNoReconocidos, sinRepartir };
 }
 
 module.exports = { territorios, territorioDeUsuario, libroDelTerritorio, cargarLibro, nombreHoja };

@@ -117,6 +117,60 @@ describe('Excel del consumo por territorio', () => {
     expect(r.status).toBe(409);
   });
 
+  it('lo entregado al territorio lo reparte el encargado en las entradas de cada lugar', async () => {
+    if (!territorio) return;
+    const destino = await prisma.ubicacion.findFirst({ where: { territorioId: territorio.id, tipo: 'territorio' } });
+    if (!destino) return;
+    const local = new Date(Date.now() - 6 * 3600000);
+    const periodo = local.toISOString().slice(0, 7);
+    const [u1, u2] = territorio.ubicaciones;
+    // No pisar informes de verdad del mes.
+    if (await prisma.informeServicio.count({ where: { periodo, ubicacionId: { in: [u1.id, u2.id] } } })) return;
+    // Un producto nuevo con su lote: sale al final del Excel («Agregados en el sistema»).
+    const insumo = (await bod(request(app).post('/api/v1/insumos')).send({
+      nombreGenerico: `Prueba territorio ${Math.random().toString(36).slice(2, 7)}`,
+      categoria: 'medicamentos', presentacion: 'tableta', unidadMedida: 'unidad',
+    })).body.insumo;
+    const recibido = await bod(request(app).post(`/api/v1/insumos/${insumo.id}/lotes`)).send({
+      numeroLote: `T${Date.now()}`, fechaVence: new Date(Date.now() + 400 * 86400000).toISOString(), cantidad: 50,
+    });
+    expect(recibido.status).toBe(201);
+    const lote = { insumoId: insumo.id, insumo };
+
+    const e = await bod(request(app).post('/api/v1/bodega/requisiciones/entregar')).send({
+      ubicacionId: destino.id, solicitante: territorio.encargado, renglones: [{ insumoId: lote.insumoId, cantidad: 30 }],
+    });
+    expect(e.status).toBe(201);
+    try {
+      const libro = await libroDe((await bajar(territorio.id, periodo)).body);
+      const reparto = libro.getWorksheet('Entregado al territorio');
+      expect(reparto).toBeTruthy();
+      const hoja = libro.worksheets[0];
+      let f = null;
+      for (let k = 5; k <= hoja.rowCount; k += 1) if (hoja.getCell(k, 2).value === lote.insumo.nombreGenerico) f = k;
+      expect(f).toBeTruthy();
+      // El encargado le dio 20 al primer lugar y 6 al segundo: lo suma en sus entradas.
+      hoja.getCell(f, 4).value = (hoja.getCell(f, 4).value ?? 0) + 20;
+      hoja.getCell(f, 10).value = (hoja.getCell(f, 10).value ?? 0) + 6;
+      const r = await bod(request(app).post(`/api/v1/bodega/consumo/excel?periodo=${periodo}&territorioId=${territorio.id}`))
+        .set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .send(Buffer.from(await libro.xlsx.writeBuffer()));
+      expect(r.status).toBe(200);
+      const de = (u) => prisma.informeServicioRenglon.findFirst({ where: { insumoId: lote.insumoId, informe: { ubicacionId: u.id, periodo } } });
+      expect((await de(u1)).entradasTerritorio).toBe(20);
+      expect((await de(u2)).entradasTerritorio).toBe(6);
+      // Lo que no repartió queda a la vista.
+      const falta = r.body.sinRepartir.find((x) => x.insumoId === lote.insumoId);
+      expect(falta.entregado - falta.repartido).toBeGreaterThanOrEqual(4);
+
+      // Al volver a bajarlo, las entradas ya traen lo repartido.
+      const otra = (await libroDe((await bajar(territorio.id, periodo)).body)).worksheets[0];
+      expect(otra.getCell(f, 4).value).toBe(hoja.getCell(f, 4).value);
+    } finally {
+      await prisma.informeServicio.deleteMany({ where: { periodo, ubicacionId: { in: [u1.id, u2.id] } } });
+    }
+  });
+
   it('el encargado de servicio solo baja el de su territorio', async () => {
     const enc = await prisma.usuario.findFirst({ where: { rol: 'servicio', activo: true, ubicacion: { territorioId: { not: null } } } });
     if (!enc) return;

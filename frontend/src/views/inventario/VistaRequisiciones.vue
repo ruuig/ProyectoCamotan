@@ -43,8 +43,10 @@ const GRUPOS = [
   ['centro_salud', 'Farmacia'],
   ['unidad_interna', 'Unidades del centro'],
   ['servicio', 'Puestos y centros comunitarios'],
+  // El encargado recibe todo y lo reparte; en su Excel dice cuánto le dio a cada lugar.
+  ['territorio', 'Territorios (el encargado reparte)'],
 ];
-const grupoDe = (u) => (u.tipo === 'centro_salud' ? 'centro_salud' : u.tipo === 'unidad_interna' ? 'unidad_interna' : 'servicio');
+const grupoDe = (u) => (['centro_salud', 'unidad_interna', 'territorio'].includes(u.tipo) ? u.tipo : 'servicio');
 
 async function cargar() {
   try {
@@ -56,7 +58,7 @@ async function cargar() {
     if (!route.query.ver && porAtender.value.length && vista.value === 'nueva' && !renglones.value.length) vista.value = 'pedidos';
     tipos.value = r.tipos;
     lugares.value = u.ubicaciones
-      .filter((x) => x.activo !== false && (x.tipo === 'centro_salud' || (esBodega.value && (x.tipo === 'unidad_interna' || x.informa))))
+      .filter((x) => x.activo !== false && (x.tipo === 'centro_salud' || (esBodega.value && (x.tipo === 'unidad_interna' || x.tipo === 'territorio' || x.informa))))
       .map((x) => (x.tipo === 'centro_salud' ? { ...x, nombre: 'Farmacia (post-consulta)' } : x));
     insumos.value = i.insumos.map((x) => ({ ...x, saldoTotal: x.saldoBodega ?? x.saldoTotal }));
     solicitantes.value = s.solicitantes;
@@ -83,7 +85,8 @@ watch(() => nueva.ubicacionId, (id) => {
   if (restaurando) return;
   const s = solicitantes.value[id];
   const lugar = lugares.value.find((l) => l.id === Number(id));
-  nueva.solicitante = s?.solicitante ?? '';
+  // A un territorio, por defecto firma su encargado.
+  nueva.solicitante = s?.solicitante ?? (lugar?.tipo === 'territorio' ? lugar.nombre.split(' · ')[1] ?? '' : '');
   nueva.jefe = s?.jefe ?? '';
   nueva.unidadSeccion = s?.unidadSeccion ?? lugar?.nombre ?? '';
 });

@@ -10,9 +10,6 @@
  * Lo que es de cada visita (signos de peligro, motivo, signos vitales,
  * historia de la enfermedad, examen fisico, diagnostico, cierre) no esta aqui.
  *
- * La ficha de adolescente no tiene secciones: falta fotografiarla en el
- * centro y fichas.md pide no implementar su detalle hasta confirmarla.
- *
  * Funciones puras.
  */
 
@@ -98,6 +95,15 @@ function clasificacionPesoNacer(libras, onzas) {
 
 const CALCULOS = {
   clasificacionPesoNacer: (datos) => clasificacionPesoNacer(datos.pesoNacerLb, datos.pesoNacerOnz),
+};
+
+// Elaborado en hoja aparte (neonato y adolescente).
+const FAMILIOGRAMA = {
+  clave: 'familiograma',
+  titulo: 'Familiograma',
+  campos: [
+    { clave: 'familiograma', etiqueta: 'Familiograma', tipo: 'archivo', ayuda: 'Foto o PDF del familiograma elaborado en hoja aparte' },
+  ],
 };
 
 // --- Neonato (1.6 Antecedentes) ----------------------------------------------
@@ -189,13 +195,7 @@ const NEONATO = [
       siNo('bcg', 'BCG', { ayuda: 'RN, hasta antes de cumplir 1 año' }),
     ],
   },
-  {
-    clave: 'familiograma',
-    titulo: 'Familiograma',
-    campos: [
-      { clave: 'familiograma', etiqueta: 'Familiograma', tipo: 'archivo', ayuda: 'Foto o PDF del familiograma elaborado en hoja aparte' },
-    ],
-  },
+  FAMILIOGRAMA,
 ];
 
 // --- Lactante, niña y niño (2.6 Antecedentes) ---------------------------------
@@ -450,10 +450,150 @@ const ADULTO = [
   },
 ];
 
+// --- Adolescente y joven (AII_016: antecedentes y desarrollo puberal) ----------------
+
+const MENOR_DE_19 = { edadMeses: { hasta: 228 } };
+
+const ADOLESCENTE = [
+  {
+    clave: 'personales_adolescente',
+    titulo: 'Personales',
+    campos: [
+      numero('menarquia', 'Menarquia/espermarquia', 'años de edad', { minimo: 6, maximo: 25 }),
+      numero('embarazos', 'Número de embarazos', null, { minimo: 0, maximo: 30, ...SOLO_MUJERES }),
+      numero('hijos', 'Número de hijos', null, { minimo: 0, maximo: 30 }),
+      numero('abortos', 'Número de abortos', null, { minimo: 0, maximo: 30, ...SOLO_MUJERES }),
+      { clave: 'fur', etiqueta: 'FUR', tipo: 'fecha', ...SOLO_MUJERES },
+      siNoNumero('vidaSexualActiva', 'Vida sexual activa', 'edad de inicio', { maximo: 99 }),
+      siNo('conSuVoluntad', 'Con su voluntad', { sensible: true, mostrarSi: { campo: 'vidaSexualActiva', igual: true } }),
+      siNo('variasParejas', 'Varias parejas'),
+      especifique('anticonceptivos', 'Uso de métodos anticonceptivos'),
+      siNo('ciclosIrregulares', 'Ciclos menstruales irregulares', SOLO_MUJERES),
+      siNo('dismenorrea', 'Dismenorrea', SOLO_MUJERES),
+    ],
+  },
+  {
+    clave: 'medicos_adolescente',
+    titulo: 'Médicos',
+    campos: [
+      lista('antecedentesMedicos', 'Antecedentes médicos', [
+        item('anemia', 'Anemia'),
+        item('alergias', 'Alergias'),
+        item('asma', 'Asma'),
+        item('its', 'ITS'),
+        item('itu', 'ITU'),
+        item('violencia', 'Violencia', { sensible: true }),
+        item('crecimiento', 'Problemas de crecimiento'),
+        item('nutricionales', 'Problemas nutricionales'),
+        item('diabetes', 'Diabetes'),
+        item('tb', 'TB'),
+        item('trastornosAlimentarios', 'Trastornos alimentarios'),
+        item('hipertension', 'Hipertensión'),
+        item('medicamentos', 'Uso de medicamentos'),
+        item('discapacidad', 'Discapacidad'),
+        item('intoxicaciones', 'Intoxicaciones'),
+        item('accidentes', 'Accidentes'),
+        item('traumas', 'Traumas'),
+        item('cirugias', 'Cirugías'),
+        item('hospitalizaciones', 'Hospitalizaciones'),
+      ]),
+      texto('otrosMedicos', 'Especifique'),
+    ],
+  },
+  {
+    clave: 'psicosociales_adolescente',
+    titulo: 'Psicosociales',
+    campos: [
+      seleccion('viveCon', 'Vive con', VIVE_CON_ADULTO),
+      siNo('comparteCama', 'Comparte cama'),
+      siNo('educacionSexualidad', 'Educación integral en sexualidad'),
+      siNoNumero('trabajoInfantil', 'Trabajo infantil (menor de 14 años)', 'edad de inicio', { maximo: 30 }),
+      siNo('alteracionesAnimo', 'Alteraciones del estado de ánimo'),
+    ],
+  },
+  {
+    clave: 'estilos_vida_adolescente',
+    titulo: 'Estilos de vida',
+    campos: [
+      siNo('alimentacionAdecuada', 'Alimentación adecuada'),
+      numero('comidasDia', 'Comidas por día', null, { minimo: 0, maximo: 12 }),
+      siNoNumero('actividadFisica', 'Actividad física', 'horas al día', { maximo: 24 }),
+      siNo('videojuegos', 'Videojuegos'),
+      siNo('tv', 'TV'),
+      texto('otrasActividades', 'Otras actividades'),
+      numero('horasSueno', 'Horas de sueño al día', 'horas', { minimo: 0, maximo: 24 }),
+      siNo('higieneDiaria', 'Higiene diaria'),
+      siNo('espaciosAmigables', 'Asiste a espacios amigables'),
+      siNo('sustancias', 'Consumo de sustancias psicoactivas'),
+      texto('alcohol', 'Alcohol', { mostrarSi: { campo: 'sustancias', igual: true } }),
+      texto('drogas', 'Drogas', { mostrarSi: { campo: 'sustancias', igual: true } }),
+      texto('tabaco', 'Tabaco', { mostrarSi: { campo: 'sustancias', igual: true } }),
+      texto('otrasSustancias', 'Otras sustancias, especifique'),
+      siNo('conduceVehiculo', 'Conduce vehículo'),
+    ],
+  },
+  {
+    clave: 'familiares_adolescente',
+    titulo: 'Familiares',
+    campos: [
+      lista('antecedentesFamiliares', 'Antecedentes familiares', [
+        item('diabetes', 'Diabetes'),
+        item('hipertension', 'Hipertensión'),
+        item('cancer', 'Cáncer'),
+        item('transmisibles', 'Enfermedades transmisibles'),
+        item('its', 'ITS'),
+        item('tb', 'TB'),
+        item('violencia', 'Violencia', { sensible: true }),
+        item('psicologicos', 'Problemas psicológicos'),
+        item('judiciales', 'Problemas judiciales', { sensible: true }),
+        item('sustancias', 'Consumo sust. psicoactivas'),
+        item('padreAusente', 'Madre/padre ausente'),
+      ]),
+    ],
+  },
+  {
+    clave: 'vacunacion_adolescente',
+    titulo: 'Vacunación, suplementación y desparasitación',
+    campos: [
+      siNo('vph', 'VPH'),
+      siNo('td', 'Td'),
+      texto('otrasVacunas', 'Otras, especifique'),
+      especifique('suplementacion', 'Suplementación'),
+      especifique('desparasitacion', 'Desparasitación'),
+    ],
+  },
+  FAMILIOGRAMA,
+  {
+    clave: 'factores_riesgo_adolescente',
+    titulo: 'Factores de riesgo',
+    campos: [
+      lista('factoresRiesgo', 'Factores de riesgo', [
+        item('individuales', 'Factores de riesgo individuales'),
+        item('familia', 'Factores de riesgo en la familia'),
+        item('amigos', 'Factores de riesgo con amigos/pares'),
+        item('escuela', 'Factores de riesgo en la escuela'),
+        item('comunidad', 'Factores de riesgo en la comunidad'),
+      ]),
+      texto('especifiqueRiesgo', 'Especifique'),
+    ],
+  },
+  {
+    clave: 'desarrollo_puberal_adolescente',
+    titulo: 'Desarrollo puberal',
+    subtitulo: 'Autoevaluación en menores de 19 años',
+    campos: [
+      siNo('tannerAdecuado', 'Tanner adecuado a su edad', MENOR_DE_19),
+      texto('tannerMamas', 'Estadío de Tanner: mamas', { ...MENOR_DE_19, ...SOLO_MUJERES }),
+      texto('tannerGenitales', 'Estadío de Tanner: genitales', { ...MENOR_DE_19, soloSexo: 'M' }),
+      texto('tannerVello', 'Estadío de Tanner: vello púbico', MENOR_DE_19),
+    ],
+  },
+];
+
 const POR_FICHA = {
   recien_nacido: NEONATO,
   lactante_ninez: NINEZ,
-  adolescente_joven: [],
+  adolescente_joven: ADOLESCENTE,
   adulto: ADULTO,
   persona_mayor: ADULTO,
 };
@@ -461,7 +601,7 @@ const POR_FICHA = {
 // --- Consultas sobre la estructura ----------------------------------------------
 
 /** Todas las secciones conocidas, por clave (para validar una ruta). */
-const TODAS = new Map([...NEONATO, ...NINEZ, ...ADULTO].map((s) => [s.clave, s]));
+const TODAS = new Map([...NEONATO, ...NINEZ, ...ADULTO, ...ADOLESCENTE].map((s) => [s.clave, s]));
 
 /** El campo se muestra para este paciente (sexo, edad, respuesta previa). */
 function aplica(campo, { sexo, edadMeses }, datos = {}) {
@@ -666,6 +806,7 @@ module.exports = {
   NEONATO,
   NINEZ,
   ADULTO,
+  ADOLESCENTE,
   POR_FICHA,
   TODAS,
   clasificacionPesoNacer,

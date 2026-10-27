@@ -32,7 +32,7 @@ const NO_MEDICOS = new Set(Object.values(APARTE).flat());
 
 function antecedentesDe({ paciente, secciones, seccionesDef }) {
   const porClave = new Map(secciones.map((s) => [s.seccion, s.datos ?? {}]));
-  const medicosClave = ['medicos_adulto', 'medicos_ninez'].find((c) => porClave.has(c));
+  const medicosClave = ['medicos_adulto', 'medicos_adolescente', 'medicos_ninez'].find((c) => porClave.has(c));
   const medicos = medicosClave ? porClave.get(medicosClave) : {};
   const def = seccionesDef.find((s) => s.clave === medicosClave);
 
@@ -49,13 +49,13 @@ function antecedentesDe({ paciente, secciones, seccionesDef }) {
     medicos: listaMedica.join(', ') || (medicosClave ? NIEGA : ''),
     quirurgicos: siNiega(medicos, APARTE.quirurgicos) || siNiega(porClave.get('perinatales_neonato'), ['quirurgicos']),
     alergicos: siNiega(medicos, APARTE.alergicos),
-    mentales: siNiega(porClave.get('psicosociales_adulto'), ['alteracionesAnimo']),
+    mentales: siNiega(porClave.get('psicosociales_adulto') ?? porClave.get('psicosociales_adolescente'), ['alteracionesAnimo']),
     traumaticos: siNiega(medicos, APARTE.traumaticos),
     gestas: '', partos: '', abortos: '', hijosVivos: '', hijosMuertos: '', fur: '', cstp: '', otros: '',
   };
 
   if (paciente.sexo === 'F') {
-    const p = porClave.get('personales_adulto') ?? {};
+    const p = porClave.get('personales_adulto') ?? porClave.get('personales_adolescente') ?? {};
     const texto = (v) => (lleno(v) ? String(v) : '');
     a.gestas = texto(p.embarazos);
     a.abortos = texto(p.abortos);

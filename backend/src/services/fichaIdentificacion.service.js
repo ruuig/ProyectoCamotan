@@ -36,12 +36,7 @@ const FICHAS = {
     nombre: 'Ficha clínica para adolescente y joven',
     rango: 'de 10 a menos de 30 años',
     seccion: 'Identificación',
-    // La ficha todavia no se ha fotografiado en el centro. Se arma con el
-    // nucleo comun y lo que se sabe por la version publica, y se avisa.
-    provisional: true,
-    notaProvisional:
-      'La ficha de adolescente todavía no se ha fotografiado en el centro. '
-      + 'Se muestran los campos comunes y los que se conocen por la versión pública.',
+    provisional: false,
   },
   adulto: {
     clave: 'adulto',
@@ -221,16 +216,13 @@ function identificacionNinez() {
 }
 
 function identificacionAdolescente(edadAnios) {
-  const menorDeEdad = edadAnios < 18;
   // Orientacion sexual e identidad de genero solo se preguntan a mayores de 20.
   const preguntaOrientacion = edadAnios > 20;
 
   return [
     registrado('nombres', 'Nombres'),
     registrado('apellidos', 'Apellidos'),
-    campo('departamentoNacimiento', 'Departamento de nacimiento', 'departamento', {
-      opciones: OPCIONES_DEPARTAMENTO,
-    }),
+    ...nacimientoCompleto(),
     campo('domicilio', 'Domicilio', 'texto'),
     ...residencia(),
     registrado('fechaNacimiento', 'Fecha de nacimiento'),
@@ -257,16 +249,15 @@ function identificacionAdolescente(edadAnios) {
     }),
     ...pueblo(),
     ...migrante(),
-    ...(menorDeEdad
-      ? [
-          campo('responsableNombre', 'Nombre del referente adulto', 'texto'),
-          campo('responsableParentesco', 'Parentesco', 'catalogo', {
-            catalogo: 'parentesco',
-          }),
-          campo('responsableTelefono', 'No. de teléfono del referente', 'telefono'),
-        ]
-      : []),
     campo('telefono', 'No. de teléfono', 'telefono'),
+    campo('redesSociales', 'Redes sociales', 'texto', { ayuda: 'Cuáles usa, si usa' }),
+    campo('profesionOficio', 'Profesión u oficio (en jóvenes)', 'catalogo', {
+      catalogo: 'profesion_oficio',
+    }),
+    campo('estadoCivil', 'Estado civil', 'seleccion', { opciones: ESTADO_CIVIL }),
+    campo('responsableNombre', 'Nombre del referente adulto', 'texto'),
+    campo('responsableParentesco', 'Parentesco', 'catalogo', { catalogo: 'parentesco' }),
+    campo('celular', 'No. de celular', 'telefono'),
   ];
 }
 

@@ -198,9 +198,12 @@ async function deAtencion(req, res, next) {
   // (no esta en su capa de texto). Antes que dejar la pantalla vacia se usa la
   // de persona adulta, y se avisa que es provisional.
   const propios = signos.filter((s) => s.etapa === etapa?.clave);
-  const listaProvisional = propios.length === 0 && Boolean(etapa);
+  // La de adolescente no trae lista en el papel (es un recuadro): usa la de
+  // adulto sin aviso.
+  const usarSuplente = propios.length === 0 && Boolean(etapa);
+  const listaProvisional = usarSuplente && etapa.clave !== 'adolescente_joven';
 
-  if (listaProvisional) {
+  if (usarSuplente) {
     const suplentes = await prisma.signoPeligro.findMany({
       where: { establecimientoId: req.usuario.establecimientoId, activo: true, etapa: 'adulto' },
       orderBy: { orden: 'asc' },

@@ -322,8 +322,7 @@ function componerFichaImpresa(ctx) {
       bloqueCierre(ctx, ['proximaCita']),
     ];
   } else {
-    // Persona adulta y mayor. La de adolescente sigue este orden comun
-    // mientras no se fotografie la suya.
+    // Adolescente y joven, persona adulta y mayor: el mismo orden del papel.
     bloques = [
       identificacion,
       { ...bloqueSignosPeligro(ctx), titulo: 'Evalúe signos y síntomas de peligro' },

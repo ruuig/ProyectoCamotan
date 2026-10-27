@@ -135,6 +135,12 @@ describe('informe del mes del encargado', () => {
     const enviar = (t) => con(t)(request(app).put(`/api/v1/bodega/informes/${propio.id}/${periodo()}`)).send({
       renglones: [{ insumoId: insumo.id, entradas: 10, entregado: 4, noEntregado: 2 }],
     });
+    // No se envía si entrega más de lo que tenía.
+    const negativo = await con(tokenEncargado)(request(app).put(`/api/v1/bodega/informes/${propio.id}/${periodo()}`)).send({
+      renglones: [{ insumoId: insumo.id, entradas: 0, entregado: 999999 }],
+    });
+    expect(negativo.status).toBe(409);
+    expect(negativo.body.error.codigo).toBe('saldo_negativo');
     // Guardado a medias se puede seguir cambiando.
     const medias = await con(tokenEncargado)(request(app).put(`/api/v1/bodega/informes/${propio.id}/${periodo()}`)).send({
       enviar: false, renglones: [{ insumoId: insumo.id, entradas: 10 }],

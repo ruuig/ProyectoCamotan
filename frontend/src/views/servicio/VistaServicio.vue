@@ -160,9 +160,9 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: '2-digi
 // --- Informe del mes de cada lugar -------------------------------------------------------
 // Las mismas columnas del Excel del balance: el encargado solo llena lo
 // entregado a usuarios y lo no entregado; lo demás ya viene.
-// En orden, del más viejo al actual; se abre en el mes que se cierra (el anterior).
+// En orden, del más viejo al actual; se abre en el mes en curso.
 const PERIODOS = [periodoMenos(2), periodoMenos(1), periodoMenos(0)];
-const periodo = ref(PERIODOS[1]);
+const periodo = ref(PERIODOS[2]);
 const informe = ref(null);
 const soloLosMios = ref(true);
 const guardando = ref(false);
@@ -260,6 +260,20 @@ function recuperarBorrador(f) {
 }
 watch(() => informe.value?.renglones, guardarBorrador, { deep: true });
 const saldo = (r) => r.saldoAnterior + entero(r.entradas) - entero(r.entregado);
+// Como el BRES: este mes y los dos anteriores (entregado + no entregado).
+const promedio = (r) => Math.round(((r.demandaAnterior ?? 0) + entero(r.entregado) + entero(r.noEntregado)) / ((r.mesesAnteriores ?? 0) + 1));
+// No se envía con saldos negativos: entregó más de lo que tenía.
+const negativos = computed(() => (informe.value?.renglones ?? []).filter((r) => saldo(r) < 0));
+function pedirEnvio() {
+  if (enviado.value) return;
+  if (negativos.value.length) {
+    error.value = `Queda en negativo (entregó más de lo que tenía): ${negativos.value.map((r) => r.nombre).join(', ')}. Revise las entradas o lo entregado.`;
+    document.querySelector('.tabla-informe td.negativo')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+  error.value = '';
+  confirmando.value = 'informe';
+}
 
 // Enviado una vez, el encargado ya no lo cambia: lo corrige bodega (responde por el BRES).
 const enviado = computed(() => Boolean(informe.value?.informe?.enviadoEn));
@@ -344,7 +358,7 @@ onMounted(async () => {
         </button>
         <button type="button" class="tarea marino" @click="ir('informe')">
           <span class="ic"><Icono nombre="hojaCalculo" :tamano="46" /></span>
-          <span class="txt"><b>Informe del mes</b><small>{{ nombreMes(PERIODOS[1]) }}</small></span>
+          <span class="txt"><b>Informe del mes</b><small>{{ nombreMes(PERIODOS[2]) }}</small></span>
         </button>
       </div>
 
@@ -434,7 +448,7 @@ onMounted(async () => {
         <span>Enviado el {{ new Date(informe.informe.capturadoEn).toLocaleDateString('es-GT') }}<template v-if="informe.informe.revisado"> · revisado por bodega</template>. Para corregir algo, avise a bodega.</span>
       </p>
 
-      <form v-if="informe" class="mt-3" @submit.prevent="!enviado && (confirmando = 'informe')">
+      <form v-if="informe" class="mt-3" @submit.prevent="pedirEnvio">
         <label class="buscar-insumo">
           <Icono nombre="buscar" :tamano="20" />
           <input v-model="buscarInsumo" type="search" placeholder="Buscar producto" aria-label="Buscar producto" />
@@ -457,14 +471,14 @@ onMounted(async () => {
             <tbody>
               <template v-for="(r, i) in visibles" :key="r.insumoId">
               <tr v-if="conTitulo(i)" class="seccion"><td colspan="7">{{ r.seccion }}</td></tr>
-              <tr :class="{ lleno: lleno(r) }">
+              <tr :class="{ lleno: lleno(r), 'fila-negativa': saldo(r) < 0 }">
                 <td class="prod">{{ [r.nombre, r.concentracion].filter(Boolean).join(' ') }} <small>{{ r.unidadEntrega }}</small></td>
                 <td class="n">{{ miles(r.saldoAnterior) }}</td>
                 <td class="celda"><input v-model="r.entradas" :readonly="enviado" type="text" inputmode="numeric" placeholder="0" :aria-label="`Entradas de ${r.nombre}`" /></td>
                 <td class="celda"><input :id="`i-${i}-e`" v-model="r.entregado" :readonly="enviado" type="text" inputmode="numeric" enterkeyhint="next" placeholder="0" :aria-label="`Entregado a usuarios de ${r.nombre}`" @keydown.enter="bajar($event, i)" /></td>
                 <td class="celda"><input v-model="r.noEntregado" :readonly="enviado" type="text" inputmode="numeric" placeholder="0" :aria-label="`No entregado de ${r.nombre}`" /></td>
                 <td class="n saldo" :class="{ negativo: saldo(r) < 0 }">{{ miles(saldo(r)) }}</td>
-                <td class="n">{{ miles(r.promedio ?? 0) }}</td>
+                <td class="n">{{ miles(promedio(r)) }}</td>
               </tr>
               </template>
               <tr v-if="!visibles.length"><td colspan="7" class="b-vacio">{{ buscarInsumo ? 'Ningún producto con ese nombre.' : 'Este lugar no ha manejado productos. Quite «Solo lo que manejo» para informar cualquiera.' }}</td></tr>
@@ -472,6 +486,7 @@ onMounted(async () => {
           </table>
         </div>
 
+        <p v-if="!enviado && negativos.length" class="b-aviso error mt-3">{{ negativos.length }} {{ negativos.length === 1 ? 'producto queda' : 'productos quedan' }} en negativo: revise las entradas o lo entregado (en rojo).</p>
         <div v-if="!enviado" class="barra-enviar">
           <button type="button" class="b-btn secundario guardar" :disabled="guardando" @click="guardarInforme(false)"><Icono nombre="guardar" :tamano="20" /> Guardar sin enviar</button>
           <button type="submit" class="b-btn primario" :disabled="guardando"><Icono nombre="guardar" :tamano="20" /> {{ guardando ? 'Enviando…' : `Enviar informe de ${lugarActual?.nombre}` }}</button>
@@ -561,7 +576,9 @@ onMounted(async () => {
 .tabla-informe td.prod small { margin-left: 4px; font-size: 12px; font-weight: 700; color: #64748B; }
 .tabla-informe td.n { text-align: right; white-space: nowrap; }
 .tabla-informe td.saldo { color: #14244A; background: #F5F9FE; }
-.tabla-informe td.negativo { color: #C03535; }
+.tabla-informe td.negativo { color: #C03535; font-weight: 900; }
+.tabla-informe tr.fila-negativa td { background: #FDF0F0; }
+.tabla-informe tr.fila-negativa td.prod { box-shadow: inset 4px 0 0 #C03535; }
 .tabla-informe tr.lleno td.prod { box-shadow: inset 4px 0 0 #2E9E6A; }
 .tabla-informe tr.seccion td { padding: 8px 10px; background: #EEE9F4; font-size: 13px; font-weight: 900; letter-spacing: .04em; color: #3B2A5A; }
 .tabla-informe td.celda { width: 130px; background: #FAFCFF; }

@@ -250,7 +250,7 @@ async function formularioInforme(establecimientoId, ubicacionId, periodo) {
  * entregado y, si se tienen, el saldo y las entradas que informa el servicio;
  * el resto se recalcula aqui.
  */
-async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglones, observacion }, usuarioId, { enviar = true } = {}) {
+async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglones, observacion }, usuarioId, { enviar = true, sinNegativos = false } = {}) {
   const form = await formularioInforme(establecimientoId, ubicacionId, periodo);
   if (!form) return null;
 
@@ -281,6 +281,12 @@ async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglon
     }
   }
 
+  // No se entrega más de lo que se tenía: un saldo negativo es un dato que falta o está mal.
+  if (sinNegativos) {
+    const nombres = new Map(form.renglones.map((r) => [r.insumoId, r.nombre]));
+    const negativos = filas.filter((f) => f.saldoSiguiente < 0).map((f) => nombres.get(f.insumoId));
+    if (negativos.length) return { negativos };
+  }
   const diferencias = filas.filter((f) => f.diferenciaSaldo || f.diferenciaEntradas).length;
 
   await prisma.$transaction(async (tx) => {

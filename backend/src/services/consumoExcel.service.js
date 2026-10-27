@@ -79,10 +79,15 @@ async function filasDelBalance(establecimientoId) {
   return filas;
 }
 
-/** Promedio de demanda (entregado + no entregado) de los meses anteriores con informe. */
+/**
+ * Promedio de demanda (entregado + no entregado), como el del BRES: el mes que
+ * se informa y los dos anteriores (los que tengan informe). Devuelve, por lugar
+ * e insumo, lo de los meses anteriores; el mes que se informa lo suma quien lo
+ * llena: promedio = (anterior + entregado + no entregado) / (meses + 1).
+ */
 async function promedios(ubicacionIds, periodo) {
   const meses = [];
-  for (let p = periodoAnterior(periodo), n = 0; n < MESES_PROMEDIO; n += 1, p = periodoAnterior(p)) meses.push(p);
+  for (let p = periodoAnterior(periodo), n = 0; n < MESES_PROMEDIO - 1; n += 1, p = periodoAnterior(p)) meses.push(p);
   const renglones = await prisma.informeServicioRenglon.findMany({
     where: { informe: { ubicacionId: { in: ubicacionIds }, periodo: { in: meses } } },
     select: { insumoId: true, entregado: true, noEntregado: true, informe: { select: { ubicacionId: true, periodo: true } } },
@@ -96,10 +101,10 @@ async function promedios(ubicacionIds, periodo) {
     m.add(r.informe.periodo);
     conInforme.set(r.informe.ubicacionId, m);
   }
-  return (ubicacionId, insumoId) => {
-    const n = conInforme.get(ubicacionId)?.size ?? 0;
-    return n ? Math.round((suma.get(`${ubicacionId}:${insumoId}`) ?? 0) / n) : 0;
-  };
+  return (ubicacionId, insumoId) => ({
+    anterior: suma.get(`${ubicacionId}:${insumoId}`) ?? 0,
+    meses: conInforme.get(ubicacionId)?.size ?? 0,
+  });
 }
 
 /*
@@ -239,7 +244,12 @@ async function libroDelTerritorio(establecimientoId, territorioId, periodo) {
         const letra = (c) => hoja.getColumn(c).letter;
         const resultado = (d?.saldoAnterior ?? 0) + (d?.entradas ?? 0) - (capturado ? d.entregado : 0);
         r.getCell(c0 + 4).value = { formula: `(${letra(c0)}${fila}+${letra(c0 + 1)}${fila})-${letra(c0 + 2)}${fila}`, result: resultado };
-        r.getCell(c0 + 5).value = promedio(u.id, f.insumo.id);
+        // Fórmula: cambia al llenar lo entregado y lo no entregado del mes.
+        const p = promedio(u.id, f.insumo.id);
+        r.getCell(c0 + 5).value = {
+          formula: `ROUND((${p.anterior}+${letra(c0 + 2)}${fila}+${letra(c0 + 3)}${fila})/${p.meses + 1},0)`,
+          result: Math.round((p.anterior + (capturado ? d.entregado + d.noEntregado : 0)) / (p.meses + 1)),
+        };
         for (let j = 0; j < 6; j += 1) {
           const celda = r.getCell(c0 + j);
           celda.border = BORDES;

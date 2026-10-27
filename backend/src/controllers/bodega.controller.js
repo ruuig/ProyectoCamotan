@@ -255,9 +255,14 @@ async function obtenerInforme(req, res, next) {
   if (!datos.esServicioQueInforma(form.ubicacion) && form.ubicacion.tipo !== 'centro_salud') {
     return next({ status: 400, codigo: 'no_informa', mensaje: 'Esa ubicación no envía informe mensual' });
   }
-  // El promedio como sale en el Excel del balance.
+  // Para el promedio, como en el BRES: lo de los meses anteriores; la pantalla
+  // le suma lo que se escribe del mes.
   const promedio = await consumoExcel.promedios([form.ubicacion.id], req.params.periodo);
-  for (const r of form.renglones) r.promedio = promedio(form.ubicacion.id, r.insumoId);
+  for (const r of form.renglones) {
+    const p = promedio(form.ubicacion.id, r.insumoId);
+    r.demandaAnterior = p.anterior;
+    r.mesesAnteriores = p.meses;
+  }
   // Las filas en el orden del balance y con sus secciones, como el Excel.
   const enBalance = (r) => r.ordenFormulario && r.ordenFormulario <= NUMERO.length;
   form.renglones.sort((a, b) => (enBalance(a) ? a.ordenFormulario : 1e6) - (enBalance(b) ? b.ordenFormulario : 1e6) || a.nombre.localeCompare(b.nombre));
@@ -282,9 +287,16 @@ async function guardarInforme(req, res, next) {
   }
   const resultado = await datos.guardarInforme(
     req.usuario.establecimientoId, ubicacionId, req.params.periodo, req.body, req.usuario.id,
-    { enviar: !esEncargado || req.body.enviar !== false },
+    { enviar: !esEncargado || req.body.enviar !== false, sinNegativos: esEncargado && req.body.enviar !== false },
   );
   if (!resultado) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Servicio no encontrado' });
+  if (resultado.negativos) {
+    return next({
+      status: 409,
+      codigo: 'saldo_negativo',
+      mensaje: `Queda en negativo (entregó más de lo que tenía): ${resultado.negativos.join(', ')}. Revise las entradas o lo entregado`,
+    });
+  }
 
   await req.bitacora({
     accion: 'actualizar',

@@ -54,6 +54,9 @@ export default {
   informe: (ubicacionId, periodo) => http.get(`/bodega/informes/${ubicacionId}/${periodo}`),
   guardarInforme: (ubicacionId, periodo, datos) => http.put(`/bodega/informes/${ubicacionId}/${periodo}`, datos),
   // Excel del consumo de cada territorio: el «pedazo» del balance de sus lugares.
+  // Lo cargado sin número de lote.
+  sinLote: () => http.get('/bodega/sin-lote'),
+  ponerLote: (datos) => http.post('/bodega/poner-lote', datos),
   territorios: () => http.get('/bodega/territorios'),
   async bajarExcelConsumo(periodo, territorio) {
     const url = await http.descargarArchivo(`/bodega/consumo/excel?${consulta({ periodo, territorioId: territorio?.id })}`);

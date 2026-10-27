@@ -11,7 +11,7 @@
 
 const prisma = require('../config/db');
 const { lotesPepe, validarFechasLote } = require('../services/bodega.service');
-const { registrarIngreso } = require('../services/movimientos.service');
+const { registrarIngreso, problemaConLoteExistente } = require('../services/movimientos.service');
 const { enUbicacion } = require('../services/inventario.service');
 const { configuracion, limitesDePeriodo } = require('../services/abastecimiento.service');
 const { sugerenciaServicio, sugerenciaDdriss } = require('../services/bodegaDatos.service');
@@ -532,8 +532,10 @@ async function recibir(req, res, next) {
       const fechas = validarFechasLote(l);
       if (fechas.errores.length) return next({ status: 400, codigo: 'fechas_invalidas', mensaje: `${g.descripcion}: ${fechas.errores[0]}` });
       const clave = `${g.insumoId}|${l.numeroLote}`;
-      const repetido = vistos.has(clave) || await prisma.lote.findFirst({ where: { insumoId: g.insumoId, numeroLote: l.numeroLote } });
-      if (repetido) return next({ status: 409, codigo: 'lote_duplicado', mensaje: `${g.descripcion}: el lote ${l.numeroLote} ya fue recibido` });
+      if (vistos.has(clave)) return next({ status: 409, codigo: 'lote_duplicado', mensaje: `${g.descripcion}: el lote ${l.numeroLote} está dos veces` });
+      const existente = await prisma.lote.findFirst({ where: { insumoId: g.insumoId, numeroLote: l.numeroLote } });
+      const problema = existente && problemaConLoteExistente(existente, `${l.fechaVence}T00:00:00Z`);
+      if (problema) return next({ status: 409, codigo: 'lote_distinto', mensaje: `${g.descripcion}: ${problema}` });
       vistos.add(clave);
     }
   }

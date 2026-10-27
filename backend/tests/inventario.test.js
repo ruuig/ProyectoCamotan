@@ -1137,6 +1137,41 @@ describe('retiro sanitario', () => {
 });
 
 // ===========================================================================
+describe('arranque y remesas', () => {
+  it('el mismo lote en otra remesa se suma; con otro vencimiento se rechaza', async () => {
+    const insumo = await nuevoInsumo();
+    const numeroLote = `REM${Date.now()}`;
+    const primera = await recibirLote(insumo.id, { cantidad: 20, dias: 400, numeroLote });
+    const segunda = await recibirLote(insumo.id, { cantidad: 15, dias: 400, numeroLote });
+    expect(segunda.lote.id).toBe(primera.lote.id);
+    const lote = await prisma.lote.findUnique({ where: { id: primera.lote.id } });
+    expect(lote.cantidadActual).toBe(35);
+
+    const otra = await farm(request(app).post(`/api/v1/insumos/${insumo.id}/lotes`)).send({ numeroLote, fechaVence: enDias(500), cantidad: 5 });
+    expect(otra.status).toBe(409);
+    expect(otra.body.error.codigo).toBe('lote_distinto');
+  });
+
+  it('bodega pone lote a lo cargado sin lote y queda disponible para despachar', async () => {
+    const insumo = await nuevoInsumo();
+    const sinLote = await prisma.lote.create({
+      data: { insumoId: insumo.id, numeroLote: 'SIN-LOTE', fechaVence: new Date(Date.now() + 400 * 86400000), cantidadInicial: 50, cantidadActual: 50, estado: 'cuarentena', motivoEstado: 'Cargado sin lote', estadoEn: new Date() },
+    });
+    const lista = await farm(request(app).get('/api/v1/bodega/sin-lote'));
+    expect(lista.body.filas.find((x) => x.loteId === sinLote.id)?.cantidad).toBe(50);
+
+    const r = await farm(request(app).post('/api/v1/bodega/poner-lote')).send({ loteId: sinLote.id, numeroLote: `pl${Date.now()}`, fechaVence: enDias(300).slice(0, 10), cantidad: 30 });
+    expect(r.status).toBe(201);
+    const nuevo = await prisma.lote.findUnique({ where: { id: r.body.loteId } });
+    expect([nuevo.estado, nuevo.cantidadActual]).toEqual(['disponible', 30]);
+    expect((await prisma.lote.findUnique({ where: { id: sinLote.id } })).cantidadActual).toBe(20);
+
+    const demas = await farm(request(app).post('/api/v1/bodega/poner-lote')).send({ loteId: sinLote.id, numeroLote: 'X99', fechaVence: enDias(300).slice(0, 10), cantidad: 25 });
+    expect(demas.status).toBe(409);
+  });
+});
+
+// ===========================================================================
 describe('bajas', () => {
   it('propone los lotes que ya se pueden dar de baja', async () => {
     const insumo = await nuevoInsumo();

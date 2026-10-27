@@ -10,6 +10,7 @@ import SelloVence from '../../components/bodega/diseno/SelloVence.vue';
 import { CATEGORIA, categoriaVisual, estiloCategoria, estiloTono, situacion, miles, decimal } from '../../components/bodega/diseno/PiezasBodega';
 import { periodoActual, periodoPrevio } from '../../dominio/bodega';
 import SelectorMes from '../../components/bodega/SelectorMes.vue';
+import PonerLoteBodega from '../../components/bodega/PonerLoteBodega.vue';
 
 /**
  * Existencias de la bodega con las cifras del balance: lo que hay, para
@@ -26,8 +27,10 @@ const balance = ref(null);
 const semaforo = ref(null);
 const error = ref('');
 
-const vista = ref(route.query.vista === 'servicio' ? 'servicio' : 'insumo');
-const VISTAS = [['insumo', 'Por insumo'], ['servicio', 'Por servicio'], ['vencimientos', 'Vencimientos']];
+const vista = ref(['servicio', 'sinlote'].includes(route.query.vista) ? route.query.vista : 'insumo');
+const VISTAS = [['insumo', 'Por insumo'], ['servicio', 'Por servicio'], ['vencimientos', 'Vencimientos'], ['sinlote', 'Sin lote']];
+// Cuántos productos tienen existencia sin lote: no se despachan hasta ponérselo.
+const sinLote = ref(null);
 function cambiarVista(v) {
   if (v === 'vencimientos') router.push('/inventario/semaforo');
   else vista.value = v;
@@ -50,6 +53,7 @@ async function cargar() {
   }
 }
 onMounted(cargar);
+onMounted(() => bodega.sinLote().then((r) => { sinLote.value = r.filas.length; }).catch(() => {}));
 watch(periodo, cargar);
 
 const minimo = computed(() => balance.value?.configuracion.nivelMinimoMeses ?? 2);
@@ -158,7 +162,7 @@ const filasServicio = computed(() => {
       </div>
       <div class="b-acciones">
         <div class="b-segmentado" role="radiogroup" aria-label="Vista">
-          <button v-for="v in VISTAS" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="cambiarVista(v[0])">{{ v[1] }}</button>
+          <button v-for="v in VISTAS" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="cambiarVista(v[0])">{{ v[1] }}<span v-if="v[0] === 'sinlote' && sinLote" class="cuenta agotados">{{ sinLote }}</span></button>
         </div>
         <RouterLink to="/inventario/nuevo" data-accion class="b-btn secundario"><Icono nombre="agregar" :tamano="20" /> Nuevo insumo</RouterLink>
       </div>
@@ -183,6 +187,8 @@ const filasServicio = computed(() => {
           </button>
         </div>
       </div>
+
+      <PonerLoteBodega v-if="vista === 'sinlote'" :buscar="buscar" @cambio="sinLote = $event" />
 
       <!-- Por insumo -->
       <div v-if="vista === 'insumo'" class="paneles mt-4">

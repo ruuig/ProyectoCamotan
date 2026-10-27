@@ -17,6 +17,7 @@ const { enUbicacion } = require('../services/inventario.service');
 const bresService = require('../services/bres.service');
 const trazadores = require('../services/trazadores.service');
 const consumoExcel = require('../services/consumoExcel.service');
+const farmaciaServicio = require('../services/farmacia.service');
 const { kardexDe, encabezadoKardex } = require('../services/kardex.service');
 
 const ETIQUETA_TIPO_UBICACION = {
@@ -706,6 +707,32 @@ async function kardex(req, res) {
   res.json({ periodo: periodo ?? null, ubicacion, encabezado: await encabezadoKardex(req.usuario.establecimientoId, ubicacion), tarjetas });
 }
 
+// --- Existencia sin lote (lo cargado del Excel) ---------------------------------------
+
+/** Lo que la bodega tiene sin número de lote: no se despacha hasta ponérselo. */
+async function sinLote(req, res) {
+  const lotes = await prisma.lote.findMany({
+    where: { numeroLote: 'SIN-LOTE', insumo: { establecimientoId: req.usuario.establecimientoId } },
+    include: { insumo: { select: { nombreGenerico: true, unidadEntrega: true } } },
+  });
+  const filas = lotes
+    .map((l) => ({ loteId: l.id, insumoId: l.insumoId, nombre: l.insumo.nombreGenerico, unidad: l.insumo.unidadEntrega, cantidad: l.cantidadActual - l.cantidadFarmacia }))
+    .filter((f) => f.cantidad > 0)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  res.json({ filas });
+}
+
+async function ponerLote(req, res) {
+  const hecho = await farmaciaServicio.ponerLote(req.usuario.establecimientoId, req.body, req.usuario.id, 'bodega');
+  await req.bitacora({
+    accion: 'actualizar',
+    entidad: 'lote',
+    entidadId: hecho.loteId,
+    detalle: `${hecho.insumo}: ${hecho.cantidad} unidades sin lote en bodega identificadas como lote ${hecho.numeroLote}`,
+  });
+  res.status(201).json(hecho);
+}
+
 // --- Excel del consumo de cada territorio -----------------------------------------
 
 /** Territorios con sus lugares. El encargado de servicio ve solo el suyo. */
@@ -759,6 +786,8 @@ async function trazador(req, res) {
 }
 
 module.exports = {
+  sinLote,
+  ponerLote,
   territorios,
   excelConsumo,
   subirExcelConsumo,

@@ -1,7 +1,7 @@
 const prisma = require('../config/db');
 const { validarFechasLote, CATEGORIAS_NO_PRESCRIBIBLES } = require('../services/bodega.service');
 const { enUbicacion } = require('../services/inventario.service');
-const { registrarIngreso } = require('../services/movimientos.service');
+const { registrarIngreso, problemaConLoteExistente } = require('../services/movimientos.service');
 const {
   mesesParaVencer,
 } = require('../services/logistica.service');
@@ -185,14 +185,8 @@ async function recibirLote(req, res, next) {
   const repetido = await prisma.lote.findFirst({
     where: { insumoId: insumo.id, numeroLote: req.body.numeroLote },
   });
-
-  if (repetido) {
-    return next({
-      status: 409,
-      codigo: 'lote_duplicado',
-      mensaje: `El lote ${req.body.numeroLote} ya fue recibido para este insumo`,
-    });
-  }
+  const problema = repetido && problemaConLoteExistente(repetido, req.body.fechaVence);
+  if (problema) return next({ status: 409, codigo: 'lote_distinto', mensaje: problema });
 
   const resultado = await prisma.$transaction((tx) =>
     registrarIngreso(tx, {

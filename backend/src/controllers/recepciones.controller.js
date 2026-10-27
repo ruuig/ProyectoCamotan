@@ -9,7 +9,7 @@
  */
 
 const prisma = require('../config/db');
-const { registrarIngreso } = require('../services/movimientos.service');
+const { registrarIngreso, problemaConLoteExistente } = require('../services/movimientos.service');
 const { validarFechasLote } = require('../services/bodega.service');
 
 const PROCEDENCIA = { despacho: 'Despacho', donacion: 'Donación', traslado: 'Traslado de otro servicio', prestamo: 'Préstamo' };
@@ -41,9 +41,12 @@ async function crear(req, res, next) {
     const fechas = validarFechasLote({ fechaVence: vencimiento(r.vence) });
     if (fechas.errores.length) return next({ status: 400, codigo: 'fechas_invalidas', mensaje: `${n} (${insumo.nombreGenerico}): ${fechas.errores[0]}` });
     const clave = `${r.insumoId}|${r.numeroLote}`;
-    if (vistos.has(clave) || await prisma.lote.findFirst({ where: { insumoId: r.insumoId, numeroLote: r.numeroLote } })) {
-      return next({ status: 409, codigo: 'lote_duplicado', mensaje: `${n}: el lote ${r.numeroLote} de ${insumo.nombreGenerico} ya fue recibido` });
+    if (vistos.has(clave)) {
+      return next({ status: 409, codigo: 'lote_duplicado', mensaje: `${n}: el lote ${r.numeroLote} de ${insumo.nombreGenerico} está dos veces en el documento` });
     }
+    const existente = await prisma.lote.findFirst({ where: { insumoId: r.insumoId, numeroLote: r.numeroLote } });
+    const problema = existente && problemaConLoteExistente(existente, vencimiento(r.vence));
+    if (problema) return next({ status: 409, codigo: 'lote_distinto', mensaje: `${n} (${insumo.nombreGenerico}): ${problema}` });
     vistos.add(clave);
   }
 

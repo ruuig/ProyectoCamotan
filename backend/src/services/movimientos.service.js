@@ -306,6 +306,35 @@ async function registrarIngreso(
     ? null
     : 'Producto no conforme en la verificación de recepción';
 
+  // La DDRISS manda el mismo lote en varias remesas: lo que llega se suma al
+  // lote que ya existe (mismo número y mismo vencimiento).
+  const existente = await tx.lote.findFirst({ where: { insumoId, numeroLote } });
+  if (existente) {
+    const problema = problemaConLoteExistente(existente, fechaVence);
+    if (problema) throw fallo(409, 'lote_distinto', problema);
+    const lote = await tx.lote.update({
+      where: { id: existente.id },
+      data: {
+        cantidadInicial: { increment: cantidad },
+        cantidadActual: { increment: cantidad },
+        ...(existente.estado === 'agotado' ? { estado: 'disponible', motivoEstado: null, estadoEn: new Date(), estadoPor: usuarioId } : {}),
+        ...(costoUnitario !== null && existente.costoUnitario === null ? { costoUnitario } : {}),
+      },
+    });
+    await tx.movimientoInsumo.create({
+      data: {
+        loteId: lote.id,
+        tipo: 'ingreso',
+        cantidad,
+        saldoResultante: existenciaEn(lote, 'bodega'),
+        usuarioId,
+        motivo,
+        causa: origen === 'donacion' ? 'donacion_externa' : null,
+      },
+    });
+    return { lote, diferenciaCantidad, enCuarentena: false, sumado: true };
+  }
+
   const lote = await tx.lote.create({
     data: {
       insumoId,
@@ -348,6 +377,21 @@ async function registrarIngreso(
   });
 
   return { lote, diferenciaCantidad, enCuarentena: !conforme };
+}
+
+/**
+ * Si un lote que ya existe puede recibir más: tiene que traer el mismo
+ * vencimiento y no estar dado de baja ni retirado. Devuelve el problema o null.
+ */
+function problemaConLoteExistente(lote, fechaVence) {
+  const dia = (f) => new Date(f).toISOString().slice(0, 10);
+  if (dia(lote.fechaVence) !== dia(fechaVence)) {
+    return `El lote ${lote.numeroLote} ya existe con vencimiento ${dia(lote.fechaVence).split('-').reverse().join('/')}: revise la caja`;
+  }
+  if (['dado_de_baja', 'retirado'].includes(lote.estado)) {
+    return `El lote ${lote.numeroLote} está ${lote.estado === 'retirado' ? 'retirado' : 'dado de baja'}: no se puede recibir más de él`;
+  }
+  return null;
 }
 
 /**
@@ -496,6 +540,7 @@ async function cambiarEstadoLote(tx, { loteId, estado, motivo, usuarioId, ahora 
 }
 
 module.exports = {
+  problemaConLoteExistente,
   CAUSAS,
   CAUSAS_POSITIVAS,
   CAUSAS_NEGATIVAS,

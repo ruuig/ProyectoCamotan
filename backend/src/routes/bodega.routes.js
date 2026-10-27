@@ -270,6 +270,20 @@ router.get('/hoy', deBodega, validar(z.object({ kardexDesde: fecha.optional() })
 
 // --- Excel del consumo de cada territorio -----------------------------------------
 // Bodega baja y sube el de cualquier territorio; el encargado, solo el suyo.
+// Lo cargado sin número de lote: se le pone el lote mirando la caja.
+router.get('/sin-lote', deBodega, asincrono(bodega.sinLote));
+router.post(
+  '/poner-lote',
+  deBodega,
+  validar(z.object({
+    loteId: id,
+    numeroLote: z.string().trim().min(2, 'Escriba el número de lote').max(40),
+    fechaVence: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha de vencimiento: día, mes y año'),
+    cantidad: z.coerce.number().int().positive('La cantidad debe ser mayor que cero'),
+  })),
+  asincrono(bodega.ponerLote),
+);
+
 const conTerritorio = autorizar('admin', 'bodega', 'servicio');
 const EXCEL = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 router.get('/territorios', conTerritorio, asincrono(bodega.territorios));

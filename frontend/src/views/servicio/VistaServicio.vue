@@ -160,8 +160,9 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: '2-digi
 // --- Informe del mes de cada lugar -------------------------------------------------------
 // Las mismas columnas del Excel del balance: el encargado solo llena lo
 // entregado a usuarios y lo no entregado; lo demás ya viene.
-const PERIODOS = [periodoMenos(1), periodoMenos(0), periodoMenos(2)];
-const periodo = ref(PERIODOS[0]);
+// En orden, del más viejo al actual; se abre en el mes que se cierra (el anterior).
+const PERIODOS = [periodoMenos(2), periodoMenos(1), periodoMenos(0)];
+const periodo = ref(PERIODOS[1]);
 const informe = ref(null);
 const soloLosMios = ref(true);
 const guardando = ref(false);
@@ -335,7 +336,7 @@ onMounted(async () => {
         </button>
         <button type="button" class="tarea marino" @click="ir('informe')">
           <span class="ic"><Icono nombre="hojaCalculo" :tamano="46" /></span>
-          <span class="txt"><b>Informe del mes</b><small>{{ nombreMes(PERIODOS[0]) }}</small></span>
+          <span class="txt"><b>Informe del mes</b><small>{{ nombreMes(PERIODOS[1]) }}</small></span>
         </button>
       </div>
 
@@ -388,8 +389,11 @@ onMounted(async () => {
     <!-- ================= Informe del mes ================= -->
     <template v-else-if="ver === 'informe'">
       <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+        <span class="b-etiqueta m-0 w-12">Mes</span>
         <div class="b-segmentado" role="radiogroup" aria-label="Mes">
           <button v-for="p in PERIODOS" :key="p" type="button" role="radio" :aria-checked="periodo === p" :class="periodo === p ? 'on' : ''" @click="periodo = p">{{ nombreMes(p) }}</button>
+        </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" class="b-btn secundario chico" :disabled="bajandoExcel" @click="bajarExcel"><Icono nombre="descargar" :tamano="16" /> {{ bajandoExcel ? 'Preparando…' : 'Bajar Excel' }}</button>
@@ -402,7 +406,7 @@ onMounted(async () => {
       </div>
       <!-- De qué lugar es el informe -->
       <div v-if="lugaresInforme.length > 1" class="mt-4 flex flex-wrap items-center gap-3">
-        <span class="b-etiqueta m-0">Lugar</span>
+        <span class="b-etiqueta m-0 w-12">Lugar</span>
         <div class="b-segmentado flex-wrap" role="radiogroup" aria-label="Lugar del informe">
           <button
             v-for="l in lugaresInforme" :key="l.id" type="button" role="radio"

@@ -9,6 +9,7 @@ import LogoInstitucional from '../components/comunes/LogoInstitucional.vue';
 import BotonInstalar from '../components/comunes/BotonInstalar.vue';
 import { TAMANOS, tamanoActual, aplicarTamano, completa, alternarPantallaCompleta } from '../dominio/ampliar';
 import Icono from '../components/comunes/Icono.vue';
+import CambiarContrasena from '../components/comunes/CambiarContrasena.vue';
 import bodega from '../services/bodega';
 
 // El estilo con relieve (styles/duo.css) vive solo dentro de la aplicación:
@@ -199,6 +200,9 @@ const FORMATO_FECHA = new Intl.DateTimeFormat('es-GT', {
 
 const hoy = computed(() => FORMATO_FECHA.format(new Date()));
 
+// Tocando sus iniciales, cada usuario cambia su contraseña.
+const cambiandoContrasena = ref(false);
+
 async function salir() {
   await auth.cerrarSesion();
   establecimiento.limpiar();
@@ -366,12 +370,17 @@ function cambiarTamano(paso) {
             <p class="font-bold leading-tight text-tinta">{{ auth.usuario?.nombre }}</p>
             <p class="text-sm text-apagado">{{ ETIQUETA_ROL[auth.rol] ?? auth.rol }}</p>
           </div>
-          <div
+          <button
+            type="button"
+            title="Cambiar contraseña"
+            aria-label="Cambiar contraseña"
             class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-marino
-                   font-titulo font-bold text-superficie"
+                   font-titulo font-bold text-superficie transition hover:ring-2 hover:ring-marino hover:ring-offset-2"
+            @click="cambiandoContrasena = true"
           >
             {{ iniciales }}
-          </div>
+          </button>
+          <CambiarContrasena v-if="cambiandoContrasena" @cerrar="cambiandoContrasena = false" />
           <button
             type="button"
             title="Cerrar sesión"

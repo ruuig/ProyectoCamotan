@@ -18,4 +18,10 @@ const login = z.object({
     .optional(),
 });
 
-module.exports = { login };
+// Cada usuario cambia la suya: la actual y la nueva, con el mismo mínimo que pone el administrador.
+const cambiarPassword = z.object({
+  actual: z.string({ required_error: 'Escriba su contraseña actual' }).min(1, 'Escriba su contraseña actual').max(200),
+  nueva: z.string({ required_error: 'Escriba la contraseña nueva' }).min(10, 'La contraseña nueva debe tener al menos 10 caracteres').max(200),
+});
+
+module.exports = { login, cambiarPassword };

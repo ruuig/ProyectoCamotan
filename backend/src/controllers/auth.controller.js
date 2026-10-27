@@ -1,5 +1,5 @@
 const prisma = require('../config/db');
-const { firmarToken, compararPassword, usuarioPublico } = require('../services/auth.service');
+const { firmarToken, compararPassword, hashearPassword, usuarioPublico } = require('../services/auth.service');
 const { verificarCodigo } = require('../services/totp.service');
 
 // Mensaje unico para toda falla de login. No se distingue entre usuario
@@ -90,4 +90,18 @@ async function logout(req, res) {
   res.json({ mensaje: 'Sesión cerrada' });
 }
 
-module.exports = { login, refresh, logout };
+/** El usuario cambia su propia contraseña: pide la actual para que nadie la cambie con una sesión abierta ajena. */
+async function cambiarPassword(req, res, next) {
+  const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
+  if (!usuario || !(await compararPassword(req.body.actual, usuario.passwordHash))) {
+    return next({ status: 400, codigo: 'password_actual', mensaje: 'La contraseña actual no es correcta' });
+  }
+  if (req.body.actual === req.body.nueva) {
+    return next({ status: 400, codigo: 'password_igual', mensaje: 'La contraseña nueva debe ser distinta de la actual' });
+  }
+  await prisma.usuario.update({ where: { id: usuario.id }, data: { passwordHash: await hashearPassword(req.body.nueva) } });
+  await req.bitacora({ accion: 'actualizar', entidad: 'usuario', entidadId: usuario.id, detalle: 'Cambió su contraseña' });
+  res.json({ mensaje: 'Contraseña cambiada' });
+}
+
+module.exports = { login, refresh, logout, cambiarPassword };

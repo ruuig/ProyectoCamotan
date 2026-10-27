@@ -10,5 +10,6 @@ const router = express.Router();
 router.post('/login', validar(esquemas.login), asincrono(controlador.login));
 router.post('/refresh', asincrono(autenticar), asincrono(controlador.refresh));
 router.post('/logout', asincrono(autenticar), asincrono(controlador.logout));
+router.post('/contrasena', asincrono(autenticar), validar(esquemas.cambiarPassword), asincrono(controlador.cambiarPassword));
 
 module.exports = router;

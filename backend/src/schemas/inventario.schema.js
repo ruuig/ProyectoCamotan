@@ -150,17 +150,14 @@ const generarBres = z.object({
   observaciones: z.string().trim().max(400).optional().nullable(),
 });
 
-// --- Oficio de baja --------------------------------------------------------
+// --- Bajas -------------------------------------------------------------------
 
-const solicitarBaja = z.object({
+const darDeBaja = z.object({
   loteId: z.coerce.number().int().positive('Debe indicar el lote'),
   cantidad: z.coerce.number().int().positive('La cantidad debe ser mayor que cero'),
   causa: z.enum(CAUSAS_BAJA, {
     errorMap: () => ({ message: 'Una baja solo procede por producto vencido o dañado' }),
   }),
-  detalle: z.string().trim().min(5, 'Debe describir el motivo').max(400),
-  numeroTarjeta: z.string().trim().max(30).optional().nullable(),
-  precioUnitario: z.coerce.number().min(0).optional().nullable(),
 });
 
 // --- Retiro sanitario ------------------------------------------------------
@@ -228,7 +225,7 @@ module.exports = {
   registrarConteo,
   cerrarInventario,
   generarBres,
-  solicitarBaja,
+  darDeBaja,
   registrarRetiro,
   actualizarLocalizacion,
   configurarLogistica,

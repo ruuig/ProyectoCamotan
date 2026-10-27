@@ -411,9 +411,7 @@ async function registrarReajuste(tx, { loteId, cantidad, causa, usuarioId, motiv
 }
 
 /**
- * Baja de un lote. Solo se aplica desde un oficio autorizado: el
- * procedimiento del MSPAS no permite sacar producto del inventario sin
- * respaldo documental.
+ * Baja de un lote vencido o dañado: sale de la bodega y queda registrada.
  */
 async function registrarBaja(tx, { loteId, cantidad, causa, usuarioId, motivo = null, ahora = new Date() }) {
   if (!['producto_vencido', 'producto_danado'].includes(causa)) {

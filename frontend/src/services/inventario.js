@@ -79,11 +79,6 @@ export default {
 
   // --- Oficio de baja ------------------------------------------------------
   candidatosBaja: () => http.get('/inventario/bajas/candidatos'),
-  oficiosBaja: () => http.get('/inventario/bajas'),
-  solicitarBaja: (datos) => http.post('/inventario/bajas', datos),
-  oficioBaja: (id) => http.get(`/inventario/bajas/${id}`),
-  autorizarBaja: (id, autorizacion) =>
-    http.post(`/inventario/bajas/${id}/autorizar`, { autorizacion }),
-  aplicarBaja: (id) => http.post(`/inventario/bajas/${id}/aplicar`),
-  anularBaja: (id) => http.post(`/inventario/bajas/${id}/anular`),
+  bajas: () => http.get('/inventario/bajas'),
+  darDeBaja: (datos) => http.post('/inventario/bajas', datos),
 };

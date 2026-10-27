@@ -1137,7 +1137,7 @@ describe('retiro sanitario', () => {
 });
 
 // ===========================================================================
-describe('oficio de baja', () => {
+describe('bajas', () => {
   it('propone los lotes que ya se pueden dar de baja', async () => {
     const insumo = await nuevoInsumo();
     const lote = await prisma.lote.create({
@@ -1158,52 +1158,23 @@ describe('oficio de baja', () => {
     expect(candidato.causaSugerida).toBe('producto_vencido');
   });
 
-  it('la baja no se aplica sin autorización del director', async () => {
+  it('la baja se descuenta del lote en ese momento y queda en la lista', async () => {
     const insumo = await nuevoInsumo();
     const { lote } = await recibirLote(insumo.id, { cantidad: 20, dias: 400 });
 
-    const oficio = await farm(request(app).post('/api/v1/inventario/bajas')).send({
+    const r = await farm(request(app).post('/api/v1/inventario/bajas')).send({
       loteId: lote.id,
       cantidad: 5,
       causa: 'producto_danado',
-      detalle: 'Frascos quebrados en el traslado',
     });
 
-    expect(oficio.status).toBe(201);
-    expect(oficio.body.oficio.correlativo).toMatch(/^BAJA-\d{4}-\d{4}$/);
-    expect(oficio.body.oficio.estado).toBe('borrador');
-
-    const aplicar = await farm(
-      request(app).post(`/api/v1/inventario/bajas/${oficio.body.oficio.id}/aplicar`),
-    );
-    expect(aplicar.status).toBe(409);
-    expect(aplicar.body.error.codigo).toBe('sin_autorizacion');
-
-    // El inventario no se tocó.
+    expect(r.status).toBe(201);
+    expect(r.body.baja.estado).toBe('aplicado');
     const actualizado = await prisma.lote.findUnique({ where: { id: lote.id } });
-    expect(actualizado.cantidadActual).toBe(20);
-  });
+    expect(actualizado.cantidadActual).toBe(15);
 
-  it('no deja dos oficios en trámite sobre el mismo lote', async () => {
-    const insumo = await nuevoInsumo();
-    const { lote } = await recibirLote(insumo.id, { cantidad: 20, dias: 400 });
-
-    await farm(request(app).post('/api/v1/inventario/bajas')).send({
-      loteId: lote.id,
-      cantidad: 5,
-      causa: 'producto_danado',
-      detalle: 'Primera solicitud',
-    });
-
-    const segunda = await farm(request(app).post('/api/v1/inventario/bajas')).send({
-      loteId: lote.id,
-      cantidad: 3,
-      causa: 'producto_danado',
-      detalle: 'Segunda solicitud',
-    });
-
-    expect(segunda.status).toBe(409);
-    expect(segunda.body.error.codigo).toBe('oficio_pendiente');
+    const lista = await farm(request(app).get('/api/v1/inventario/bajas'));
+    expect(lista.body.bajas.find((b) => b.id === r.body.baja.id)).toMatchObject({ cantidad: 5, numeroLote: lote.numeroLote });
   });
 
   it('no se puede dar de baja más de lo que hay', async () => {
@@ -1214,7 +1185,6 @@ describe('oficio de baja', () => {
       loteId: lote.id,
       cantidad: 50,
       causa: 'producto_danado',
-      detalle: 'Más de lo que existe',
     });
 
     expect(r.status).toBe(400);

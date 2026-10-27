@@ -18,7 +18,6 @@ const BoletaReferencia = () => import('../views/impresion/BoletaReferencia.vue')
 const FormularioReferencia = () => import('../views/consulta/FormularioReferencia.vue');
 const TarjetaControl = () => import('../views/impresion/TarjetaControl.vue');
 const HojaBres = () => import('../views/impresion/HojaBres.vue');
-const OficioBajaImpreso = () => import('../views/impresion/OficioBaja.vue');
 
 // Pantallas de logistica: se cargan al entrar a inventario, no en el arranque.
 const DetalleLote = () => import('../views/inventario/DetalleLote.vue');
@@ -259,12 +258,6 @@ const router = createRouter({
           component: HojaBres,
           // Farmacia imprime el suyo con ?ubicacion=farmacia.
           meta: { roles: [...BODEGA, 'farmacia'] },
-        },
-        {
-          path: 'oficio-baja/:id',
-          name: 'imprimir-oficio-baja',
-          component: OficioBajaImpreso,
-          meta: { roles: BODEGA },
         },
         { path: 'balance/:periodo', name: 'imprimir-balance', component: HojaBalance, meta: { roles: BODEGA } },
         { path: 'cierre/:periodo', name: 'imprimir-cierre', component: HojaInventarioCierre, meta: { roles: BODEGA } },

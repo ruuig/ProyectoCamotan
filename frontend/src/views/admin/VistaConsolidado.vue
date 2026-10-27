@@ -223,7 +223,6 @@ const listosMes = computed(() => documentosMes.value.filter((d) => d.estado?.ton
 const OTROS = [
   { texto: 'Tarjeta de control', donde: 'En la ficha de cada insumo', a: '/inventario/productos' },
   { texto: 'Requisiciones', donde: 'Al despachar a un servicio', a: '/inventario/requisiciones' },
-  { texto: 'Oficios de baja', donde: 'En bajas y retiros', a: '/inventario/bajas' },
   { texto: 'Ficha, resumen y referencia', donde: 'En el expediente del paciente', a: '/pacientes' },
 ];
 

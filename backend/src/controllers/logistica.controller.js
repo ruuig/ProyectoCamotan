@@ -413,83 +413,30 @@ async function cerrarRetiro(req, res) {
   res.json({ retiro });
 }
 
-// --- Oficio de baja --------------------------------------------------------
+// --- Bajas --------------------------------------------------------------------
 
 async function candidatosBaja(req, res) {
   res.json({ lotes: await oficioService.candidatos(req.usuario.establecimientoId) });
 }
 
-async function listarOficios(req, res) {
-  res.json({ oficios: await oficioService.listar(req.usuario.establecimientoId) });
+async function listarBajas(req, res) {
+  res.json({ bajas: await oficioService.listar(req.usuario.establecimientoId) });
 }
 
-async function solicitarBaja(req, res) {
-  const oficio = await oficioService.solicitar(req.usuario.establecimientoId, {
+async function darDeBaja(req, res) {
+  const baja = await oficioService.darDeBaja(req.usuario.establecimientoId, {
     ...req.body,
     usuarioId: req.usuario.id,
   });
 
   await req.bitacora({
     accion: 'crear',
-    entidad: 'oficio_baja',
-    entidadId: oficio.id,
-    detalle: `Oficio ${oficio.correlativo}: baja de ${oficio.cantidad} por ${ETIQUETA_CAUSA[oficio.causa]}`,
+    entidad: 'baja',
+    entidadId: baja.id,
+    detalle: `Baja ${baja.correlativo}: ${baja.cantidad} por ${ETIQUETA_CAUSA[baja.causa]}`,
   });
 
-  res.status(201).json({ oficio });
-}
-
-async function autorizarBaja(req, res) {
-  const oficio = await oficioService.autorizar(Number(req.params.id), req.usuario.establecimientoId, {
-    directorId: req.director.id,
-  });
-
-  await req.bitacora({
-    accion: 'actualizar',
-    entidad: 'oficio_baja',
-    entidadId: oficio.id,
-    detalle: `Oficio ${oficio.correlativo} autorizado por el director ${req.director.nombre}`,
-  });
-
-  res.json({ oficio });
-}
-
-async function aplicarBaja(req, res) {
-  const oficio = await oficioService.aplicar(Number(req.params.id), req.usuario.establecimientoId, {
-    usuarioId: req.usuario.id,
-  });
-
-  await req.bitacora({
-    accion: 'actualizar',
-    entidad: 'oficio_baja',
-    entidadId: oficio.id,
-    detalle: `Oficio ${oficio.correlativo} aplicado al inventario`,
-  });
-
-  res.json({ oficio });
-}
-
-async function anularBaja(req, res) {
-  const oficio = await oficioService.anular(Number(req.params.id), req.usuario.establecimientoId);
-
-  await req.bitacora({
-    accion: 'actualizar',
-    entidad: 'oficio_baja',
-    entidadId: oficio.id,
-    detalle: `Oficio ${oficio.correlativo} anulado`,
-  });
-
-  res.json({ oficio });
-}
-
-async function obtenerOficio(req, res, next) {
-  const oficio = await oficioService.obtener(Number(req.params.id), req.usuario.establecimientoId);
-
-  if (!oficio) {
-    return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Oficio no encontrado' });
-  }
-
-  res.json({ oficio });
+  res.status(201).json({ baja });
 }
 
 module.exports = {
@@ -520,10 +467,6 @@ module.exports = {
   marcarLocalizacion,
   cerrarRetiro,
   candidatosBaja,
-  listarOficios,
-  solicitarBaja,
-  autorizarBaja,
-  aplicarBaja,
-  anularBaja,
-  obtenerOficio,
+  listarBajas,
+  darDeBaja,
 };

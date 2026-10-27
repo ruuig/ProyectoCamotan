@@ -9,7 +9,6 @@ const inventario = require('../controllers/inventario.controller');
 const dispensaciones = require('../controllers/dispensaciones.controller');
 const logistica = require('../controllers/logistica.controller');
 const idempotencia = require('../middleware/idempotencia');
-const { exigirAutorizacionDirector } = require('../services/autorizacionDirector.service');
 
 const router = express.Router();
 
@@ -312,47 +311,10 @@ router.post(
   asincrono(logistica.cerrarRetiro),
 );
 
-// --- Oficio de baja --------------------------------------------------------
+// --- Bajas --------------------------------------------------------------------
 
 router.get('/inventario/bajas/candidatos', deBodega, asincrono(logistica.candidatosBaja));
-
-router.get('/inventario/bajas', deBodega, asincrono(logistica.listarOficios));
-
-router.post(
-  '/inventario/bajas',
-  deBodega,
-  validar(esquemas.solicitarBaja),
-  asincrono(logistica.solicitarBaja),
-);
-
-router.get(
-  '/inventario/bajas/:id',
-  deBodega,
-  validar(esquemas.parametroId, 'params'),
-  asincrono(logistica.obtenerOficio),
-);
-
-// Nadie da de baja lo que él mismo solicitó sin que el director lo autorice.
-router.post(
-  '/inventario/bajas/:id/autorizar',
-  deBodega,
-  validar(esquemas.parametroId, 'params'),
-  asincrono(exigirAutorizacionDirector('autorizar baja de inventario')),
-  asincrono(logistica.autorizarBaja),
-);
-
-router.post(
-  '/inventario/bajas/:id/aplicar',
-  deBodega,
-  validar(esquemas.parametroId, 'params'),
-  asincrono(logistica.aplicarBaja),
-);
-
-router.post(
-  '/inventario/bajas/:id/anular',
-  deBodega,
-  validar(esquemas.parametroId, 'params'),
-  asincrono(logistica.anularBaja),
-);
+router.get('/inventario/bajas', deBodega, asincrono(logistica.listarBajas));
+router.post('/inventario/bajas', deBodega, validar(esquemas.darDeBaja), asincrono(logistica.darDeBaja));
 
 module.exports = router;

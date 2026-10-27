@@ -101,6 +101,7 @@ async function impresa(req, res, next) {
     paciente,
     perfil,
     edadTexto: edadSegunFicha(etapa, edad, dias),
+    edad,
     horaTexto: new Date(atencion.registradaEn).toLocaleTimeString('es-GT', {
       hour: '2-digit', minute: '2-digit', timeZone: 'America/Guatemala',
     }),

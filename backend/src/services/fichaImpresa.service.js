@@ -260,6 +260,87 @@ function bloque3cs(ctx) {
   };
 }
 
+// --- Datos para la hoja oficial ---------------------------------------------------
+
+/**
+ * Los datos sueltos para escribirlos sobre el formulario oficial, cada uno en
+ * su casilla. Lo sensible que el usuario no puede ver no se manda.
+ */
+function datosOficial(ctx, identificacion) {
+  const ocultos = ctx.puedeVerSensibles ? new Set() : new Set(ctx.sensiblesIdentificacion ?? []);
+  const p = ctx.paciente;
+  const crudo = (k) => (ocultos.has(k) ? null : p[k] ?? null);
+  const id = {};
+  ctx.identificacion.campos.forEach((c, i) => { id[c.clave] = identificacion.filas[i].valor; });
+  const secciones = {};
+  for (const s of ctx.secciones) {
+    const datos = { ...(ctx.filasSecciones.get(s.clave) ?? {}) };
+    if (!ctx.puedeVerSensibles) for (const k of clavesSensibles(s)) delete datos[k];
+    secciones[s.clave] = datos;
+  }
+  const a = ctx.atencion;
+  const pre = a.preconsulta ?? {};
+  const marcados = new Set(pre.signosPeligro ?? []);
+  const diagnosticos = a.diagnosticos?.length
+    ? a.diagnosticos.map((d) => ({ descripcion: d.descripcion, cie: d.cie }))
+    : (a.diagnosticoTxt ? [{ descripcion: a.diagnosticoTxt, cie: a.diagnosticoCie }] : []);
+  const receta = [
+    ...(a.prescripciones ?? []).map((x) => `${x.insumo?.nombreGenerico ?? ''} ${x.insumo?.presentacion ?? ''}: ${x.cantidad}${x.indicaciones ? ` (${x.indicaciones})` : ''}`.trim()),
+    ...(a.recetasExternas ?? []).map((r) => `${r.medicamento}${r.cantidad ? `: ${r.cantidad}` : ''}${r.indicaciones ? ` (${r.indicaciones})` : ''}`),
+  ];
+  return {
+    registradaEn: a.registradaEn,
+    hora: ctx.horaTexto ?? '',
+    expediente: p.expediente ?? '',
+    id,
+    paciente: {
+      sexo: p.sexo,
+      fechaNacimiento: p.fechaNacimiento,
+      cui: crudo('cui'),
+      estudiaActualmente: crudo('estudiaActualmente'),
+      trabaja: crudo('trabaja'),
+      trabajoEspecifique: crudo('trabajoEspecifique'),
+      migrante: crudo('migrante'),
+      origenMigracion: crudo('origenMigracion'),
+      pueblo: crudo('pueblo'),
+      comunidadLinguistica: crudo('comunidadLinguistica'),
+      estadoCivil: crudo('estadoCivil'),
+      redesSociales: crudo('redesSociales'),
+    },
+    edad: ctx.edad ?? null,
+    secciones,
+    signosPeligro: ctx.signosPeligro.filter((x) => marcados.has(x.codigo) || marcados.has(x.descripcion)).map((x) => x.descripcion),
+    preconsulta: {
+      temperatura: pre.temperatura ?? null,
+      frecCardiaca: pre.frecCardiaca ?? null,
+      presionSis: pre.presionSis ?? null,
+      presionDia: pre.presionDia ?? null,
+      frecRespiratoria: pre.frecRespiratoria ?? null,
+      peso: pre.peso ?? null,
+      talla: pre.talla ?? null,
+    },
+    imc: ctx.antropometria?.imc ?? null,
+    clasificacion: ctx.antropometria?.clasificacion ?? null,
+    atencion: {
+      motivoConsulta: a.motivoConsulta ?? '',
+      historiaEnfermedad: a.historiaEnfermedad ?? '',
+      referenciaViene: a.referenciaViene ?? null,
+      referidoA: a.referidoA ?? '',
+      sitios: a.examenSitios?.sitios ?? {},
+      otrosHallazgos: a.examenSitios?.otrosHallazgos ?? '',
+      hallazgosAnormales: [a.examenFisico, a.examenSitios?.hallazgosAnormales].filter(Boolean).join('. '),
+      diagnosticos,
+      tratamiento: [a.tratamiento, receta.join('; ')].filter(Boolean).join('. '),
+      otrosProblemas: a.otrosProblemas ?? '',
+      laboratorios: a.laboratorios ?? '',
+      orientacionIntegral: a.orientacionIntegral ?? '',
+      proximaCita: a.proximaCita ?? null,
+      numeroNotificacion: a.numeroNotificacion ? (ctx.puedeVerSensibles ? a.numeroNotificacion : 'Registrado') : '',
+      proveedor: ctx.proveedor ?? '',
+    },
+  };
+}
+
 // --- Composicion ----------------------------------------------------------------------
 
 /**
@@ -346,6 +427,7 @@ function componerFichaImpresa(ctx) {
       { etiqueta: 'Ficha en papel', valor: ctx.paciente.expedientePapel ?? '' },
     ],
     bloques: [...bloques, bloque3cs(ctx)],
+    oficial: datosOficial(ctx, identificacion),
   };
 }
 
@@ -358,6 +440,7 @@ function enBlanco(compuesta) {
   }));
   return {
     ...compuesta,
+    oficial: null,
     encabezado: compuesta.encabezado.map((e) => ({ ...e, valor: '' })),
     bloques: compuesta.bloques.map((b) => ({
       ...b,

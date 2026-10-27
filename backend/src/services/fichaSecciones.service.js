@@ -515,7 +515,6 @@ const ADOLESCENTE = [
     clave: 'estilos_vida_adolescente',
     titulo: 'Estilos de vida',
     campos: [
-      siNo('alimentacionAdecuada', 'Alimentación adecuada'),
       numero('comidasDia', 'Comidas por día', null, { minimo: 0, maximo: 12 }),
       siNoNumero('actividadFisica', 'Actividad física', 'horas al día', { maximo: 24 }),
       siNo('videojuegos', 'Videojuegos'),

@@ -3,6 +3,11 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import http from '../../services/http';
 import HojaImpresion from '../../components/comunes/HojaImpresion.vue';
+import FichaOficial from '../../components/comunes/FichaOficial.vue';
+import aii016 from '../../dominio/fichasOficiales/aii016';
+
+// Fichas que ya se imprimen sobre su formulario oficial.
+const OFICIALES = { adolescente_joven: aii016 };
 
 /**
  * Ficha clínica impresa de una atención.
@@ -42,6 +47,7 @@ async function cargar() {
   }
 }
 
+const oficial = computed(() => (ficha.value ? OFICIALES[ficha.value.ficha.clave] ?? null : null));
 const titulo = computed(() => (ficha.value ? `${ficha.value.ficha.nombre}, ${ficha.value.ficha.rango}` : ''));
 
 /** Filas cortas de a dos por renglón; las largas, las casillas y las firmas aparte. */
@@ -73,6 +79,8 @@ onMounted(cargar);
 
 <template>
   <p v-if="error" role="alert" class="aviso aviso-urgente no-imprimir">{{ error }}</p>
+
+  <FichaOficial v-else-if="ficha && oficial" :plantilla="oficial" :datos="ficha.oficial" :establecimiento="establecimiento" />
 
   <!-- Las firmas van en el cierre, donde las pone el papel; el proveedor es quien cerró la consulta -->
   <HojaImpresion v-else-if="ficha" :titulo="titulo" :establecimiento="establecimiento" :firmas="[]">

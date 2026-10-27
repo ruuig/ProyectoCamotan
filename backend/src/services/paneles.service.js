@@ -165,7 +165,7 @@ async function panelMedico(establecimientoId, ahora = new Date()) {
   // Consultas cerradas sin codigo CIE-10: el medico las completa cuando
   // tenga un momento; el SIGSA las necesita codificadas.
   const porCodificar = await prisma.atencion.findMany({
-    where: { establecimientoId, estado: 'atendido', diagnosticoCie: null },
+    where: { establecimientoId, estado: 'atendido', diagnosticoCie: null, atendidaPor: { not: null } },
     select: {
       id: true,
       diagnosticoTxt: true,
@@ -342,7 +342,7 @@ async function panelAdmin(establecimientoId, ahora = new Date(), periodo = 'sema
   // detener la atencion, pero el consolidado SIGSA si lo necesita: aqui queda
   // la lista para completarlas.
   const pendientesDeCodificar = await prisma.atencion.findMany({
-    where: { establecimientoId, estado: 'atendido', diagnosticoCie: null },
+    where: { establecimientoId, estado: 'atendido', diagnosticoCie: null, atendidaPor: { not: null } },
     select: {
       id: true,
       diagnosticoTxt: true,

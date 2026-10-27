@@ -209,6 +209,20 @@ describe('PATCH /atenciones/:id/estado', () => {
     expect(r.body.error.codigo).toBe('sin_clinica');
   });
 
+  it('sin médico en el sistema, preconsulta marca que salió de consulta y la clínica queda libre', async () => {
+    const { atencion: primera } = await nuevaAtencion();
+    const { atencion: segunda } = await nuevaAtencion();
+    await pre(request(app).patch(`/api/v1/atenciones/${primera.id}/estado`)).send({ estado: 'en_atencion' });
+
+    const salio = await pre(request(app).patch(`/api/v1/atenciones/${primera.id}/estado`)).send({ estado: 'atendido' });
+    expect(salio.status).toBe(200);
+    expect(salio.body.atencion.estado).toBe('atendido');
+    expect(salio.body.atencion.atendidaPor).toBeNull();
+
+    const r = await pre(request(app).patch(`/api/v1/atenciones/${segunda.id}/estado`)).send({ estado: 'en_atencion' });
+    expect(r.status).toBe(200);
+  });
+
   it('rechaza una transicion no permitida', async () => {
     const { atencion } = await nuevaAtencion();
     await pre(request(app).patch(`/api/v1/atenciones/${atencion.id}/estado`)).send({ estado: 'ausente' });

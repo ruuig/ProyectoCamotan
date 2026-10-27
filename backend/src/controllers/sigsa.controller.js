@@ -26,7 +26,8 @@ async function datos3cs(req) {
       establecimientoId,
       estado: 'atendido',
       cerradaEn: { gte: inicio, lt: fin },
-      ...(medicoId ? { atendidaPor: Number(medicoId) } : {}),
+      // Solo lo que un médico registró: la consulta en papel no tiene sus datos.
+      atendidaPor: medicoId ? Number(medicoId) : { not: null },
     },
     include: {
       paciente: { include: { lugarPoblado: { select: { nombre: true } } } },

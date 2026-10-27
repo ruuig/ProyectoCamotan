@@ -18,7 +18,8 @@ async function resumenDia(req, res) {
 // Transiciones permitidas. Cualquier otra se rechaza.
 const TRANSICIONES = {
   en_espera: ['en_atencion', 'ausente'],
-  en_atencion: ['ausente', 'en_espera'],
+  // «atendido» desde la cola: el médico consultó en papel y el paciente ya salió.
+  en_atencion: ['ausente', 'en_espera', 'atendido'],
   ausente: ['en_espera'],
   atendido: [],
 };
@@ -85,6 +86,13 @@ async function cambiarEstado(req, res, next) {
       ausencias >= MAX_AUSENCIAS
         ? 'Segunda ausencia en la jornada. El paciente sale del sistema y debe registrarse de nuevo'
         : 'Paciente marcado ausente. Al volver, su cronometro se reinicia y pierde 10 puntos';
+  }
+
+  // Salió de consulta sin que el médico la registre en el sistema (consulta en
+  // papel): se libera la clínica. Queda sin médico, así no entra al SIGSA 3C/S
+  // ni a lo que el médico tiene por codificar.
+  if (destino === 'atendido') {
+    datos = { estado: 'atendido', cerradaEn: ahora };
   }
 
   if (destino === 'en_espera') {

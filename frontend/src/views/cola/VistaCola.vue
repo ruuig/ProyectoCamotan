@@ -348,6 +348,8 @@ onUnmounted(() => clearInterval(temporizador));
             <RouterLink v-if="puedeConsultar" :to="`/consulta/${e.id}`" class="b-btn primario chico">
               <Icono nombre="consulta" :tamano="18" /> Abrir
             </RouterLink>
+            <!-- Consulta en papel: preconsulta libera la clínica cuando el paciente sale. -->
+            <button v-else-if="puedeRegistrar" type="button" class="b-btn secundario chico" @click="cambiar(e.id, 'atendido')">Salió de consulta</button>
           </div>
         </section>
       </aside>

@@ -80,7 +80,7 @@ const parametroReceta = z.object({
 // Transiciones que el personal puede pedir. El controlador valida que la
 // transicion sea legal desde el estado actual.
 const cambiarEstado = z.object({
-  estado: z.enum(['en_atencion', 'ausente', 'en_espera'], {
+  estado: z.enum(['en_atencion', 'ausente', 'en_espera', 'atendido'], {
     errorMap: () => ({ message: 'Estado no valido' }),
   }),
   motivo: z.string().trim().max(300).optional(),

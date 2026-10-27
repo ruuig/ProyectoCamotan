@@ -28,10 +28,9 @@ const ETIQUETA_TIPO_UBICACION = {
   centro_comunitario: 'Centro comunitario',
 };
 
-const periodoActual = () => {
-  const d = new Date(Date.now() - 6 * 3600000);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-};
+const { periodoDe } = require('../services/logistica.service');
+
+const periodoActual = () => periodoDe(new Date());
 
 // --- Ubicaciones ------------------------------------------------------------------
 
@@ -269,6 +268,9 @@ async function obtenerInforme(req, res, next) {
   for (const r of form.renglones) {
     r.seccion = enBalance(r) ? SECCIONES.filter((s) => s.antesDe <= r.ordenFormulario).at(-1)?.titulo ?? 'MEDICAMENTOS' : 'AGREGADOS EN EL SISTEMA';
   }
+  // Para el BRES del lugar (máximo y cantidad a pedir).
+  const config = await configuracion(req.usuario.establecimientoId);
+  form.niveles = { minimo: Number(config.nivelMinimoMeses), maximo: Number(config.nivelMaximoMeses) };
   res.json(form);
 }
 
@@ -818,8 +820,7 @@ async function subirExcelConsumo(req, res, next) {
 
 /** Informe de trazadores del mes (por defecto, el mes en curso). */
 async function trazador(req, res) {
-  const local = new Date(Date.now() - 6 * 3600000);
-  const periodo = req.query.periodo ?? local.toISOString().slice(0, 7);
+  const periodo = req.query.periodo ?? periodoActual();
   res.json(await trazadores.trazador(req.usuario.establecimientoId, req.params.formato, periodo));
 }
 

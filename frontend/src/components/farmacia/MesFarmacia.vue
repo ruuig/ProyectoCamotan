@@ -8,6 +8,7 @@ import { usarBorrador, erroresPorRenglon } from '../../dominio/borrador';
 import { useAuthStore } from '../../stores/auth';
 import Icono from '../comunes/Icono.vue';
 import { miles } from '../bodega/diseno/PiezasBodega';
+import { periodoActual } from '../../dominio/bodega';
 
 /**
  * Requisición de la farmacia (post-consulta) a bodega, una vez al mes. El
@@ -30,7 +31,8 @@ const auth = useAuthStore();
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const local = new Date(Date.now() - 6 * 3600000);
 const hoy = local.toISOString().slice(0, 10);
-const mesActual = hoy.slice(0, 7);
+// El mes de inventario cierra el 25.
+const mesActual = periodoActual();
 const nombreMes = (p) => MESES[Number(p.slice(5, 7)) - 1];
 const sinTildes = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const entero = (v) => Number(String(v ?? '').replace(/[^0-9]/g, '')) || 0;

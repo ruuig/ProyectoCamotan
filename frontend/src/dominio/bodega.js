@@ -31,9 +31,16 @@ export const SEMAFORO = {
   verde: { etiqueta: 'Verde', clase: 'bg-green-100 text-green-900 border-green-300', punto: 'bg-green-600' },
 };
 
-/** Período del mes actual en hora de Guatemala. */
+/** El mes de inventario cierra el 25: octubre va del 26 de septiembre al 25 de octubre. */
+export const DIA_CORTE = 25;
+
+/** Período del mes en curso en hora de Guatemala: del 26 en adelante ya es el siguiente. */
 export function periodoActual() {
   const d = new Date(Date.now() - 6 * 3600000);
+  if (d.getUTCDate() > DIA_CORTE) {
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+  }
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 

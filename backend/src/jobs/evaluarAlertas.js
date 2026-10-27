@@ -210,9 +210,11 @@ async function evaluarInventario(establecimientoId, ahora) {
  */
 async function evaluarCalendario(establecimientoId, ahora) {
   const config = await abastecimiento.configuracion(establecimientoId);
-  const { periodoDe } = require('../services/logistica.service');
-  const periodo = periodoDe(ahora);
-  const diaDelMes = new Date(ahora).getUTCDate();
+  // El mes que cierra el 25 de este mes de calendario (del 26 en adelante ya
+  // corre el siguiente, pero el que se revisa es el que acaba de cerrar).
+  const local = new Date(new Date(ahora).getTime() - 6 * 3600000);
+  const periodo = `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}`;
+  const diaDelMes = local.getUTCDate();
 
   const pendientes = [];
 

@@ -11,6 +11,7 @@ import Icono from '../../components/comunes/Icono.vue';
 import EditorPedido from '../../components/bodega/EditorPedido.vue';
 import VentanaConfirmar from '../../components/comunes/VentanaConfirmar.vue';
 import { miles, estiloTono } from '../../components/bodega/diseno/PiezasBodega';
+import { periodoActual, periodoPrevio } from '../../dominio/bodega';
 
 /**
  * Encargado de un centro o puesto de salud.
@@ -32,11 +33,11 @@ const entero = (v) => Number(String(v ?? '').replace(/[^0-9]/g, '')) || 0;
 const hoy = () => new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const nombreMes = (p) => `${MESES[Number(p.slice(5, 7)) - 1]} ${p.slice(0, 4)}`;
+// El mes cierra el 25: del 26 en adelante ya se llena el siguiente.
 function periodoMenos(n) {
-  const d = new Date(Date.now() - 6 * 3600000);
-  d.setUTCDate(1);
-  d.setUTCMonth(d.getUTCMonth() - n);
-  return d.toISOString().slice(0, 7);
+  let p = periodoActual();
+  for (let i = 0; i < n; i += 1) p = periodoPrevio(p);
+  return p;
 }
 
 // --- Lo que pasa con mis requisiciones ---------------------------------------------
@@ -164,7 +165,6 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: '2-digi
 const PERIODOS = [periodoMenos(2), periodoMenos(1), periodoMenos(0)];
 const periodo = ref(PERIODOS[2]);
 const informe = ref(null);
-const soloLosMios = ref(true);
 const guardando = ref(false);
 // De qué lugar se informa: cada lugar de su territorio tiene su informe.
 const lugarInforme = ref(null);
@@ -190,6 +190,16 @@ async function cargarInforme() {
   }
 }
 watch([periodo, () => lugarActual.value?.id], () => { if (ver.value === 'informe') cargarInforme(); });
+
+// BRES del lugar o del territorio, para pasarlo a mano al formulario. Sale de
+// lo guardado: lo escrito y no guardado se guarda antes (sin enviar).
+async function verBres() {
+  const ventana = window.open('', '_blank');
+  if (!enviado.value && informe.value?.renglones.some(lleno)) await guardarInforme(false);
+  const url = `/imprimir/bres-lugar/${periodo.value}?lugar=${lugarActual.value?.id ?? 'todos'}`;
+  if (ventana) ventana.location.href = url;
+  else window.open(url, '_blank');
+}
 
 // El Excel de su territorio (todos sus lugares), como el que le daba la bodega.
 const bajandoExcel = ref(false);
@@ -233,8 +243,7 @@ watch(ver, (v) => {
 const buscarInsumo = ref('');
 const visibles = computed(() => {
   const q = buscarInsumo.value.trim().toLowerCase();
-  return (informe.value?.renglones ?? []).filter((r) => (!soloLosMios.value || r.maneja || entero(r.entregado) || q)
-    && (!q || `${r.nombre} ${r.concentracion ?? ''}`.toLowerCase().includes(q)));
+  return (informe.value?.renglones ?? []).filter((r) => (!q || `${r.nombre} ${r.concentracion ?? ''}`.toLowerCase().includes(q)));
 });
 const lleno = (r) => r.entregado !== '' || r.noEntregado !== '';
 // Fila con título de sección encima, como en el Excel del balance.
@@ -418,12 +427,12 @@ onMounted(async () => {
         </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="b-btn secundario chico" :disabled="guardando" @click="verBres"><Icono nombre="imprimir" :tamano="16" /> Ver BRES</button>
           <button type="button" class="b-btn secundario chico" :disabled="bajandoExcel" @click="bajarExcel"><Icono nombre="descargar" :tamano="16" /> {{ bajandoExcel ? 'Preparando…' : 'Bajar Excel' }}</button>
           <label class="b-btn secundario chico cursor-pointer" :class="{ 'opacity-60': subiendoExcel }">
             <Icono nombre="recibir" :tamano="16" /> {{ subiendoExcel ? 'Cargando…' : 'Subir Excel' }}
             <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only" :disabled="subiendoExcel" @change="subirExcel" />
           </label>
-          <label class="flex items-center gap-2 text-sm font-semibold"><input v-model="soloLosMios" type="checkbox" /> Solo lo que manejo</label>
         </div>
       </div>
       <!-- De qué lugar es el informe -->
@@ -481,7 +490,7 @@ onMounted(async () => {
                 <td class="n">{{ miles(promedio(r)) }}</td>
               </tr>
               </template>
-              <tr v-if="!visibles.length"><td colspan="7" class="b-vacio">{{ buscarInsumo ? 'Ningún producto con ese nombre.' : 'Este lugar no ha manejado productos. Quite «Solo lo que manejo» para informar cualquiera.' }}</td></tr>
+              <tr v-if="!visibles.length"><td colspan="7" class="b-vacio">Ningún producto con ese nombre.</td></tr>
             </tbody>
           </table>
         </div>

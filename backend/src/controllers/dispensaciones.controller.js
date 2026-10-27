@@ -1,7 +1,7 @@
 const { encabezadoEstablecimiento } = require('../services/encabezado.service');
 const prisma = require('../config/db');
 const { descontarDeLote, devolverEntrega } = require('../services/movimientos.service');
-const { limitesDePeriodo } = require('../services/abastecimiento.service');
+const { limitesDeMes } = require('../services/abastecimiento.service');
 const { renglonesSigsa4 } = require('../services/sigsa4.service');
 const { enUbicacion, existenciaTotal, lotesDisponibles } = require('../services/inventario.service');
 const { planEntrega, pendienteDe } = require('../services/dispensacion.service');
@@ -522,7 +522,7 @@ async function imagenConstancia(req, res, next) {
 async function sigsa4(req, res) {
   const establecimientoId = req.usuario.establecimientoId;
   const { periodo } = req.query;
-  const { desde, hasta } = limitesDePeriodo(periodo);
+  const { desde, hasta } = limitesDeMes(periodo);
   const prescripciones = await prisma.prescripcion.findMany({
     where: {
       atencion: { establecimientoId },

@@ -40,6 +40,7 @@ const ComprobanteTraslado = () => import('../views/impresion/ComprobanteTraslado
 const RecetaPaciente = () => import('../views/impresion/RecetaPaciente.vue');
 const HojaRequisicion = () => import('../views/impresion/HojaRequisicion.vue');
 const HojaPedido = () => import('../views/impresion/HojaPedido.vue');
+const HojaBresLugar = () => import('../views/impresion/HojaBresLugar.vue');
 const HojaKardex = () => import('../views/impresion/HojaKardex.vue');
 const HojaInventarioFarmacia = () => import('../views/impresion/HojaInventarioFarmacia.vue');
 const VistaRequisiciones = () => import('../views/inventario/VistaRequisiciones.vue');
@@ -274,6 +275,7 @@ const router = createRouter({
         { path: 'receta/:id', name: 'imprimir-receta', component: RecetaPaciente, meta: { roles: FARMACIA } },
         // La del encargado en hoja normal, para pasarla al formulario.
         { path: 'pedido/:id', name: 'imprimir-pedido', component: HojaPedido, meta: { roles: [...BODEGA, 'servicio'] } },
+        { path: 'bres-lugar/:periodo', name: 'imprimir-bres-lugar', component: HojaBresLugar, meta: { roles: [...BODEGA, 'servicio'] } },
         { path: 'requisicion/:id', name: 'imprimir-requisicion', component: HojaRequisicion, meta: { roles: [...BODEGA, 'farmacia', 'servicio'] } },
         { path: 'kardex', name: 'imprimir-kardex', component: HojaKardex, meta: { roles: [...BODEGA, 'farmacia'] } },
         { path: 'inventario-farmacia', name: 'imprimir-inventario-farmacia', component: HojaInventarioFarmacia, meta: { roles: FARMACIA } },

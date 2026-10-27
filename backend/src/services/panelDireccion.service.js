@@ -3,6 +3,7 @@ const { describirPeriodo, MS_POR_DIA, DESFASE_LOCAL_HORAS } = require('./periodo
 const { decisionesPendientes } = require('./decisiones.service');
 const bodegaDatos = require('./bodegaDatos.service');
 const { situacionBres } = require('./bodega.service');
+const { periodoDe } = require('./logistica.service');
 const { etapaDeVida } = require('./etapaVida.service');
 
 /**
@@ -484,8 +485,7 @@ async function armarDiagnosticos(establecimientoId, ahora) {
  * sin medicamento).
  */
 async function armarAbastecimiento(establecimientoId, ahora) {
-  const local = new Date(new Date(ahora).getTime() - DESFASE_LOCAL_HORAS * 3600000);
-  const periodo = `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}`;
+  const periodo = periodoDe(ahora);
   const b = await bodegaDatos.balance(establecimientoId, periodo);
 
   const conteo = { agotado: 0, bajo: 0, bien: 0, sin_consumo: 0 };

@@ -129,7 +129,7 @@ async function trasladosHasta(establecimientoId, hasta) {
     ubicacionId: m.traslado.ubicacionId,
     insumoId: m.lote.insumoId,
     cantidad: m.tipo === 'traslado' ? -m.cantidad : m.cantidad,
-    periodo: periodoDe(new Date(new Date(m.registradoEn).getTime() - 6 * 3600000)),
+    periodo: periodoDe(m.registradoEn),
   }));
 }
 
@@ -340,7 +340,7 @@ async function repartoDelTerritorio(establecimientoId, territorioId, periodo) {
   for (const m of movimientos) {
     const f = de(m.lote.insumoId);
     f.entregado -= m.cantidad;
-    if (periodoDe(new Date(new Date(m.registradoEn).getTime() - 6 * 3600000)) === periodo) f.entregadoMes -= m.cantidad;
+    if (periodoDe(m.registradoEn) === periodo) f.entregadoMes -= m.cantidad;
   }
   for (const r of repartido) de(r.insumoId).repartido += r.entradasTerritorio;
   return salida;
@@ -400,7 +400,7 @@ async function demandaMunicipal(establecimientoId, periodos) {
     }),
   ]);
   const candidatos = [
-    primero ? periodoDe(new Date(new Date(primero.registradoEn).getTime() - 6 * 3600000)) : null,
+    primero ? periodoDe(primero.registradoEn) : null,
     primerInforme?.periodo ?? null,
   ].filter(Boolean).sort();
   const inicio = candidatos[0] ?? null;
@@ -707,21 +707,14 @@ async function balance(establecimientoId, periodo, { categoria = null, insumoId 
   };
 }
 
-/** El periodo es el mes en curso y todavia no llega al dia de corte. */
+/** El periodo es el mes en curso: todavia no llega a su cierre (el 25). */
 function mesAbierto(periodo, diaCorte, ahora = new Date()) {
-  const local = new Date(ahora.getTime() - 6 * 3600000);
-  const actual = `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}`;
-  return periodo === actual && local.getUTCDate() < diaCorte;
+  return periodo === periodoDe(ahora);
 }
 
-/**
- * El BRES con que se pide a la DDRISS: el del mes en curso si ya llegó al día
- * de corte; si no, el del mes anterior, que es el último cerrado.
- */
+/** El BRES con que se pide a la DDRISS: el del último mes cerrado. */
 function periodoDelPedido(diaCorte, ahora = new Date()) {
-  const local = new Date(ahora.getTime() - 6 * 3600000);
-  const actual = `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}`;
-  return local.getUTCDate() < diaCorte ? periodoAnterior(actual) : actual;
+  return periodoAnterior(periodoDe(ahora));
 }
 
 /**

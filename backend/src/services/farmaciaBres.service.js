@@ -179,7 +179,7 @@ async function mesDeInicio(establecimientoId) {
     orderBy: { registradoEn: 'asc' },
     select: { registradoEn: true },
   });
-  return primero ? new Date(primero.registradoEn.getTime() - 6 * 3600000).toISOString().slice(0, 7) : null;
+  return primero ? periodoDe(primero.registradoEn) : null;
 }
 
 /**

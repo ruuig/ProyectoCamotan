@@ -190,9 +190,19 @@ function saldoDesdeMovimientos(movimientos) {
   return movimientos.reduce((suma, m) => suma + m.cantidad, 0);
 }
 
-/** Etiqueta del periodo mensual, como AAAA-MM. */
+/** El mes de inventario cierra el día 25: octubre va del 26 de septiembre al 25 de octubre. */
+const DIA_CORTE = 25;
+
+/**
+ * Etiqueta del periodo mensual, como AAAA-MM, de un momento (se toma la hora
+ * de Guatemala). Del 26 en adelante ya cuenta en el mes siguiente.
+ */
 function periodoDe(fecha) {
-  const f = new Date(fecha);
+  const f = new Date(new Date(fecha).getTime() - 6 * 3600000);
+  if (f.getUTCDate() > DIA_CORTE) {
+    f.setUTCDate(1);
+    f.setUTCMonth(f.getUTCMonth() + 1);
+  }
   return `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
@@ -202,12 +212,13 @@ function periodosHasta(periodo, cantidad = MESES_PMDR) {
   const lista = [];
   for (let i = cantidad - 1; i >= 0; i -= 1) {
     const f = new Date(Date.UTC(anio, mes - 1 - i, 1));
-    lista.push(periodoDe(f));
+    lista.push(`${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}`);
   }
   return lista;
 }
 
 module.exports = {
+  DIA_CORTE,
   MESES_PMDR,
   DIAS_POR_MES,
   MESES_ROJO,

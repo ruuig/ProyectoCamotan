@@ -1,5 +1,5 @@
 const prisma = require('../config/db');
-const { demandaReal, periodoDe } = require('./logistica.service');
+const { demandaReal } = require('./logistica.service');
 const { configuracion, limitesDePeriodo } = require('./abastecimiento.service');
 const { balance } = require('./bodegaDatos.service');
 
@@ -47,7 +47,8 @@ function fallo(status, codigo, mensaje) {
 /** El periodo anterior a uno dado. */
 function periodoAnterior(periodo) {
   const [anio, mes] = periodo.split('-').map(Number);
-  return periodoDe(new Date(Date.UTC(anio, mes - 2, 1)));
+  const d = new Date(Date.UTC(anio, mes - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 /**

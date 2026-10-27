@@ -109,7 +109,8 @@ const renglones = computed(() => {
 // sí va de 20 en 20, como el formulario.
 const hojas = computed(() => [renglones.value]);
 const hojasFormulario = computed(() => paginas(renglones.value, 20));
-const columnas = computed(() => datos.value?.columnas ?? []);
+// El código interno del sistema no está en el formulario.
+const columnas = computed(() => (datos.value?.columnas ?? []).filter((c) => c.clave !== 'codigoInterno'));
 const TEXTO = ['codigoInterno', 'nombre', 'unidadEntrega'];
 
 function valor(r, clave) {
@@ -179,14 +180,6 @@ onMounted(cargar);
         <strong>Niveles:</strong> mínimo {{ datos.configuracion.nivelMinimoMeses }}, máximo {{ datos.configuracion.nivelMaximoMeses }} meses
       </p>
     </section>
-
-    <p v-if="!enBlanco && datos.descuadres.length" class="bloque-impresion mb-2 border border-slate-900 px-3 py-2 text-xs">
-      <strong>Atención:</strong> el saldo anterior de {{ datos.descuadres.length }} insumo(s) no coincide con el BRES de
-      {{ nombrePeriodo(datos.periodoAnterior) }}. Revise antes de enviar.
-    </p>
-    <p v-if="!enBlanco && datos.serviciosSinInforme" class="bloque-impresion mb-2 text-xs">
-      {{ datos.serviciosSinInforme }} servicio(s) sin informe del mes: su entregado cuenta como cero.
-    </p>
 
     <section v-for="(hoja, h) in hojas" :key="h">
       <table class="tabla-compacta w-full border-collapse text-[9px]">

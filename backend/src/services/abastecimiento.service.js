@@ -10,6 +10,7 @@ const {
   periodoDe,
   periodosHasta,
   MESES_PMDR,
+  DIA_CORTE,
 } = require('./logistica.service');
 
 /**
@@ -24,8 +25,21 @@ const {
 // fisicamente ahi pero no se puede entregar, asi que no es saldo utilizable.
 const ESTADO_UTILIZABLE = 'disponible';
 
-/** Limites de un periodo mensual en hora local de Guatemala (UTC-6). */
+/**
+ * Limites de un periodo mensual en hora local de Guatemala (UTC-6): del 26 del
+ * mes anterior al 25 del mes, que es cuando cierra.
+ */
 function limitesDePeriodo(periodo) {
+  const [anio, mes] = periodo.split('-').map(Number);
+  const desfase = 6 * 3600000;
+  return {
+    desde: new Date(Date.UTC(anio, mes - 2, DIA_CORTE + 1) + desfase),
+    hasta: new Date(Date.UTC(anio, mes - 1, DIA_CORTE + 1) + desfase),
+  };
+}
+
+/** Limites del mes de calendario (del 1 al último día), para los formularios SIGSA. */
+function limitesDeMes(periodo) {
   const [anio, mes] = periodo.split('-').map(Number);
   const desfase = 6 * 3600000;
   return {
@@ -312,6 +326,7 @@ module.exports = {
   semaforoDelCentro,
   ESTADO_UTILIZABLE,
   limitesDePeriodo,
+  limitesDeMes,
   configuracion,
   parametros,
   saldoUtilizable,

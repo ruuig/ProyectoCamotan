@@ -64,6 +64,9 @@ function creado(i) {
 }
 const erroresRenglon = ref({});
 const aEnviar = computed(() => lineas.value.filter((l) => entero(l.cantidad) > 0));
+const totalUnidades = computed(() => aEnviar.value.reduce((s, l) => s + entero(l.cantidad), 0));
+// El resumen se revisa antes de registrar.
+const revisando = ref(false);
 
 async function cargarSugerencia() {
   error.value = '';
@@ -88,6 +91,7 @@ async function cargarSugerencia() {
 }
 
 async function enviar() {
+  revisando.value = false;
   erroresRenglon.value = {};
   error.value = '';
   enviando.value = true;
@@ -141,12 +145,39 @@ onMounted(() => { borrador.recuperar(); cargarSugerencia(); });
           <div><label for="sol" class="b-etiqueta">Solicita</label><input id="sol" v-model="cabecera.solicitante" class="b-campo" /></div>
           <div><label for="jefe" class="b-etiqueta">Visto bueno <span class="b-opcional">opcional</span></label><input id="jefe" v-model="cabecera.jefe" class="b-campo" /></div>
           <div><label for="obs" class="b-etiqueta">Observaciones <span class="b-opcional">opcional</span></label><textarea id="obs" v-model="cabecera.observaciones" rows="2" class="b-campo" /></div>
-          <button type="button" class="b-btn primario enviar" :disabled="enviando || !sugerencia || !aEnviar.length || cabecera.solicitante.trim().length < 3" @click="enviar">
-            <Icono nombre="imprimir" :tamano="22" /> {{ enviando ? 'Registrando…' : `Registrar e imprimir (${aEnviar.length})` }}
+          <button type="button" class="b-btn primario enviar" :disabled="enviando || !sugerencia || !aEnviar.length || cabecera.solicitante.trim().length < 3" @click="revisando = true">
+            <Icono nombre="correcto" :tamano="22" /> {{ enviando ? 'Registrando…' : `Revisar y registrar (${aEnviar.length})` }}
           </button>
         </section>
 
       </aside>
+    </div>
+
+    <!-- Resumen antes de registrar -->
+    <div v-if="revisando" class="velo" role="dialog" aria-modal="true" aria-labelledby="titulo-resumen" @click.self="revisando = false" @keydown.esc="revisando = false">
+      <div class="ventana">
+        <header>
+          <h2 id="titulo-resumen">Requisición a la DDRISS</h2>
+          <p>{{ aEnviar.length }} productos · {{ miles(totalUnidades) }} unidades</p>
+        </header>
+        <ul class="resumen">
+          <li v-for="l in aEnviar" :key="l.insumoId">
+            <span class="min-w-0 flex-1">{{ l.nombre }}</span>
+            <b>{{ miles(entero(l.cantidad)) }}</b>
+            <small>{{ l.unidad }}</small>
+          </li>
+        </ul>
+        <dl class="firmas">
+          <div><dt>N.º del formulario</dt><dd>{{ cabecera.numero || '—' }}</dd></div>
+          <div><dt>Solicita</dt><dd>{{ cabecera.solicitante }}</dd></div>
+          <div><dt>Visto bueno</dt><dd>{{ cabecera.jefe || '—' }}</dd></div>
+          <div v-if="cabecera.observaciones.trim()" class="col-span-full"><dt>Observaciones</dt><dd>{{ cabecera.observaciones }}</dd></div>
+        </dl>
+        <footer class="ventana-pie">
+          <button type="button" class="b-btn secundario" @click="revisando = false">Seguir revisando</button>
+          <button type="button" class="b-btn primario" :disabled="enviando" @click="enviar"><Icono nombre="imprimir" :tamano="20" /> {{ enviando ? 'Registrando…' : 'Registrar e imprimir' }}</button>
+        </footer>
+      </div>
     </div>
   </section>
 </template>
@@ -159,4 +190,19 @@ onMounted(() => { borrador.recuperar(); cargarSugerencia(); });
 .tarjeta { display: grid; gap: 12px; padding: 16px; border: 2px solid #E5E9F0; border-bottom-width: 4px; border-radius: 20px; background: #fff; }
 .tarjeta h2 { font-size: 18px; font-weight: 900; color: #14244A; }
 .enviar { width: 100%; height: 60px; font-size: 17px; border-radius: 16px; }
+
+.velo { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(15, 23, 42, .5); }
+.ventana { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 12px; width: min(620px, 100%); max-height: calc(100vh - 32px); padding: 20px; border-radius: 22px; background: #fff; }
+.ventana h2 { font-size: 22px; font-weight: 900; color: #14244A; }
+.ventana header p { font-size: 15px; font-weight: 700; color: #475569; }
+.resumen { overflow-y: auto; border: 2px solid #E5E9F0; border-radius: 14px; }
+.resumen li { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-top: 1px solid #EEF2F6; font-size: 14.5px; font-weight: 700; color: #1E293B; }
+.resumen li:first-child { border-top: 0; }
+.resumen li b { font-variant-numeric: tabular-nums; color: #14244A; }
+.resumen li small { width: 62px; font-size: 12.5px; font-weight: 700; color: #64748B; }
+.firmas { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.firmas dt { font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
+.firmas dd { font-size: 15px; font-weight: 800; color: #14244A; overflow-wrap: anywhere; }
+.ventana-pie { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+@media (max-width: 560px) { .firmas { grid-template-columns: 1fr; } }
 </style>

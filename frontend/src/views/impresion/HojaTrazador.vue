@@ -103,24 +103,27 @@ function volver() {
 .marco { width: 100%; border-collapse: collapse; }
 .marco > thead td, .marco > tfoot td, .marco > tbody > tr > td { padding: 0; border: 0; }
 .margen { height: 0; }
-.linea { height: 5px; margin: 0 0 6px; background: repeating-linear-gradient(90deg, #9DB3CF 0 6px, #C9D6E6 6px 9px); }
+.linea { height: 4px; margin: 0 0 6px; background: linear-gradient(90deg, #A9BCD0, #C5D3E2 50%, #A9BCD0); }
 .cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
-.cabeza h1 { font-family: Arial, sans-serif; font-size: 15px; font-weight: 900; color: #1F3864; }
-.lugar { margin-top: 2px; font-size: 11px; font-style: italic; color: #4F81BD; letter-spacing: .03em; }
-.fecha { font-size: 11px; text-align: left; }
+/* El formato usa letra angosta en el encabezado. */
+.cabeza, .cabeza h1 { font-family: 'Arial Narrow', 'Roboto Condensed', Arial, sans-serif; font-stretch: condensed; }
+.cabeza h1 { padding-left: 14px; font-size: 16px; font-weight: 700; color: #1B2A47; }
+.lugar { margin-top: 2px; padding-left: 24px; font-size: 11px; font-style: italic; color: #4F81BD; letter-spacing: .03em; }
+.fecha { font-size: 11.5px; text-align: left; }
 .nuevo { display: flex; gap: 28px; margin-top: 4px; padding-left: 8px; }
-.formato { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; page-break-inside: auto; }
-.formato th, .formato td { border: 1px solid #000; padding: 0 3px; height: 14px; }
-.titulo-seccion { background: #DCE6F1; font-size: 10.5px; font-weight: 700; text-align: center; }
-.columnas th { background: #FCE4D6; font-weight: 700; text-align: center; vertical-align: middle; }
-.columnas th.cifra { width: 82px; font-size: 7.5px; line-height: 1.15; }
+.formato { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 9.5px; page-break-inside: auto; }
+.formato th, .formato td { border: 1px solid #000; padding: 0 3px; height: 12.5px; line-height: 1.1; }
+.titulo-seccion { background: #B8CCE4; font-size: 10.5px; font-weight: 700; text-align: center; }
+.columnas th { background: #FCE4D6; font-weight: 400; font-size: 10.5px; text-align: center; vertical-align: middle; }
+.columnas th.no { font-weight: 700; }
+.columnas th.cifra { width: 58px; padding: 1px 2px; font-size: 7.5px; line-height: 1.25; }
 .no { width: 34px; text-align: center; font-weight: 700; }
-.texto { font-weight: 600; }
-.valor { width: 82px; text-align: center; font-weight: 700; }
+.texto { font-weight: 400; }
+.valor { width: 58px; text-align: center; }
 tr { page-break-inside: avoid; }
 .controles { display: flex; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #E2E8F0; }
 @media print {
-  .hoja { max-width: none; padding: 0 12mm; }
+  .hoja { max-width: none; padding: 0 18mm 0 22mm; }
   .margen { height: 10mm; }
   .controles { display: none; }
   /* Los colores del formato salen en el papel. */

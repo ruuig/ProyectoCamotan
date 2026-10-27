@@ -209,7 +209,7 @@ const ESTADO = {
 .marca { display: grid; place-items: center; font-size: 11px; }
 .check { width: 24px; height: 24px; accent-color: #1E8E5E; cursor: pointer; }
 
-.despacho { position: sticky; bottom: 0; display: grid; grid-template-columns: 180px minmax(0, 1fr) auto; align-items: end; gap: 12px; padding: 12px 0 2px; background: #fff; }
+.despacho { position: sticky; bottom: 0; display: grid; grid-template-columns: 180px minmax(0, 1fr) auto; align-items: end; gap: 12px; padding: 14px 0 20px; border-top: 2px solid #EEF2F6; background: #fff; }
 .despacho > label { display: grid; gap: 4px; min-width: 0; }
 .despacho > label > span { font-size: 12px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; color: #64748B; }
 .botones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }

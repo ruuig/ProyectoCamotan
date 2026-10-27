@@ -282,7 +282,7 @@ router.get(
 router.post(
   '/consumo/excel',
   conTerritorio,
-  validar(z.object({ periodo }), 'query'),
+  validar(z.object({ periodo, ubicacionId: id.optional() }), 'query'),
   express.raw({ type: [EXCEL, 'application/octet-stream'], limit: '15mb' }),
   asincrono(bodega.subirExcelConsumo),
 );

@@ -747,7 +747,8 @@ async function subirExcelConsumo(req, res, next) {
     const lugares = await prisma.ubicacion.findMany({ where: { territorioId: propio }, select: { id: true } });
     permitidos = new Set(lugares.map((u) => u.id));
   }
-  const r = await consumoExcel.cargarLibro(req.usuario.establecimientoId, req.body, req.query.periodo, req.usuario.id, permitidos);
+  const destino = req.query.ubicacionId ? Number(req.query.ubicacionId) : null;
+  const r = await consumoExcel.cargarLibro(req.usuario.establecimientoId, req.body, req.query.periodo, req.usuario.id, permitidos, destino);
   await req.bitacora({
     accion: 'actualizar',
     entidad: 'reporte_servicio',

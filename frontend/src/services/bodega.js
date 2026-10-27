@@ -63,11 +63,11 @@ export default {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   },
-  subirExcelConsumo(periodo, archivo) {
+  subirExcelConsumo(periodo, archivo, ubicacionId) {
     // Algunos equipos no le ponen tipo al .xlsx: se manda con el suyo.
     const tipo = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     const conTipo = archivo.type === tipo ? archivo : new File([archivo], archivo.name, { type: tipo });
-    return http.subirArchivo(`/bodega/consumo/excel?${consulta({ periodo })}`, conTipo);
+    return http.subirArchivo(`/bodega/consumo/excel?${consulta({ periodo, ubicacionId })}`, conTipo);
   },
   revisarInforme: (ubicacionId, periodo, observacion) =>
     http.post(`/bodega/informes/${ubicacionId}/${periodo}/revisar`, { observacion }),

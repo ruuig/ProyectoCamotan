@@ -153,7 +153,7 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
 </script>
 
 <template>
-  <section>
+  <section class="trazabilidad">
     <header class="b-cabecera">
       <div class="flex flex-wrap items-center gap-4">
         <h1 class="b-titulo">Trazabilidad</h1>
@@ -425,6 +425,9 @@ const fechaHora = (v) => new Date(v).toLocaleString('es-GT', { dateStyle: 'short
 .lote-traza.amarillo { border-left-color: #D9A400; }
 .lote-traza.rojo { border-left-color: #E8930C; }
 .lote-traza.vencido { border-left-color: #C03535; }
+/* La hoja de bodega recorta lo que se sale (overflow: clip): sin lote elegido,
+   la vista mide solo la cabecera y la lista de resultados quedaba cortada. */
+.trazabilidad { min-height: 460px; }
 .resultados { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); max-height: 380px; overflow-y: auto; padding: 4px; background: #fff; border: 2px solid #172A5A; border-radius: 12px; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, .35); }
 .resultados.vacia { padding: 14px; text-align: center; font-weight: 600; color: #64748B; }
 .resultado { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 4px 10px; border-radius: 8px; text-align: left; }

@@ -95,8 +95,42 @@ async function promedios(ubicacionIds, periodo) {
   };
 }
 
-const BORDE = { style: 'thin', color: { argb: 'FF9CA3AF' } };
-const BORDES = { top: BORDE, left: BORDE, bottom: BORDE, right: BORDE };
+/*
+ * Formato del balance del centro (hoja SEP26 de BALANCENE25.xlsx): las mismas
+ * letras, colores y bordes. Los colores de tema del libro ya convertidos:
+ * azul de los nombres B7DEE8, saldo anterior DCE6F2, saldo siguiente C6D9F1,
+ * secciones E6E0EC, promedio 66FF99 / 00FF99, títulos en azul oscuro 003366.
+ * Mejoras: títulos y nombres fijos al desplazarse, cifras con separador de
+ * miles, solo enteros en lo que llena el encargado y hoja lista para imprimir.
+ */
+const COLOR = {
+  nombreLugar: 'FFB7DEE8',
+  saldoAnterior: 'FFDCE6F2',
+  saldoSiguiente: 'FFC6D9F1',
+  seccion: 'FFE6E0EC',
+  promedioTitulo: 'FF66FF99',
+  promedio: 'FF00FF99',
+  blanco: 'FFFFFFFF',
+  titulo: 'FF003366',
+};
+const relleno = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+const DELGADO = { style: 'thin', color: { argb: 'FF000000' } };
+const BORDES = { top: DELGADO, left: DELGADO, bottom: DELGADO, right: DELGADO };
+const MEDIANO = { style: 'medium', color: { argb: 'FF000000' } };
+const LETRA = {
+  titulo: { name: 'Arial', size: 14, bold: true },
+  fecha: { name: 'Arial', size: 14 },
+  lugar: { name: 'Arial', size: 12, bold: true },
+  encabezado: { name: 'Arial', size: 11, color: { argb: COLOR.titulo } },
+  medicamentos: { name: 'Bodoni MT Black', size: 11, bold: true, color: { argb: COLOR.titulo } },
+  seccion: { name: 'Bodoni MT Black', size: 11 },
+  numero: { name: 'Comic Sans MS', size: 11 },
+  dato: { name: 'Calibri', size: 11 },
+  saldo: { name: 'Arial', size: 11, color: { argb: COLOR.titulo } },
+};
+// Relleno de cada columna del bloque, en el título (fila 4) y en los datos.
+const RELLENO_TITULO = [COLOR.saldoAnterior, COLOR.blanco, COLOR.blanco, COLOR.blanco, COLOR.nombreLugar, COLOR.promedioTitulo];
+const RELLENO_DATO = [COLOR.saldoAnterior, null, null, null, COLOR.saldoSiguiente, COLOR.promedio];
 
 /** Libro del territorio para el mes: el pedazo del balance de sus lugares. */
 async function libroDelTerritorio(establecimientoId, territorioId, periodo) {
@@ -117,49 +151,77 @@ async function libroDelTerritorio(establecimientoId, territorioId, periodo) {
 
   const libro = new ExcelJS.Workbook();
   libro.creator = 'Sistema de gestión clínica · Centro de Salud de Camotán';
-  const hoja = libro.addWorksheet(nombreHoja(periodo));
-  hoja.properties.defaultRowHeight = 15;
-  hoja.getColumn(1).width = 5;
-  hoja.getColumn(2).width = 46;
+  const hoja = libro.addWorksheet(nombreHoja(periodo), {
+    views: [{ state: 'frozen', xSplit: 2, ySplit: 4, zoomScale: 89 }],
+    pageSetup: { orientation: 'landscape', paperSize: 5, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '1:4' },
+  });
+  const ultima = 2 + lugares.length * 6;
+  hoja.getColumn(1).width = 8;
+  hoja.getColumn(2).width = 49;
+  for (let c = 3; c <= ultima; c += 1) hoja.getColumn(c).width = 13;
+
   hoja.getCell('B1').value = 'INFORME BALANCE MEDICAMENTOS';
-  hoja.getCell('B1').font = { bold: true, size: 12 };
+  hoja.getCell('B1').font = LETRA.titulo;
   hoja.getCell('B2').value = `Territorio ${t.numero} · ${t.encargado}`;
-  hoja.getCell('B2').font = { italic: true };
+  hoja.getCell('B2').font = { name: 'Arial', size: 11, italic: true, color: { argb: COLOR.titulo } };
   const fecha = hoja.getCell('G2');
   fecha.value = new Date(Date.UTC(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)) - 1, 1, 12));
-  fecha.numFmt = 'mmmm yyyy';
-  hoja.getCell('B4').value = 'MEDICAMENTOS';
+  fecha.numFmt = 'mmm-yy';
+  fecha.font = LETRA.fecha;
+  fecha.alignment = { horizontal: 'center' };
+  [1, 2, 3].forEach((n) => { hoja.getRow(n).height = 18; });
+
+  const m = hoja.getCell('B4');
+  m.value = 'MEDICAMENTOS';
+  m.font = LETRA.medicamentos;
+  m.fill = relleno(COLOR.blanco);
+  m.alignment = { horizontal: 'center', vertical: 'middle' };
+  m.border = BORDES;
+  hoja.getRow(4).height = 30;
 
   lugares.forEach((u, k) => {
     const c0 = 3 + k * 6;
-    const nombre = hoja.getCell(3, c0 + 2);
+    // El nombre del lugar a lo ancho de su bloque, como en el balance.
+    hoja.mergeCells(3, c0, 3, c0 + 5);
+    const nombre = hoja.getCell(3, c0);
     nombre.value = NOMBRE_EN_BALANCE[u.nombre] ?? u.nombre.toUpperCase();
-    nombre.font = { bold: true };
+    nombre.font = LETRA.lugar;
+    nombre.fill = relleno(COLOR.nombreLugar);
+    nombre.alignment = { horizontal: 'center', vertical: 'middle' };
+    nombre.border = { top: MEDIANO, bottom: MEDIANO, left: DELGADO, right: DELGADO };
     COLUMNAS_LUGAR.forEach((texto, j) => {
-      hoja.getColumn(c0 + j).width = 11;
       const celda = hoja.getCell(4, c0 + j);
       celda.value = texto;
-      celda.font = { bold: true, size: 9 };
-      celda.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
+      celda.font = LETRA.encabezado;
+      celda.fill = relleno(RELLENO_TITULO[j]);
+      celda.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
       celda.border = BORDES;
-      // Lo que llena el encargado, en amarillo claro.
-      if (j === 2 || j === 3) celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
     });
   });
-  hoja.getRow(4).height = 30;
-  hoja.getCell('B4').font = { bold: true };
-  hoja.getCell('B4').border = BORDES;
 
   let fila = PRIMERA_FILA;
   for (const f of filas) {
     const r = hoja.getRow(fila);
     if (f.seccion) {
+      r.height = 18;
       r.getCell(2).value = f.seccion;
-      r.getCell(2).font = { bold: true };
+      for (let c = 1; c <= ultima; c += 1) {
+        const celda = r.getCell(c);
+        celda.fill = relleno(COLOR.seccion);
+        celda.border = BORDES;
+        celda.font = c === 2 ? LETRA.seccion : LETRA.dato;
+      }
     } else if (f.insumo) {
-      r.getCell(1).value = f.numero ?? null;
-      r.getCell(2).value = f.insumo.nombreGenerico;
-      r.getCell(2).border = BORDES;
+      r.height = 15.6;
+      const no = r.getCell(1);
+      no.value = f.numero ?? null;
+      no.font = LETRA.numero;
+      no.alignment = { horizontal: 'center' };
+      no.border = BORDES;
+      const nombre = r.getCell(2);
+      nombre.value = f.insumo.nombreGenerico;
+      nombre.font = LETRA.dato;
+      nombre.border = BORDES;
       lugares.forEach((u, k) => {
         const c0 = 3 + k * 6;
         const d = deLugar[k].get(f.insumo.id);
@@ -171,15 +233,23 @@ async function libroDelTerritorio(establecimientoId, territorioId, periodo) {
         r.getCell(c0 + 4).value = { formula: `(${letra(c0)}${fila}+${letra(c0 + 1)}${fila})-${letra(c0 + 2)}${fila}`, result: resultado };
         r.getCell(c0 + 5).value = promedio(u.id, f.insumo.id);
         for (let j = 0; j < 6; j += 1) {
-          r.getCell(c0 + j).border = BORDES;
-          r.getCell(c0 + j).numFmt = '#,##0';
-          if (j === 2 || j === 3) r.getCell(c0 + j).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEA' } };
+          const celda = r.getCell(c0 + j);
+          celda.border = BORDES;
+          celda.numFmt = '#,##0';
+          celda.font = j === 4 ? LETRA.saldo : LETRA.dato;
+          if (RELLENO_DATO[j]) celda.fill = relleno(RELLENO_DATO[j]);
+          // Lo que llena el encargado: solo números enteros, cero o más.
+          if (j === 2 || j === 3) {
+            celda.dataValidation = {
+              type: 'whole', operator: 'greaterThanOrEqual', formulae: [0], allowBlank: true,
+              showErrorMessage: true, errorTitle: 'Cantidad', error: 'Escriba un número entero, sin decimales.',
+            };
+          }
         }
       });
     }
     fila += 1;
   }
-  hoja.views = [{ state: 'frozen', xSplit: 2, ySplit: 4 }];
   return { libro, nombre: `Consumo ${nombreHoja(periodo)} - Territorio ${t.numero} ${t.encargado}.xlsx` };
 }
 
@@ -197,8 +267,11 @@ const texto = (valor) => (valor && typeof valor === 'object' ? valor.richText?.m
  * Carga el Excel devuelto: por cada bloque de lugar, lo entregado y lo no
  * entregado de cada insumo quedan como el informe del mes de ese lugar.
  * `permitidos`: los lugares que puede cargar quien sube (null = todos).
+ * `destino`: si se sube desde un lugar, solo ese. Su bloque se busca por el
+ * nombre; si le cambiaron el nombre, es el único bloque del archivo o el que
+ * va en su posición dentro del territorio.
  */
-async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, permitidos = null) {
+async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, permitidos = null, destino = null) {
   const libro = new ExcelJS.Workbook();
   try {
     await libro.xlsx.load(buffer);
@@ -208,6 +281,9 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, permit
   // La hoja del balance: la que tiene «Saldo anterior» en la fila 4.
   const hoja = libro.worksheets.find((h) => [...Array(40).keys()].some((c) => clave(texto(h.getRow(4).getCell(c + 1).value)) === 'saldoanterior'));
   if (!hoja) throw fallo(400, 'sin_balance', 'El Excel no tiene la hoja del balance (fila 4 con «Saldo anterior»)');
+  // Un mes con el BRES cerrado ya no cambia.
+  const cerrado = await prisma.bres.findUnique({ where: { establecimientoId_periodo: { establecimientoId, periodo } }, select: { estado: true } });
+  if (cerrado?.estado === 'cerrado') throw fallo(409, 'mes_cerrado', `El BRES de ${nombreHoja(periodo)} está cerrado: ya no se cargan informes de ese mes`);
   const delArchivo = periodoDeHoja(hoja.name);
   if (delArchivo && delArchivo !== periodo) throw fallo(409, 'otro_mes', `El Excel es de ${hoja.name} y se está cargando ${nombreHoja(periodo)}`);
 
@@ -219,18 +295,38 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, permit
   }
 
   // Bloques: donde la fila 4 dice «Saldo anterior»; el lugar es el nombre de la fila 3 sobre el bloque.
-  const bloques = [];
-  const lugaresNoReconocidos = [];
+  const todos = [];
   const filaTitulos = hoja.getRow(4);
   for (let c = 1; c <= Math.max(filaTitulos.cellCount, 400); c += 1) {
     if (clave(texto(filaTitulos.getCell(c).value)) !== 'saldoanterior') continue;
     const nombre = [0, 1, 2, 3, 4, 5].map((j) => texto(hoja.getRow(3).getCell(c + j).value)).find(Boolean) ?? '';
-    const u = porClave.get(clave(nombre));
-    if (!u) { if (nombre) lugaresNoReconocidos.push(nombre); continue; }
-    if (permitidos && !permitidos.has(u.id)) { lugaresNoReconocidos.push(`${nombre} (no es de su territorio)`); continue; }
-    bloques.push({ c, u });
+    todos.push({ c, nombre, u: porClave.get(clave(nombre)) });
   }
-  if (!bloques.length) throw fallo(400, 'sin_lugares', 'No se reconoció ningún centro o puesto en la fila 3 del Excel');
+  if (!todos.length) throw fallo(400, 'sin_bloques', 'El Excel no tiene ningún bloque con «Saldo anterior» en la fila 4');
+
+  const bloques = [];
+  const lugaresNoReconocidos = [];
+  if (destino) {
+    const u = ubicaciones.find((x) => x.id === destino);
+    if (!u) throw fallo(404, 'no_encontrado', 'Ese centro o puesto no existe');
+    if (permitidos && !permitidos.has(u.id)) throw fallo(403, 'sin_permiso', 'Ese lugar no es de su territorio');
+    let elegido = todos.find((b) => b.u?.id === u.id);
+    if (!elegido && todos.length === 1) elegido = todos[0];
+    if (!elegido && u.territorioId) {
+      const delTerritorio = ubicaciones.filter((x) => x.territorioId === u.territorioId && datos.esServicioQueInforma(x))
+        .sort((a, b) => a.orden - b.orden || a.id - b.id);
+      if (delTerritorio.length === todos.length) elegido = todos[delTerritorio.findIndex((x) => x.id === u.id)];
+    }
+    if (!elegido) throw fallo(400, 'sin_bloque', `No se encontró el bloque de ${u.nombre} en el Excel`);
+    bloques.push({ c: elegido.c, u });
+  } else {
+    for (const b of todos) {
+      if (!b.u) { if (b.nombre) lugaresNoReconocidos.push(b.nombre); continue; }
+      if (permitidos && !permitidos.has(b.u.id)) { lugaresNoReconocidos.push(`${b.nombre} (no es de su territorio)`); continue; }
+      bloques.push({ c: b.c, u: b.u });
+    }
+    if (!bloques.length) throw fallo(400, 'sin_lugares', 'No se reconoció ningún centro o puesto en la fila 3 del Excel');
+  }
 
   // Insumos por su nombre y por los nombres con que aparecen en los Excel.
   const [insumos, alias] = await Promise.all([

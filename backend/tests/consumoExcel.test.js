@@ -92,6 +92,26 @@ describe('Excel del consumo por territorio', () => {
     expect([otra.getCell(f, 5).value, otra.getCell(f, 6).value]).toEqual([12, 3]);
   });
 
+  it('subido desde un lugar, encuentra su bloque aunque le hayan cambiado el nombre', async () => {
+    if (!territorio) return;
+    const libro = await libroDe((await bajar()).body);
+    const hoja = libro.worksheets[0];
+    const f = primeraFila(hoja);
+    const nombre = hoja.getCell(f, 2).value;
+    hoja.getCell(3, 9).value = 'PUESTO CON OTRO NOMBRE'; // el bloque del segundo lugar
+    hoja.getCell(f, 11).value = 44; // segundo lugar: entregado
+    const [, u2] = territorio.ubicaciones;
+    const subirA = async (ubicacionId) => bod(request(app).post(`/api/v1/bodega/consumo/excel?periodo=${PERIODO}&ubicacionId=${ubicacionId}`))
+      .set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .send(Buffer.from(await libro.xlsx.writeBuffer()));
+    const r = await subirA(u2.id);
+    expect(r.status).toBe(200);
+    expect(r.body.lugares.map((l) => l.ubicacionId)).toEqual([u2.id]);
+    const insumo = await prisma.insumo.findFirst({ where: { nombreGenerico: nombre } });
+    const ren = await prisma.informeServicioRenglon.findFirst({ where: { insumoId: insumo.id, informe: { ubicacionId: u2.id, periodo: PERIODO } } });
+    expect(ren.entregado).toBe(44);
+  });
+
   it('un Excel de otro mes no se carga', async () => {
     if (!territorio) return;
     const libro = await libroDe((await bajar()).body);

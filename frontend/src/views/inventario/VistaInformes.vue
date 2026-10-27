@@ -49,23 +49,25 @@ async function bajarExcel(t) {
     bajando.value = null;
   }
 }
-const subiendo = ref(false);
+// El Excel de un lugar se sube desde su renglón: así se sabe de qué lugar es
+// aunque en el archivo le hayan cambiado el nombre.
+const subiendo = ref(null);
 const resultado = ref(null);
-async function subir(evento) {
+async function subir(evento, s) {
   const archivo = evento.target.files?.[0];
   evento.target.value = '';
   if (!archivo) return;
   error.value = '';
   aviso.value = '';
   resultado.value = null;
-  subiendo.value = true;
+  subiendo.value = s.ubicacionId;
   try {
-    resultado.value = await bodega.subirExcelConsumo(cierre.periodo, archivo);
+    resultado.value = await bodega.subirExcelConsumo(cierre.periodo, archivo, s.ubicacionId);
     await cargarEstado();
   } catch (fallo) {
-    error.value = fallo.message;
+    error.value = `${s.nombre}: ${fallo.message}`;
   } finally {
-    subiendo.value = false;
+    subiendo.value = null;
   }
 }
 
@@ -182,14 +184,7 @@ onMounted(cargarEstado);
 
 <template>
   <section>
-    <PasosCierre>
-      <template #acciones>
-        <label v-if="!form" class="b-btn primario subir" :class="{ ocupado: subiendo }">
-          <Icono nombre="recibir" :tamano="20" /> {{ subiendo ? 'Cargando…' : 'Subir Excel' }}
-          <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only" :disabled="subiendo" @change="subir" />
-        </label>
-      </template>
-    </PasosCierre>
+    <PasosCierre />
 
     <!-- Lo que se cargó del Excel -->
     <section v-if="resultado" class="cargado mt-4" aria-live="polite">
@@ -253,6 +248,10 @@ onMounted(cargarEstado);
                 <small v-else-if="s.estado === 'pendiente'">Sin informe</small>
                 <small v-else>{{ new Date(s.capturadoEn).toLocaleDateString('es-GT') }} · {{ s.capturadoPor }}</small>
               </span>
+              <label class="b-btn secundario chico subir" :class="{ ocupado: subiendo === s.ubicacionId }" :title="`Subir el Excel de ${s.nombre}`">
+                <Icono nombre="recibir" :tamano="16" /> {{ subiendo === s.ubicacionId ? 'Cargando…' : 'Subir' }}
+                <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only" :disabled="Boolean(subiendo)" @change="subir($event, s)" />
+              </label>
               <button type="button" class="b-btn chico" :class="s.estado === 'listo' ? 'secundario' : 'primario'" @click="abrir(s)">{{ ACCION[s.estado] }}</button>
             </li>
           </ul>

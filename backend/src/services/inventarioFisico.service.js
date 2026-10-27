@@ -87,7 +87,9 @@ async function hojaDeConteo(establecimientoId, ahora = new Date()) {
     orderBy: [{ insumo: { nombreGenerico: 'asc' } }, { fechaVence: 'asc' }],
   });
 
-  return lotes.map((l) => ({
+  // Bodega cuenta lo suyo: el lote que está todo en farmacia lo cuenta farmacia.
+  const enBodega = (l) => l.cantidadActual - l.cantidadFarmacia > 0 || l.cantidadActual === 0 || l.estado !== 'disponible';
+  return lotes.filter(enBodega).map((l) => ({
     loteId: l.id,
     numeroLote: l.numeroLote,
     fechaVence: l.fechaVence,

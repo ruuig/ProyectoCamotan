@@ -28,6 +28,7 @@ const VistaRetiros = () => import('../views/inventario/VistaRetiros.vue');
 import MarcoBodega from '../components/bodega/MarcoBodega.vue';
 const VistaTrazabilidad = () => import('../views/inventario/VistaTrazabilidad.vue');
 const VistaInformes = () => import('../views/inventario/VistaInformes.vue');
+const VistaConteo = () => import('../views/inventario/VistaConteo.vue');
 const VistaSemaforo = () => import('../views/inventario/VistaSemaforo.vue');
 const HojaBalance = () => import('../views/impresion/HojaBalance.vue');
 const HojaInventarioCierre = () => import('../views/impresion/HojaInventarioCierre.vue');
@@ -149,6 +150,8 @@ const router = createRouter({
             { path: 'pedir-ddriss', name: 'pedir-ddriss', component: VistaPedirDdriss, meta: { roles: ['bodega'] } },
             { path: 'trazabilidad', name: 'trazabilidad', component: VistaTrazabilidad, meta: { roles: BODEGA } },
             { path: 'informes', name: 'informes-servicios', component: VistaInformes, meta: { roles: BODEGA } },
+            // Conteo físico del mes, antes de cerrar el BRES.
+            { path: 'conteo', name: 'conteo-fisico', component: VistaConteo, meta: { roles: BODEGA } },
             // El balance quedo dentro del BRES como "Detalle por servicio".
             { path: 'balance', redirect: '/inventario/bres' },
             { path: 'semaforo', name: 'semaforo', component: VistaSemaforo, meta: { roles: BODEGA } },

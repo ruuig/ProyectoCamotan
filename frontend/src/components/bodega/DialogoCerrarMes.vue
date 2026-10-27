@@ -10,11 +10,14 @@ const props = defineProps({
   mes: { type: String, required: true },
   enviando: { type: Boolean, default: false },
   error: { type: String, default: '' },
+  // Lugares sin informe de consumo: su consumo quedaría en cero.
+  sinInforme: { type: Array, default: () => [] },
 });
 const emit = defineEmits(['confirmar', 'cancelar']);
 
 const paso = ref(1);
 const password = ref('');
+const aceptaSinInformes = ref(false);
 
 async function siguiente() {
   paso.value = 2;
@@ -40,9 +43,14 @@ async function siguiente() {
           <li>Las correcciones posteriores entran al mes siguiente como ajuste.</li>
           <li>No se puede deshacer.</li>
         </ul>
+        <div v-if="props.sinInforme.length" class="faltan">
+          <p><b>Sin informe de consumo ({{ props.sinInforme.length }}):</b> {{ props.sinInforme.join(', ') }}</p>
+          <p>Su consumo queda en cero y su promedio baja.</p>
+          <label><input v-model="aceptaSinInformes" type="checkbox" /> Cerrar sin esos informes</label>
+        </div>
         <footer>
           <button type="button" class="b-btn secundario" @click="emit('cancelar')">Cancelar</button>
-          <button type="button" class="b-btn primario" @click="siguiente">Cerrar el mes</button>
+          <button type="button" class="b-btn primario" :disabled="props.sinInforme.length > 0 && !aceptaSinInformes" @click="siguiente">Cerrar el mes</button>
         </footer>
       </template>
 
@@ -69,6 +77,9 @@ header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 h2 { font-size: 22px; font-weight: 800; color: #14244A; }
 .efectos { display: grid; gap: 8px; margin-bottom: 4px; }
 .efectos li { padding-left: 18px; position: relative; font-weight: 600; color: #334155; }
+.faltan { display: grid; gap: 6px; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: #FFF1DC; color: #7A4300; font-size: 14px; font-weight: 600; }
+.faltan label { display: flex; align-items: center; gap: 8px; font-weight: 800; color: #5C3300; }
+.faltan input { width: 18px; height: 18px; }
 .efectos li::before { content: ''; position: absolute; left: 4px; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: #172A5A; }
 footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 /* --- Relieve (estilo duo) --- */

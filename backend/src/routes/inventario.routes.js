@@ -133,6 +133,8 @@ router.post(
       aplicada: z.boolean().optional(),
       // No alcanza y no se entrega incompleto: todo lo recetado queda como no entregado.
       noEntregar: z.boolean().optional(),
+      // Otro lote que el que vence primero: el que está a mano en el estante.
+      loteId: z.coerce.number().int().positive().optional(),
     })).max(50).optional(),
     // Se le explicó cómo tomarlo y cuándo regresar.
     orientado: z.boolean().optional(),

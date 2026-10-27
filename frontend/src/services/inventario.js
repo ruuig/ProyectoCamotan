@@ -67,7 +67,13 @@ export default {
   bresFarmacia: (periodo) => http.get(`/farmacia/bres/${periodo}`),
   bresDe: (periodo) => http.get(`/inventario/bres/${periodo}`),
   generarBres: (datos) => http.post('/inventario/bres', datos),
-  cerrarBres: (periodo, password) => http.post(`/inventario/bres/${periodo}/cerrar`, { password }),
+  // Conteo físico del mes (ciego: la hoja no trae lo que el sistema cree tener).
+  hojaDeConteo: () => http.get('/inventario/fisico/hoja'),
+  inventarioFisico: (periodo) => http.get(`/inventario/fisico/${periodo}`),
+  abrirInventarioFisico: (periodo) => http.post('/inventario/fisico', { periodo }),
+  registrarConteo: (id, conteos) => http.post(`/inventario/fisico/${id}/conteos`, { conteos }),
+  cerrarInventarioFisico: (id) => http.post(`/inventario/fisico/${id}/cerrar`, { aplicarReajustes: true }),
+  cerrarBres: (periodo, password, sinInformes = false) => http.post(`/inventario/bres/${periodo}/cerrar`, { password, sinInformes }),
   demandaDiaria: (periodo) => http.get(`/inventario/demanda-diaria/${periodo}`),
 
   // --- Retiro sanitario ----------------------------------------------------

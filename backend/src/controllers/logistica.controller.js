@@ -271,8 +271,9 @@ async function cerrarInventario(req, res) {
     usuarioId: req.usuario.id,
     observaciones: req.body.observaciones,
     aplicarReajustes: req.body.aplicarReajustes,
-    // El director autoriza las diferencias grandes en el mismo acto.
-    autorizado: Boolean(req.director),
+    // Lo contado es lo que hay: toda diferencia se ajusta y queda en el kardex
+    // como reajuste por inventario físico, con quién cerró.
+    autorizado: true,
   });
 
   await req.bitacora({
@@ -326,13 +327,24 @@ async function cerrarBres(req, res, next) {
   if (!req.body?.password || !(await compararPassword(req.body.password, usuario?.passwordHash))) {
     return next({ status: 403, codigo: 'contrasena_incorrecta', mensaje: 'La contraseña no es correcta' });
   }
+  // Un lugar sin informe queda con consumo cero y baja el promedio: se cierra
+  // sin él solo si se dice a propósito.
+  const faltan = (await require('../services/bodegaDatos.service').estadoInformes(req.usuario.establecimientoId, req.params.periodo))
+    .filter((s) => !s.informado);
+  if (faltan.length && !req.body?.sinInformes) {
+    return next({
+      status: 409,
+      codigo: 'informes_pendientes',
+      mensaje: `Faltan ${faltan.length} informes de consumo: ${faltan.map((s) => s.nombre).join(', ')}`,
+    });
+  }
   const bres = await bresService.cerrar(req.usuario.establecimientoId, req.params.periodo);
 
   await req.bitacora({
     accion: 'actualizar',
     entidad: 'bres',
     entidadId: bres.id,
-    detalle: `BRES ${bres.periodo} cerrado`,
+    detalle: `BRES ${bres.periodo} cerrado${faltan.length ? `, sin el informe de ${faltan.map((s) => s.nombre).join(', ')}` : ''}`,
   });
 
   res.json({ bres });

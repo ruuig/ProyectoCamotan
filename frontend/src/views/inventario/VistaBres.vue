@@ -79,11 +79,22 @@ const generar = () => accion(() => servicio.generarBres({ periodo: cierre.period
 // Cerrar pide doble confirmación y la contraseña de quien cierra.
 const cerrando = ref(false);
 const errorCierre = ref('');
+// Los lugares que no han mandado su informe de consumo del mes.
+const sinInforme = ref([]);
+async function abrirCierre() {
+  errorCierre.value = '';
+  try {
+    sinInforme.value = (await bodega.estadoInformes(cierre.periodo)).servicios.filter((s) => !s.informado).map((s) => s.nombre);
+  } catch {
+    sinInforme.value = [];
+  }
+  cerrando.value = true;
+}
 async function confirmarCierre(password) {
   errorCierre.value = '';
   enviando.value = true;
   try {
-    await servicio.cerrarBres(cierre.periodo, password);
+    await servicio.cerrarBres(cierre.periodo, password, sinInforme.value.length > 0);
     cerrando.value = false;
     aviso.value = 'Mes cerrado. Sus cifras ya no cambian.';
     await cargar();
@@ -245,12 +256,12 @@ function celda(r, c) {
 
       <div v-if="!cerrado" data-accion class="pie">
         <input v-model="observaciones" maxlength="400" placeholder="Observaciones del informe" aria-label="Observaciones del informe" class="b-campo min-w-[14rem] flex-1" />
-        <button type="button" class="b-btn exito" :disabled="enviando || !guardado" :title="guardado ? '' : 'Genere el BRES primero'" @click="errorCierre = ''; cerrando = true">
+        <button type="button" class="b-btn exito" :disabled="enviando || !guardado" :title="guardado ? '' : 'Genere el BRES primero'" @click="abrirCierre">
           <Icono nombre="bloqueo" :tamano="20" /> Cerrar BRES de {{ nombrePeriodo(cierre.periodo) }}
         </button>
       </div>
     </template>
-    <DialogoCerrarMes v-if="cerrando" :mes="nombrePeriodo(cierre.periodo)" :enviando="enviando" :error="errorCierre" @confirmar="confirmarCierre" @cancelar="cerrando = false" />
+    <DialogoCerrarMes v-if="cerrando" :mes="nombrePeriodo(cierre.periodo)" :sin-informe="sinInforme" :enviando="enviando" :error="errorCierre" @confirmar="confirmarCierre" @cancelar="cerrando = false" />
   </section>
 </template>
 

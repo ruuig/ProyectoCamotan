@@ -819,7 +819,7 @@ describe('inventario físico', () => {
     expect(reajuste.causa).toBe('faltante_inventario_fisico');
   });
 
-  it('una diferencia grande queda pendiente de autorización', async () => {
+  it('una diferencia grande también se ajusta y queda en el kardex', async () => {
     const insumo = await nuevoInsumo();
     const { lote } = await recibirLote(insumo.id, { cantidad: 100, dias: 400 });
 
@@ -836,12 +836,14 @@ describe('inventario físico', () => {
       request(app).post(`/api/v1/inventario/fisico/${abierto.body.inventario.id}/cerrar`),
     ).send({ aplicarReajustes: true });
 
-    expect(cerrado.body.pendientesDeAutorizar).toHaveLength(1);
-    expect(cerrado.body.reajustesAplicados).toBe(0);
+    expect(cerrado.body.pendientesDeAutorizar).toHaveLength(0);
+    expect(cerrado.body.reajustesAplicados).toBe(1);
 
-    // El saldo no se tocó: la pérdida no se borra sin que se note.
+    // Lo contado es lo que hay; la pérdida queda como reajuste con su causa.
     const actualizado = await prisma.lote.findUnique({ where: { id: lote.id } });
-    expect(actualizado.cantidadActual).toBe(100);
+    expect(actualizado.cantidadActual).toBe(60);
+    const reajuste = await prisma.movimientoInsumo.findFirst({ where: { loteId: lote.id, tipo: 'reajuste' } });
+    expect([reajuste.cantidad, reajuste.causa]).toEqual([-40, 'faltante_inventario_fisico']);
   });
 
   it('no deja abrir dos inventarios del mismo período', async () => {
@@ -947,9 +949,13 @@ describe('BRES', () => {
     expect(sinClave.status).toBe(403);
     expect(sinClave.body.error.codigo).toBe('contrasena_incorrecta');
 
+    // Si faltan informes de lugares, se cierra solo diciéndolo a propósito.
+    const sinInformes = await farm(request(app).post(`/api/v1/inventario/bres/${periodoActual()}/cerrar`)).send({ password: 'Camotan2026!' });
+    if (sinInformes.status === 409) expect(sinInformes.body.error.codigo).toBe('informes_pendientes');
+
     const cerrado = await farm(
       request(app).post(`/api/v1/inventario/bres/${periodoActual()}/cerrar`),
-    ).send({ password: 'Camotan2026!' });
+    ).send({ password: 'Camotan2026!', sinInformes: true });
     expect(cerrado.status).toBe(200);
 
     const otraVez = await farm(request(app).post('/api/v1/inventario/bres')).send({

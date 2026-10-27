@@ -209,11 +209,12 @@ describe('requisición', () => {
     expect(r.status).toBe(403);
   });
 
-  it('sin número del formulario no se despacha; anulada sale del flujo', async () => {
+  it('sin número del formulario se despacha igual (se anota después); anulada sale del flujo', async () => {
     const { insumo } = await insumoConLotes([[10, 500]]);
+    const sinNumero = (await bod(request(app).post('/api/v1/bodega/requisiciones')).send({ ...nueva(servicio.id, [{ insumoId: insumo.id, cantidadSolicitada: 2 }]), numero: null })).body.requisicion;
+    const d = await bod(request(app).post(`/api/v1/bodega/requisiciones/${sinNumero.id}/despachar`)).send({ recibidoPor: 'Promotora' });
+    expect(d.body.requisicion.estado).toBe('despachada');
     const sin = (await bod(request(app).post('/api/v1/bodega/requisiciones')).send({ ...nueva(servicio.id, [{ insumoId: insumo.id, cantidadSolicitada: 2 }]), numero: null })).body.requisicion;
-    const d = await bod(request(app).post(`/api/v1/bodega/requisiciones/${sin.id}/despachar`)).send({ recibidoPor: 'Promotora' });
-    expect(d.body.error.codigo).toBe('sin_numero');
     const an = await bod(request(app).post(`/api/v1/bodega/requisiciones/${sin.id}/anular`)).send({ motivo: 'Se llenó dos veces' });
     expect(an.body.requisicion.estado).toBe('anulada');
     expect((await bod(request(app).post(`/api/v1/bodega/requisiciones/${sin.id}/despachar`)).send({ recibidoPor: 'Promotora', numero: numero() })).status).toBe(409);

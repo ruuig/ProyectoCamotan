@@ -406,9 +406,7 @@ async function despachar(req, res, next) {
   if (!ESTADOS_EDITABLES.includes(r.estado)) {
     return next({ status: 409, codigo: 'no_despachable', mensaje: `La requisición ya está ${r.estado}` });
   }
-  if (!r.numero && !req.body.numero) {
-    return next({ status: 400, codigo: 'sin_numero', mensaje: 'Anote el número del formulario de la requisición antes de despachar' });
-  }
+  // El número del formulario puede anotarse después: queda en «Sin número».
   if (req.body.numero && req.body.numero !== r.numero) {
     const choque = await choqueDeNumeros(establecimientoId, r.id, req.body.numero, r.renglones.map((g) => g.descripcion));
     if (choque) return next(choque);

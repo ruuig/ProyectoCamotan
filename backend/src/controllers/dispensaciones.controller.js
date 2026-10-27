@@ -3,7 +3,7 @@ const prisma = require('../config/db');
 const { descontarDeLote, devolverEntrega } = require('../services/movimientos.service');
 const { limitesDePeriodo } = require('../services/abastecimiento.service');
 const { renglonesSigsa4 } = require('../services/sigsa4.service');
-const { enUbicacion, existenciaTotal } = require('../services/inventario.service');
+const { enUbicacion, existenciaTotal, lotesDisponibles } = require('../services/inventario.service');
 const { planEntrega, pendienteDe } = require('../services/dispensacion.service');
 const { calcularEdad } = require('../services/pacientes.service');
 
@@ -235,6 +235,8 @@ async function hojaDeEntrega(req, res, next) {
       noAlcanza: plan?.noAtendido ?? 0,
       // Cada lote propuesto con lo que queda de él en farmacia.
       lotes: (plan?.reparto ?? []).map((l) => ({ ...l, hay: lotesFarmacia.find((x) => x.id === l.loteId)?.cantidadActual ?? null })),
+      // Los lotes que se pueden dar, por si en el estante está a mano otro.
+      opciones: pendiente > 0 ? lotesDisponibles(lotesFarmacia, ahora).map((l) => ({ loteId: l.id, numeroLote: l.numeroLote, fechaVence: l.fechaVence, hay: l.cantidadActual })) : [],
       // Lo que de verdad se llevó, sin contar lo que quedó como "no había".
       entregado: r.dispensaciones.filter((d) => !d.anulada).reduce((t, d) => t + d.cantidad, 0),
       noHabia: r.demandaNoAtendida.reduce((t, d) => t + d.cantidad, 0),
@@ -302,7 +304,11 @@ async function dispensarAtencion(req, res, next) {
     // Lo que no se manda se entrega completo; con cantidad 0 se deja pendiente.
     const cantidad = pedido ? pedido.cantidad : pendiente;
     if (cantidad === 0) continue;
-    const plan = planEntrega({ lotes: enUbicacion(p.insumo.lotes, 'farmacia'), cantidad, pendiente, ahora });
+    // Si se eligió otro lote (el que está a mano), sale de ese y queda el motivo.
+    const plan = planEntrega({
+      lotes: enUbicacion(p.insumo.lotes, 'farmacia'), cantidad, pendiente, ahora,
+      ...(pedido?.loteId ? { loteId: pedido.loteId, motivo: 'Lote elegido en la entrega (el que estaba a mano)' } : {}),
+    });
     if (plan.error) return next({ ...plan.error, mensaje: `${p.insumo.nombreGenerico}: ${plan.error.mensaje}` });
     planes.push({ prescripcion: p, plan });
   }

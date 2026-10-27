@@ -165,7 +165,7 @@ const ESTADO = {
         <label><span>Recibe</span><input v-model="despacho.recibidoPor" class="b-campo" /></label>
         <div class="botones">
           <button type="button" class="b-btn secundario" :disabled="enviando" @click="rechazando = !rechazando">Rechazar</button>
-          <button type="button" class="b-btn exito" :disabled="enviando || !total || hayExceso || !despacho.numero.trim() || despacho.recibidoPor.trim().length < 3" @click="despachar">
+          <button type="button" class="b-btn exito" :disabled="enviando || !total || hayExceso || despacho.recibidoPor.trim().length < 3" @click="despachar">
             <Icono nombre="imprimir" :tamano="20" /> {{ enviando ? 'Despachando…' : `Despachar e imprimir · ${miles(total)}` }}
           </button>
         </div>

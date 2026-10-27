@@ -122,6 +122,7 @@ const GRUPOS = [
       { ruta: '/inventario/recibir', etiqueta: 'Recibir', icono: 'recibir', roles: ['bodega'] },
       { ruta: '/inventario/requisiciones?ver=pedidos', etiqueta: 'Salidas', icono: 'trasladar', roles: ['bodega'], contador: 'pedidos' },
       { ruta: '/inventario/informes', etiqueta: 'Consumo de puestos', icono: 'consolidado', roles: ['bodega'] },
+      { ruta: '/inventario/conteo', etiqueta: 'Conteo físico', icono: 'correcto', roles: ['bodega'] },
     ],
   },
   {

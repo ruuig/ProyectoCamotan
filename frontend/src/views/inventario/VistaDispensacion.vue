@@ -37,6 +37,8 @@ let clave = null;
 const aplicadas = reactive({});
 // No alcanza y no se quiere entregar incompleto: todo queda como no entregado.
 const noEntregar = reactive({});
+// Otro lote que el que vence primero: el que está a mano en el estante.
+const loteElegido = reactive({});
 const orientado = ref(false);
 const orientacion = computed(() => (hoja.value
   ? orientacionPara([hoja.value.diagnosticoCie, ...hoja.value.diagnosticos.map((d) => d.cie)])
@@ -80,6 +82,7 @@ async function abrir(atencionId, verSolo = false) {
     for (const r of hoja.value.renglones) cantidades[r.prescripcionId] = String(r.aEntregar);
     for (const k of Object.keys(aplicadas)) delete aplicadas[k];
     for (const k of Object.keys(noEntregar)) delete noEntregar[k];
+    for (const k of Object.keys(loteElegido)) delete loteElegido[k];
     orientado.value = false;
     // Una clave por entrega: si se reintenta, no se registra dos veces.
     clave = nuevaClaveIdempotencia();
@@ -95,6 +98,8 @@ const entero = (v) => Number(String(v ?? '').replace(/[^0-9]/g, '')) || 0;
 
 /** Los lotes de la propuesta (el que vence primero) para la cantidad escrita. */
 function lotesPara(r) {
+  const elegido = r.opciones?.find((o) => o.loteId === loteElegido[r.prescripcionId]);
+  if (elegido) return [{ ...elegido, cantidad: Math.min(entero(cantidades[r.prescripcionId]), elegido.hay) }];
   let falta = Math.min(entero(cantidades[r.prescripcionId]), r.aEntregar);
   const salida = [];
   for (const l of r.lotes) {
@@ -138,7 +143,7 @@ async function terminar() {
     const r = await servicio.dispensarAtencion(hoja.value.atencionId, {
       renglones: porEntregar.value.map((x) => (noEntregar[x.prescripcionId]
         ? { prescripcionId: x.prescripcionId, cantidad: 0, noEntregar: true }
-        : { prescripcionId: x.prescripcionId, cantidad: aSolicitar(x), aplicada: Boolean(aplicadas[x.prescripcionId]) })),
+        : { prescripcionId: x.prescripcionId, cantidad: aSolicitar(x), aplicada: Boolean(aplicadas[x.prescripcionId]), ...(loteElegido[x.prescripcionId] ? { loteId: loteElegido[x.prescripcionId] } : {}) })),
       orientado: orientado.value,
     }, clave);
     const faltaron = r.renglones.some((x) => x.noEntregado > 0);
@@ -364,6 +369,10 @@ onBeforeUnmount(() => {
                     <span v-if="r.noAlcanza" class="lote-chip rojo">
                       No había {{ r.noAlcanza }}<template v-if="r.enBodega"> · en bodega hay {{ r.enBodega }}</template>
                     </span>
+                    <select v-if="r.opciones?.length > 1" v-model="loteElegido[r.prescripcionId]" class="otro-lote" :aria-label="`Lote de ${r.medicamento}`">
+                      <option :value="undefined">El que vence primero</option>
+                      <option v-for="o in r.opciones" :key="o.loteId" :value="o.loteId">{{ o.numeroLote }} · vence {{ venceCorto(o.fechaVence) }} · hay {{ o.hay }}</option>
+                    </select>
                   </template>
                 </div>
               </div>
@@ -556,6 +565,7 @@ onBeforeUnmount(() => {
 .med-indic { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: 15px; font-weight: 600; color: #334155; }
 .med-indic svg { flex-shrink: 0; margin-top: 3px; color: #2F83C4; }
 .med-lotes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.otro-lote { height: 30px; padding: 0 8px; border: 2px solid #CBD5E1; border-radius: 9px; background: #fff; font-size: 13px; font-weight: 700; color: #14244A; }
 .lote-chip { padding: 3px 10px; border-radius: 9px; background: #EAF7F0; color: #145C3C; font-size: 13px; font-weight: 700; }
 .lote-chip b { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 .lote-chip.rojo { background: #FDECEC; color: #A52A2A; }

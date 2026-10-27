@@ -1229,6 +1229,8 @@ model InformeServicio {
   revisado     Boolean  @default(false)
   observacion  String?
   importado    Boolean  @default(false)
+  // El encargado puede guardarlo a medias; al enviarlo ya no lo cambia él.
+  enviadoEn    DateTime? @map("enviado_en")
 
   ubicacion Ubicacion                @relation(fields: [ubicacionId], references: [id])
   usuario   Usuario                  @relation("InformeCapturadoPor", fields: [capturadoPor], references: [id])

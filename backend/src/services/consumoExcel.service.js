@@ -373,7 +373,7 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
   const yaEnviados = [];
   if (soloNuevos) {
     const enviados = new Set((await prisma.informeServicio.findMany({
-      where: { periodo, ubicacionId: { in: bloques.map(({ u }) => u.id) } }, select: { ubicacionId: true },
+      where: { periodo, ubicacionId: { in: bloques.map(({ u }) => u.id) }, enviadoEn: { not: null } }, select: { ubicacionId: true },
     })).map((x) => x.ubicacionId));
     for (let k = bloques.length - 1; k >= 0; k -= 1) {
       if (enviados.has(bloques[k].u.id)) { yaEnviados.unshift(bloques[k].u.nombre); bloques.splice(k, 1); }
@@ -422,13 +422,12 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
       // servicio. En el balance completo es la cifra calculada: no se toma.
       const saldo = r.getCell(c + 4).value;
       const saldoInformado = !completo && typeof saldo === 'number' ? Math.max(0, Math.round(saldo)) : null;
-      let entradasTerritorio;
-      const entradas = numeroDe(r.getCell(c + 1).value);
-      if (repartos.get(u.territorioId)?.get(insumoId)?.entregado && entradas !== null) {
-        entradasTerritorio = Math.max(0, Math.round(entradas) - (formularios.get(u.id).get(insumoId)?.entradasBodega ?? 0));
-      }
-      if (entregado || noEntregado || saldoInformado !== null || entradasTerritorio !== undefined) {
-        porLugar.get(u.id).push({ insumoId, entregado, noEntregado, saldoInformado, entradasTerritorio });
+      // Las entradas como las dice el lugar (lo que pase de lo de bodega se suma).
+      const leidas = numeroDe(r.getCell(c + 1).value);
+      const entradas = leidas === null ? null : Math.max(0, Math.round(leidas));
+      const cambian = entradas !== null && entradas !== (formularios.get(u.id).get(insumoId)?.entradas ?? 0);
+      if (entregado || noEntregado || saldoInformado !== null || cambian) {
+        porLugar.get(u.id).push({ insumoId, entregado, noEntregado, saldoInformado, entradas });
       }
     }
   }
@@ -445,7 +444,7 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
   for (const t of territoriosDe) {
     const numero = completo ? (await prisma.territorio.findUnique({ where: { id: t }, select: { numero: true } }))?.numero : null;
     for (const [insumoId, r] of await datos.repartoDelTerritorio(establecimientoId, t, periodo)) {
-      if (r.entregado === r.repartido) continue;
+      if (!r.entregado || r.entregado === r.repartido) continue;
       sinRepartir.push({ insumoId, nombre: numero ? `${nombres.get(insumoId)} (territorio ${numero})` : nombres.get(insumoId), entregado: r.entregado, repartido: r.repartido });
     }
   }

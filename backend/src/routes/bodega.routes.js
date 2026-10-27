@@ -324,12 +324,16 @@ router.put(
   validar(parametrosInforme, 'params'),
   validar(z.object({
     observacion: z.string().trim().max(500).optional().nullable(),
+    // false: el encargado lo guarda sin enviarlo todavía.
+    enviar: z.boolean().optional(),
     renglones: z.array(z.object({
       insumoId: id,
       entregado: z.coerce.number().int().min(0).default(0),
       noEntregado: z.coerce.number().int().min(0).default(0),
       saldoInformado: z.coerce.number().int().min(0).optional().nullable(),
       entradasInformadas: z.coerce.number().int().min(0).optional().nullable(),
+      // Las entradas del mes como las dice el lugar.
+      entradas: z.coerce.number().int().min(0).optional().nullable(),
     })).max(1000),
   })),
   asincrono(bodega.guardarInforme),

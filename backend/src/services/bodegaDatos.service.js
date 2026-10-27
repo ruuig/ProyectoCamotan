@@ -220,6 +220,7 @@ async function formularioInforme(establecimientoId, ubicacionId, periodo) {
       unidadEntrega: i.unidadEntrega,
       categoria: i.categoria,
       maneja: maneja.has(i.id),
+      ordenFormulario: i.ordenFormulario,
       entradasBodega,
       entradasTerritorio,
       ...filaInforme({
@@ -238,7 +239,7 @@ async function formularioInforme(establecimientoId, ubicacionId, periodo) {
     ubicacion,
     periodo,
     informe: informe
-      ? { id: informe.id, capturadoEn: informe.capturadoEn, capturadoPor: informe.usuario?.nombre, revisado: informe.revisado, observacion: informe.observacion, importado: informe.importado }
+      ? { id: informe.id, capturadoEn: informe.capturadoEn, capturadoPor: informe.usuario?.nombre, revisado: informe.revisado, observacion: informe.observacion, importado: informe.importado, enviadoEn: informe.enviadoEn }
       : null,
     renglones,
   };
@@ -249,7 +250,7 @@ async function formularioInforme(establecimientoId, ubicacionId, periodo) {
  * entregado y, si se tienen, el saldo y las entradas que informa el servicio;
  * el resto se recalcula aqui.
  */
-async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglones, observacion }, usuarioId) {
+async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglones, observacion }, usuarioId, { enviar = true } = {}) {
   const form = await formularioInforme(establecimientoId, ubicacionId, periodo);
   if (!form) return null;
 
@@ -258,15 +259,18 @@ async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglon
   for (const r of renglones) {
     const b = base.get(r.insumoId);
     if (!b) continue;
-    // Sin dato nuevo de lo repartido, se queda lo que ya había dicho.
-    const entradasTerritorio = r.entradasTerritorio ?? b.entradasTerritorio;
+    // Las entradas que dice el lugar: lo que pase de lo que la bodega le
+    // registró se suma (se lo dio el encargado o llegó por otro lado); si dice
+    // menos, queda lo de bodega y la diferencia para que bodega la revise.
+    const dice = r.entradas ?? null;
+    const entradasTerritorio = dice !== null ? Math.max(0, dice - b.entradasBodega) : (r.entradasTerritorio ?? b.entradasTerritorio);
     const f = filaInforme({
       saldoAnterior: b.saldoAnterior,
       entradas: b.entradasBodega + entradasTerritorio,
       entregado: r.entregado ?? 0,
       noEntregado: r.noEntregado ?? 0,
       saldoInformado: r.saldoInformado,
-      entradasInformadas: r.entradasInformadas,
+      entradasInformadas: dice !== null && dice < b.entradasBodega ? dice : r.entradasInformadas,
     });
     filas.push({ insumoId: r.insumoId, ...f, entradasTerritorio });
   }
@@ -282,9 +286,9 @@ async function guardarInforme(establecimientoId, ubicacionId, periodo, { renglon
   await prisma.$transaction(async (tx) => {
     const informe = await tx.informeServicio.upsert({
       where: { ubicacionId_periodo: { ubicacionId, periodo } },
-      create: { ubicacionId, periodo, capturadoPor: usuarioId, observacion: observacion ?? null, revisado: diferencias === 0 },
+      create: { ubicacionId, periodo, capturadoPor: usuarioId, observacion: observacion ?? null, revisado: diferencias === 0, enviadoEn: enviar ? new Date() : null },
       // Volver a capturar deja el informe por revisar otra vez.
-      update: { capturadoPor: usuarioId, capturadoEn: new Date(), observacion: observacion ?? null, revisado: diferencias === 0 },
+      update: { capturadoPor: usuarioId, capturadoEn: new Date(), observacion: observacion ?? null, revisado: diferencias === 0, enviadoEn: enviar ? new Date() : null },
     });
     await tx.informeServicioRenglon.deleteMany({ where: { informeId: informe.id } });
     await tx.informeServicioRenglon.createMany({
@@ -356,7 +360,9 @@ async function estadoInformes(establecimientoId, periodo) {
       ubicacionId: u.id,
       nombre: u.nombre,
       tipo: u.tipo,
-      informado: Boolean(r),
+      // Guardado a medias por el encargado todavía no cuenta como informado.
+      informado: Boolean(r?.enviadoEn),
+      borrador: Boolean(r) && !r.enviadoEn,
       capturadoEn: r?.capturadoEn ?? null,
       capturadoPor: r?.usuario?.nombre ?? null,
       revisado: r?.revisado ?? false,

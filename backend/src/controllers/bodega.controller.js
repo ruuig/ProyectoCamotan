@@ -17,6 +17,7 @@ const { enUbicacion } = require('../services/inventario.service');
 const bresService = require('../services/bres.service');
 const trazadores = require('../services/trazadores.service');
 const consumoExcel = require('../services/consumoExcel.service');
+const { SECCIONES, NUMERO } = require('../data/plantillaBalance');
 const farmaciaServicio = require('../services/farmacia.service');
 const { kardexDe, encabezadoKardex } = require('../services/kardex.service');
 
@@ -257,6 +258,12 @@ async function obtenerInforme(req, res, next) {
   // El promedio como sale en el Excel del balance.
   const promedio = await consumoExcel.promedios([form.ubicacion.id], req.params.periodo);
   for (const r of form.renglones) r.promedio = promedio(form.ubicacion.id, r.insumoId);
+  // Las filas en el orden del balance y con sus secciones, como el Excel.
+  const enBalance = (r) => r.ordenFormulario && r.ordenFormulario <= NUMERO.length;
+  form.renglones.sort((a, b) => (enBalance(a) ? a.ordenFormulario : 1e6) - (enBalance(b) ? b.ordenFormulario : 1e6) || a.nombre.localeCompare(b.nombre));
+  for (const r of form.renglones) {
+    r.seccion = enBalance(r) ? SECCIONES.filter((s) => s.antesDe <= r.ordenFormulario).at(-1)?.titulo ?? 'MEDICAMENTOS' : 'AGREGADOS EN EL SISTEMA';
+  }
   res.json(form);
 }
 
@@ -267,12 +274,15 @@ async function guardarInforme(req, res, next) {
     where: { establecimientoId_periodo: { establecimientoId: req.usuario.establecimientoId, periodo } }, select: { estado: true },
   });
   if (cerrado?.estado === 'cerrado') return next({ status: 409, codigo: 'mes_cerrado', mensaje: 'El BRES de ese mes está cerrado: el informe ya no cambia' });
-  // El encargado lo envía una sola vez: corregirlo le toca a bodega, que responde por el BRES.
-  if (req.usuario.rol === 'servicio' && await prisma.informeServicio.findUnique({ where: { ubicacionId_periodo: { ubicacionId, periodo } } })) {
+  // El encargado lo guarda a medias las veces que quiera y lo envía una sola
+  // vez: corregirlo después le toca a bodega, que responde por el BRES.
+  const esEncargado = req.usuario.rol === 'servicio';
+  if (esEncargado && (await prisma.informeServicio.findUnique({ where: { ubicacionId_periodo: { ubicacionId, periodo } } }))?.enviadoEn) {
     return next({ status: 409, codigo: 'informe_enviado', mensaje: 'Este informe ya se envió. Para corregirlo, avise a bodega' });
   }
   const resultado = await datos.guardarInforme(
     req.usuario.establecimientoId, ubicacionId, req.params.periodo, req.body, req.usuario.id,
+    { enviar: !esEncargado || req.body.enviar !== false },
   );
   if (!resultado) return next({ status: 404, codigo: 'no_encontrado', mensaje: 'Servicio no encontrado' });
 

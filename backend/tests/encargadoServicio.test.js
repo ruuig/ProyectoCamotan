@@ -133,9 +133,20 @@ describe('informe del mes del encargado', () => {
     const f = await con(tokenEncargado)(request(app).get(`/api/v1/bodega/informes/${propio.id}/${periodo()}`));
     expect(f.status).toBe(200);
     const enviar = (t) => con(t)(request(app).put(`/api/v1/bodega/informes/${propio.id}/${periodo()}`)).send({
-      renglones: [{ insumoId: insumo.id, entregado: 0, noEntregado: 2 }],
+      renglones: [{ insumoId: insumo.id, entradas: 10, entregado: 4, noEntregado: 2 }],
     });
+    // Guardado a medias se puede seguir cambiando.
+    const medias = await con(tokenEncargado)(request(app).put(`/api/v1/bodega/informes/${propio.id}/${periodo()}`)).send({
+      enviar: false, renglones: [{ insumoId: insumo.id, entradas: 10 }],
+    });
+    expect(medias.status).toBe(200);
+    const estado = (await con(tokenBodega)(request(app).get(`/api/v1/bodega/informes?periodo=${periodo()}`))).body;
+    const fila = (estado.servicios ?? estado).find?.((x) => x.ubicacionId === propio.id);
+    if (fila) expect([fila.informado, fila.borrador]).toEqual([false, true]);
     expect((await enviar(tokenEncargado)).status).toBe(200);
+    // Las entradas las dice el lugar: cuentan para su saldo.
+    const ren = await prisma.informeServicioRenglon.findFirst({ where: { insumoId: insumo.id, informe: { ubicacionId: propio.id, periodo: periodo() } } });
+    expect([ren.entradas, ren.saldoSiguiente]).toEqual([10, ren.saldoAnterior + 10 - 4]);
     const otraVez = await enviar(tokenEncargado);
     expect(otraVez.status).toBe(409);
     expect(otraVez.body.error.codigo).toBe('informe_enviado');

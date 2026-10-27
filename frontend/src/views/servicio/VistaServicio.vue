@@ -178,11 +178,12 @@ async function cargarInforme() {
   try {
     const f = await bodega.informe(id, periodo.value);
     for (const r of f.renglones) {
+      r.entradas = r.entradas ? String(r.entradas) : '';
       r.entregado = r.capturado ? String(r.entregado) : '';
       r.noEntregado = r.capturado && r.noEntregado ? String(r.noEntregado) : '';
     }
     // Ya enviado no se cambia: se ve como quedó.
-    if (!f.informe) recuperarBorrador(f);
+    if (!f.informe?.enviadoEn) recuperarBorrador(f);
     informe.value = f;
   } catch (fallo) {
     error.value = fallo.message;
@@ -236,6 +237,8 @@ const visibles = computed(() => {
     && (!q || `${r.nombre} ${r.concentracion ?? ''}`.toLowerCase().includes(q)));
 });
 const lleno = (r) => r.entregado !== '' || r.noEntregado !== '';
+// Fila con título de sección encima, como en el Excel del balance.
+const conTitulo = (i) => i === 0 || visibles.value[i - 1].seccion !== visibles.value[i].seccion;
 const llenos = computed(() => visibles.value.filter(lleno).length);
 // En el celular se puede cerrar la página sin querer: lo escrito se guarda en
 // el equipo hasta enviarlo.
@@ -243,7 +246,7 @@ const claveBorrador = computed(() => `camotan_informe_${lugarActual.value?.id}_$
 function guardarBorrador() {
   if (!informe.value) return;
   const datos = Object.fromEntries(informe.value.renglones.filter(lleno)
-    .map((r) => [r.insumoId, [r.entregado, r.noEntregado]]));
+    .map((r) => [r.insumoId, [r.entregado, r.noEntregado, r.entradas]]));
   try { localStorage.setItem(claveBorrador.value, JSON.stringify(datos)); } catch { /* sin almacenamiento */ }
 }
 function recuperarBorrador(f) {
@@ -252,28 +255,33 @@ function recuperarBorrador(f) {
   if (!datos) return;
   for (const r of f.renglones) {
     const d = datos[r.insumoId];
-    if (d) [r.entregado, r.noEntregado] = d;
+    if (d) [r.entregado, r.noEntregado, r.entradas = r.entradas] = d;
   }
 }
 watch(() => informe.value?.renglones, guardarBorrador, { deep: true });
-const saldo = (r) => r.saldoAnterior + r.entradas - entero(r.entregado);
+const saldo = (r) => r.saldoAnterior + entero(r.entradas) - entero(r.entregado);
 
 // Enviado una vez, el encargado ya no lo cambia: lo corrige bodega (responde por el BRES).
-const enviado = computed(() => Boolean(informe.value?.informe));
+const enviado = computed(() => Boolean(informe.value?.informe?.enviadoEn));
 const resumenInforme = computed(() => (informe.value?.renglones ?? [])
   .filter((x) => entero(x.entregado) || entero(x.noEntregado))
   .map((x) => ({ nombre: [x.nombre, x.concentracion].filter(Boolean).join(' '), cantidad: entero(x.entregado), unidad: x.unidadEntrega })));
-async function guardarInforme() {
+/** enviar false: se guarda a medias (por ejemplo, las entradas al recibir) y se completa a fin de mes. */
+async function guardarInforme(enviar = true) {
   confirmando.value = null;
   error.value = '';
+  aviso.value = '';
   guardando.value = true;
   try {
     await bodega.guardarInforme(lugarActual.value.id, periodo.value, {
+      enviar,
       renglones: informe.value.renglones
-        .filter((x) => x.maneja || entero(x.entregado) || entero(x.noEntregado))
-        .map((x) => ({ insumoId: x.insumoId, entregado: entero(x.entregado), noEntregado: entero(x.noEntregado) })),
+        .filter((x) => x.maneja || entero(x.entradas) || entero(x.entregado) || entero(x.noEntregado))
+        .map((x) => ({ insumoId: x.insumoId, entradas: entero(x.entradas), entregado: entero(x.entregado), noEntregado: entero(x.noEntregado) })),
     });
-    aviso.value = `Informe enviado: ${lugarActual.value.nombre}, ${nombreMes(periodo.value)}.`;
+    aviso.value = enviar
+      ? `Informe enviado: ${lugarActual.value.nombre}, ${nombreMes(periodo.value)}.`
+      : `Guardado sin enviar: ${lugarActual.value.nombre}, ${nombreMes(periodo.value)}.`;
     try { localStorage.removeItem(claveBorrador.value); } catch { /* sin almacenamiento */ }
     await cargarInforme();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -417,6 +425,10 @@ onMounted(async () => {
       </div>
       <h2 class="titulo-informe">{{ lugarActual?.nombre }} · {{ nombreMes(periodo) }}</h2>
 
+      <p v-if="informe?.informe && !enviado" class="b-aviso atencion mt-2 text-[15px]">
+        <Icono nombre="guardar" :tamano="20" />
+        <span>Guardado el {{ new Date(informe.informe.capturadoEn).toLocaleDateString('es-GT') }}, sin enviar. Puede seguir llenándolo.</span>
+      </p>
       <p v-if="enviado" class="b-aviso ok mt-2 text-[15px]">
         <Icono nombre="correcto" :tamano="20" />
         <span>Enviado el {{ new Date(informe.informe.capturadoEn).toLocaleDateString('es-GT') }}<template v-if="informe.informe.revisado"> · revisado por bodega</template>. Para corregir algo, avise a bodega.</span>
@@ -435,7 +447,7 @@ onMounted(async () => {
               <tr>
                 <th class="prod">Producto</th>
                 <th>Saldo anterior</th>
-                <th>Entradas</th>
+                <th class="llena">Entradas</th>
                 <th class="llena">Entregado a usuarios</th>
                 <th class="llena">No entregado</th>
                 <th>Saldo siguiente</th>
@@ -443,21 +455,25 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(r, i) in visibles" :key="r.insumoId" :class="{ lleno: lleno(r) }">
+              <template v-for="(r, i) in visibles" :key="r.insumoId">
+              <tr v-if="conTitulo(i)" class="seccion"><td colspan="7">{{ r.seccion }}</td></tr>
+              <tr :class="{ lleno: lleno(r) }">
                 <td class="prod">{{ [r.nombre, r.concentracion].filter(Boolean).join(' ') }} <small>{{ r.unidadEntrega }}</small></td>
                 <td class="n">{{ miles(r.saldoAnterior) }}</td>
-                <td class="n">{{ miles(r.entradas) }}</td>
+                <td class="celda"><input v-model="r.entradas" :readonly="enviado" type="text" inputmode="numeric" placeholder="0" :aria-label="`Entradas de ${r.nombre}`" /></td>
                 <td class="celda"><input :id="`i-${i}-e`" v-model="r.entregado" :readonly="enviado" type="text" inputmode="numeric" enterkeyhint="next" placeholder="0" :aria-label="`Entregado a usuarios de ${r.nombre}`" @keydown.enter="bajar($event, i)" /></td>
                 <td class="celda"><input v-model="r.noEntregado" :readonly="enviado" type="text" inputmode="numeric" placeholder="0" :aria-label="`No entregado de ${r.nombre}`" /></td>
                 <td class="n saldo" :class="{ negativo: saldo(r) < 0 }">{{ miles(saldo(r)) }}</td>
                 <td class="n">{{ miles(r.promedio ?? 0) }}</td>
               </tr>
+              </template>
               <tr v-if="!visibles.length"><td colspan="7" class="b-vacio">{{ buscarInsumo ? 'Ningún producto con ese nombre.' : 'Este lugar no ha manejado productos. Quite «Solo lo que manejo» para informar cualquiera.' }}</td></tr>
             </tbody>
           </table>
         </div>
 
         <div v-if="!enviado" class="barra-enviar">
+          <button type="button" class="b-btn secundario guardar" :disabled="guardando" @click="guardarInforme(false)"><Icono nombre="guardar" :tamano="20" /> Guardar sin enviar</button>
           <button type="submit" class="b-btn primario" :disabled="guardando"><Icono nombre="guardar" :tamano="20" /> {{ guardando ? 'Enviando…' : `Enviar informe de ${lugarActual?.nombre}` }}</button>
         </div>
       </form>
@@ -473,7 +489,7 @@ onMounted(async () => {
       icono="guardar"
       :ocupado="guardando"
       @cerrar="confirmando = null"
-      @confirmar="guardarInforme"
+      @confirmar="guardarInforme(true)"
     />
     <VentanaConfirmar
       v-if="confirmando === 'pedido'"
@@ -547,12 +563,15 @@ onMounted(async () => {
 .tabla-informe td.saldo { color: #14244A; background: #F5F9FE; }
 .tabla-informe td.negativo { color: #C03535; }
 .tabla-informe tr.lleno td.prod { box-shadow: inset 4px 0 0 #2E9E6A; }
+.tabla-informe tr.seccion td { padding: 8px 10px; background: #EEE9F4; font-size: 13px; font-weight: 900; letter-spacing: .04em; color: #3B2A5A; }
 .tabla-informe td.celda { width: 130px; background: #FAFCFF; }
 .tabla-informe td.celda input { width: 100%; height: 42px; padding: 0 10px; border: 2px solid #CBD5E1; border-radius: 10px; background: #fff; text-align: right; font-size: 17px; font-weight: 800; color: #14244A; }
 .tabla-informe td.celda input:focus { outline: none; border-color: #172A5A; box-shadow: 0 0 0 3px #DCE4F5; }
 .tabla-informe td.celda input[readonly] { border-color: #E2E8F0; background: #F8FAFC; color: #475569; }
 .barra-enviar { position: sticky; bottom: 0; margin-top: 12px; padding: 12px 0; background: linear-gradient(transparent, #fff 30%); }
+.barra-enviar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
 .barra-enviar .b-btn { width: 100%; height: 58px; font-size: 18px; border-radius: 16px; }
+@media (max-width: 640px) { .barra-enviar { grid-template-columns: 1fr; } }
 /* Celular: una columna, botones y campos al ancho de la pantalla. */
 @media (max-width: 640px) {
   .tarea { min-height: 140px; padding: 18px; }

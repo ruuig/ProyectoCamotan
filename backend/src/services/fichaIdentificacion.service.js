@@ -250,7 +250,9 @@ function identificacionAdolescente(edadAnios) {
     ...pueblo(),
     ...migrante(),
     campo('telefono', 'No. de teléfono', 'telefono'),
-    campo('redesSociales', 'Redes sociales', 'texto', { ayuda: 'Cuáles usa, si usa' }),
+    campo('redesSociales', 'Redes sociales', 'seleccion', {
+      opciones: [{ valor: 'si', etiqueta: 'Sí' }, { valor: 'no', etiqueta: 'No' }],
+    }),
     campo('profesionOficio', 'Profesión u oficio (en jóvenes)', 'catalogo', {
       catalogo: 'profesion_oficio',
     }),

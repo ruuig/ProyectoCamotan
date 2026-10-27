@@ -137,6 +137,42 @@ function agregarLibre() {
   Object.assign(libre, { descripcion: '', unidadMedida: 'Unidad', cantidad: '' });
 }
 
+// Lo que le falta al lugar para su nivel máximo, según sus informes de consumo
+// (lo mismo que ve el encargado al hacer su requisición). Nunca más de lo que hay.
+const llenando = ref(false);
+const conInformes = computed(() => {
+  const l = lugares.value.find((x) => x.id === Number(nueva.ubicacionId));
+  return Boolean(l) && grupoDe(l) !== 'unidad_interna';
+});
+async function llenarSugerido() {
+  error.value = '';
+  aviso.value = '';
+  llenando.value = true;
+  try {
+    const s = await bodega.sugerida(Number(nueva.ubicacionId));
+    let puestos = 0;
+    let incompletos = 0;
+    let sinExistencia = 0;
+    for (const x of s.renglones) {
+      const insumo = insumos.value.find((i) => i.id === x.insumoId);
+      if (!insumo || !x.sugerido || renglones.value.some((r) => r.insumoId === x.insumoId)) continue;
+      const c = Math.min(x.sugerido, Math.max(0, insumo.saldoTotal ?? 0));
+      if (!c) { sinExistencia += 1; continue; }
+      if (c < x.sugerido) incompletos += 1;
+      sumarRenglon(insumo, c);
+      puestos += 1;
+    }
+    const faltas = [incompletos && `${incompletos} van con lo que hay en bodega`, sinExistencia && `${sinExistencia} no hay en bodega`].filter(Boolean);
+    if (!s.renglones.some((x) => x.demandaMensual > 0)) aviso.value = 'Este lugar no tiene informes de consumo de los últimos meses.';
+    else if (!puestos && !sinExistencia) aviso.value = 'Con lo que tiene le alcanza para el nivel máximo.';
+    else aviso.value = `${puestos} productos según su consumo.${faltas.length ? ` ${faltas.join('; ')}.` : ''}`;
+  } catch (fallo) {
+    error.value = fallo.message;
+  } finally {
+    llenando.value = false;
+  }
+}
+
 const noAlcanza = computed(() => renglones.value.filter((r) => (r.enBodega != null && r.enBodega < entero(r.cantidad)) || (loteDe(r) && loteDe(r).cantidad < entero(r.cantidad))));
 
 async function entregar() {
@@ -306,6 +342,10 @@ onMounted(() => {
           </div>
         </div>
 
+        <button v-if="esBodega && conInformes" type="button" data-accion class="b-btn secundario" :disabled="llenando" @click="llenarSugerido">
+          <Icono nombre="agregar" :tamano="18" /> {{ llenando ? 'Calculando…' : 'Llenar según su consumo' }}
+        </button>
+
         <div class="agregar">
           <div class="min-w-0 flex-1">
             <span class="b-etiqueta">Producto</span>
@@ -393,6 +433,7 @@ onMounted(() => {
               <template v-else>{{ miles(propuesta.cantidad) }} entre {{ propuesta.filas.length }} servicios</template>
               · quedan {{ miles(propuesta.sobrante) }} en bodega
             </p>
+            <p v-if="propuesta.aviso" class="b-aviso atencion text-sm">{{ propuesta.aviso }}</p>
             <ul class="reparto">
               <li v-for="f in propuesta.filas" :key="f.ubicacionId">
                 <span class="min-w-0 flex-1 nombre-completo text-sm font-semibold text-tinta">{{ f.nombre }}</span>

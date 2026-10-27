@@ -266,12 +266,11 @@ const texto = (valor) => (valor && typeof valor === 'object' ? valor.richText?.m
 /**
  * Carga el Excel devuelto: por cada bloque de lugar, lo entregado y lo no
  * entregado de cada insumo quedan como el informe del mes de ese lugar.
- * `permitidos`: los lugares que puede cargar quien sube (null = todos).
- * `destino`: si se sube desde un lugar, solo ese. Su bloque se busca por el
- * nombre; si le cambiaron el nombre, es el único bloque del archivo o el que
- * va en su posición dentro del territorio.
+ * El archivo es de un territorio y trae todos sus lugares juntos. Cada bloque
+ * se reconoce por el nombre; si le cambiaron el nombre, por su posición dentro
+ * del territorio (el mismo orden con que se descargó).
  */
-async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, permitidos = null, destino = null) {
+async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territorioId) {
   const libro = new ExcelJS.Workbook();
   try {
     await libro.xlsx.load(buffer);
@@ -304,29 +303,22 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, permit
   }
   if (!todos.length) throw fallo(400, 'sin_bloques', 'El Excel no tiene ningún bloque con «Saldo anterior» en la fila 4');
 
+  const delTerritorio = ubicaciones
+    .filter((x) => x.territorioId === territorioId && datos.esServicioQueInforma(x))
+    .sort((a, b) => a.orden - b.orden || a.id - b.id);
+  if (!delTerritorio.length) throw fallo(409, 'sin_lugares', 'Ese territorio no tiene centros ni puestos asignados');
+  const suyo = new Set(delTerritorio.map((u) => u.id));
+  const mismoOrden = todos.length === delTerritorio.length;
   const bloques = [];
   const lugaresNoReconocidos = [];
-  if (destino) {
-    const u = ubicaciones.find((x) => x.id === destino);
-    if (!u) throw fallo(404, 'no_encontrado', 'Ese centro o puesto no existe');
-    if (permitidos && !permitidos.has(u.id)) throw fallo(403, 'sin_permiso', 'Ese lugar no es de su territorio');
-    let elegido = todos.find((b) => b.u?.id === u.id);
-    if (!elegido && todos.length === 1) elegido = todos[0];
-    if (!elegido && u.territorioId) {
-      const delTerritorio = ubicaciones.filter((x) => x.territorioId === u.territorioId && datos.esServicioQueInforma(x))
-        .sort((a, b) => a.orden - b.orden || a.id - b.id);
-      if (delTerritorio.length === todos.length) elegido = todos[delTerritorio.findIndex((x) => x.id === u.id)];
-    }
-    if (!elegido) throw fallo(400, 'sin_bloque', `No se encontró el bloque de ${u.nombre} en el Excel`);
-    bloques.push({ c: elegido.c, u });
-  } else {
-    for (const b of todos) {
-      if (!b.u) { if (b.nombre) lugaresNoReconocidos.push(b.nombre); continue; }
-      if (permitidos && !permitidos.has(b.u.id)) { lugaresNoReconocidos.push(`${b.nombre} (no es de su territorio)`); continue; }
-      bloques.push({ c: b.c, u: b.u });
-    }
-    if (!bloques.length) throw fallo(400, 'sin_lugares', 'No se reconoció ningún centro o puesto en la fila 3 del Excel');
-  }
+  todos.forEach((b, k) => {
+    // Por nombre; si no se reconoce, por su lugar en el orden del territorio.
+    const u = b.u && suyo.has(b.u.id) ? b.u : mismoOrden && !b.u ? delTerritorio[k] : null;
+    if (!u) { if (b.nombre) lugaresNoReconocidos.push(b.u ? `${b.nombre} (de otro territorio)` : b.nombre); return; }
+    if (bloques.some((x) => x.u.id === u.id)) { lugaresNoReconocidos.push(`${b.nombre} (repetido)`); return; }
+    bloques.push({ c: b.c, u });
+  });
+  if (!bloques.length) throw fallo(400, 'sin_lugares', 'No se reconoció ningún centro o puesto del territorio en la fila 3 del Excel');
 
   // Insumos por su nombre y por los nombres con que aparecen en los Excel.
   const [insumos, alias] = await Promise.all([

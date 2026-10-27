@@ -49,23 +49,22 @@ async function bajarExcel(t) {
     bajando.value = null;
   }
 }
-// El Excel de un lugar se sube desde su renglón: así se sabe de qué lugar es
-// aunque en el archivo le hayan cambiado el nombre.
+// El Excel se sube completo por territorio, con todos sus lugares.
 const subiendo = ref(null);
 const resultado = ref(null);
-async function subir(evento, s) {
+async function subir(evento, t) {
   const archivo = evento.target.files?.[0];
   evento.target.value = '';
   if (!archivo) return;
   error.value = '';
   aviso.value = '';
   resultado.value = null;
-  subiendo.value = s.ubicacionId;
+  subiendo.value = t.id;
   try {
-    resultado.value = await bodega.subirExcelConsumo(cierre.periodo, archivo, s.ubicacionId);
+    resultado.value = await bodega.subirExcelConsumo(cierre.periodo, archivo, t.id);
     await cargarEstado();
   } catch (fallo) {
-    error.value = `${s.nombre}: ${fallo.message}`;
+    error.value = `Territorio ${t.numero}: ${fallo.message}`;
   } finally {
     subiendo.value = null;
   }
@@ -237,8 +236,12 @@ onMounted(cargarEstado);
               <small v-if="t.listos !== null">{{ t.listos }} de {{ t.total }}</small>
             </span>
             <button v-if="t.id" type="button" class="b-btn secundario chico" :disabled="bajando === t.id" @click="bajarExcel(t)">
-              <Icono nombre="descargar" :tamano="16" /> {{ bajando === t.id ? 'Preparando…' : 'Excel' }}
+              <Icono nombre="descargar" :tamano="16" /> {{ bajando === t.id ? 'Preparando…' : 'Bajar Excel' }}
             </button>
+            <label v-if="t.id" class="b-btn primario chico subir" :class="{ ocupado: subiendo === t.id }">
+              <Icono nombre="recibir" :tamano="16" /> {{ subiendo === t.id ? 'Cargando…' : 'Subir Excel' }}
+              <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only" :disabled="Boolean(subiendo)" @change="subir($event, t)" />
+            </label>
           </header>
           <ul class="lugares">
             <li v-for="s in t.lugares" :key="s.ubicacionId" class="lugar">
@@ -248,10 +251,6 @@ onMounted(cargarEstado);
                 <small v-else-if="s.estado === 'pendiente'">Sin informe</small>
                 <small v-else>{{ new Date(s.capturadoEn).toLocaleDateString('es-GT') }} · {{ s.capturadoPor }}</small>
               </span>
-              <label class="b-btn secundario chico subir" :class="{ ocupado: subiendo === s.ubicacionId }" :title="`Subir el Excel de ${s.nombre}`">
-                <Icono nombre="recibir" :tamano="16" /> {{ subiendo === s.ubicacionId ? 'Cargando…' : 'Subir' }}
-                <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only" :disabled="Boolean(subiendo)" @change="subir($event, s)" />
-              </label>
               <button type="button" class="b-btn chico" :class="s.estado === 'listo' ? 'secundario' : 'primario'" @click="abrir(s)">{{ ACCION[s.estado] }}</button>
             </li>
           </ul>

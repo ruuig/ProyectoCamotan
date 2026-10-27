@@ -30,6 +30,8 @@ export const useAuthStore = defineStore('auth', {
     autenticado: (state) => Boolean(state.token && state.usuario),
     rol: (state) => state.usuario?.rol ?? null,
     rutaPanel: (state) => PANEL_POR_ROL[state.usuario?.rol] ?? '/login',
+    // El director ve todo, pero fuera de Administración solo consulta.
+    soloConsulta: (state) => state.usuario?.rol === 'admin',
   },
 
   actions: {

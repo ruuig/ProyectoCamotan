@@ -43,7 +43,7 @@ const registrar = z.object({
 
 router.post(
   '/',
-  autorizar('admin', 'preconsulta', 'medico', 'farmacia', 'bodega', 'servicio'),
+  autorizar.conAdmin('admin', 'preconsulta', 'medico', 'farmacia', 'bodega', 'servicio'),
   validar(registrar),
   asincrono(controlador.registrar),
 );

@@ -80,6 +80,6 @@ const NOMBRE_EN_BALANCE = {
   "C/C Nearar Pitahaya": "C/C NEARAR PITAHAYA"
 };
 
-const COLUMNAS_LUGAR = ['Saldo anterior', 'Entradas', 'Entregado Usu', 'No entregado', 'Saldo siguiente', 'Promedio'];
+const COLUMNAS_LUGAR = ['Saldo anterior', 'Entradas', 'Entregado a usuarios', 'No entregado', 'Saldo siguiente', 'Promedio'];
 
 module.exports = { SECCIONES, NUMERO, NOMBRE_EN_BALANCE, COLUMNAS_LUGAR };

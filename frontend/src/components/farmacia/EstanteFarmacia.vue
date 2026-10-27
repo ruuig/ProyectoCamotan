@@ -141,7 +141,7 @@ async function guardarLote() {
                   <template v-else><b>{{ enMeses(l) }}</b> · {{ fecha(l.fechaVence) }}</template>
                 </span>
                 <b class="l-cant">{{ miles(l.cantidad) }}</b>
-                <button v-if="esSinLote(l)" type="button" class="b-btn exito" @click="abrirPonerLote(x, l)"><Icono nombre="lapiz" :tamano="18" /> Poner lote</button>
+                <button v-if="esSinLote(l)" type="button" data-accion class="b-btn exito" @click="abrirPonerLote(x, l)"><Icono nombre="lapiz" :tamano="18" /> Poner lote</button>
               </li>
               <li v-if="!x.lotes.length" class="vacio">No hay nada en el estante.</li>
             </ul>

@@ -212,7 +212,7 @@ async function guardar() {
         <button type="button" class="filtro" :class="{ on: soloPedir }" :aria-pressed="soloPedir" @click="soloPedir = !soloPedir">
           Solo lo que hay que pedir <b>{{ porPedir }}</b>
         </button>
-        <button v-if="puedeEscribir" type="button" class="b-btn primario" @click="escribir">
+        <button v-if="puedeEscribir" type="button" data-accion class="b-btn primario" @click="escribir">
           <Icono nombre="lapiz" :tamano="18" /> {{ datos.fuente === 'farmacia' ? 'Corregir este mes' : 'Escribir este mes' }}
         </button>
       </div>

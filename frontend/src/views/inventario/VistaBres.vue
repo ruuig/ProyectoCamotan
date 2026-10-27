@@ -243,7 +243,7 @@ function celda(r, c) {
         </ul>
       </section>
 
-      <div v-if="!cerrado" class="pie">
+      <div v-if="!cerrado" data-accion class="pie">
         <input v-model="observaciones" maxlength="400" placeholder="Observaciones del informe" aria-label="Observaciones del informe" class="b-campo min-w-[14rem] flex-1" />
         <button type="button" class="b-btn exito" :disabled="enviando || !guardado" :title="guardado ? '' : 'Genere el BRES primero'" @click="errorCierre = ''; cerrando = true">
           <Icono nombre="bloqueo" :tamano="20" /> Cerrar BRES de {{ nombrePeriodo(cierre.periodo) }}

@@ -31,7 +31,7 @@ const insumos = ref(null);
 const error = ref('');
 const abriendo = ref(false);
 
-const puedeRegistrar = computed(() => ['admin', 'preconsulta', 'medico'].includes(auth.rol));
+const puedeRegistrar = computed(() => ['preconsulta', 'medico'].includes(auth.rol));
 
 // --- Cómo se lee cada cosa -------------------------------------------------
 

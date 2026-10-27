@@ -138,7 +138,7 @@ onMounted(async () => {
       </div>
       <div class="b-acciones">
         <RouterLink :to="`/inventario/kardex?insumo=${id}`" class="b-btn secundario"><Icono nombre="hojaCalculo" :tamano="20" /> Kardex</RouterLink>
-        <RouterLink :to="`/inventario/recibir?insumo=${id}`" class="b-btn primario"><Icono nombre="recibir" :tamano="20" :grosor="2" /> Recibir lote</RouterLink>
+        <RouterLink :to="`/inventario/recibir?insumo=${id}`" data-accion class="b-btn primario"><Icono nombre="recibir" :tamano="20" :grosor="2" /> Recibir lote</RouterLink>
       </div>
     </header>
 
@@ -175,9 +175,9 @@ onMounted(async () => {
         </dl>
 
         <div class="grid gap-2">
-          <button type="button" class="b-btn secundario" :class="abierto === 'uso' ? 'activo' : ''" @click="abrir('uso')"><Icono nombre="dispensacion" :tamano="20" /> Consumo interno</button>
-          <button type="button" class="b-btn secundario" :class="abierto === 'reajuste' ? 'activo' : ''" @click="abrir('reajuste')"><Icono nombre="lapiz" :tamano="20" /> Reajuste</button>
-          <RouterLink to="/inventario/requisiciones" class="b-btn secundario"><Icono nombre="trasladar" :tamano="20" :grosor="2.2" /> Requisiciones</RouterLink>
+          <button data-accion type="button" class="b-btn secundario" :class="abierto === 'uso' ? 'activo' : ''" @click="abrir('uso')"><Icono nombre="dispensacion" :tamano="20" /> Consumo interno</button>
+          <button data-accion type="button" class="b-btn secundario" :class="abierto === 'reajuste' ? 'activo' : ''" @click="abrir('reajuste')"><Icono nombre="lapiz" :tamano="20" /> Reajuste</button>
+          <RouterLink to="/inventario/requisiciones" data-accion class="b-btn secundario"><Icono nombre="trasladar" :tamano="20" :grosor="2.2" /> Requisiciones</RouterLink>
         </div>
       </div>
 
@@ -302,7 +302,7 @@ onMounted(async () => {
                 <span class="cant text-right">{{ miles(l.cantidadActual) }}<span class="block text-[11px] font-semibold text-apagado">de {{ miles(l.cantidadInicial) }}</span></span>
                 <SelloVence :fecha="l.fechaVence" :semaforo="l.semaforo" />
               </RouterLink>
-              <button v-if="l.cantidadActual > 0" type="button" class="b-btn secundario chico" @click="abrir('estado', l.id)">Estado</button>
+              <button data-accion v-if="l.cantidadActual > 0" type="button" class="b-btn secundario chico" @click="abrir('estado', l.id)">Estado</button>
             </li>
             <li v-if="!lotesVisibles.length" class="b-vacio">Sin lotes con existencia.</li>
           </ul>

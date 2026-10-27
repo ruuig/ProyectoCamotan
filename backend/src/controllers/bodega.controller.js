@@ -741,14 +741,8 @@ async function excelConsumo(req, res) {
 /** Sube el Excel llenado: queda como el informe del mes de cada lugar. */
 async function subirExcelConsumo(req, res, next) {
   if (!Buffer.isBuffer(req.body) || !req.body.length) return next({ status: 400, codigo: 'archivo_vacio', mensaje: 'No llegó ningún archivo' });
-  let permitidos = null;
-  if (req.usuario.rol === 'servicio') {
-    const propio = await territorioPedido(req);
-    const lugares = await prisma.ubicacion.findMany({ where: { territorioId: propio }, select: { id: true } });
-    permitidos = new Set(lugares.map((u) => u.id));
-  }
-  const destino = req.query.ubicacionId ? Number(req.query.ubicacionId) : null;
-  const r = await consumoExcel.cargarLibro(req.usuario.establecimientoId, req.body, req.query.periodo, req.usuario.id, permitidos, destino);
+  const territorioId = await territorioPedido(req);
+  const r = await consumoExcel.cargarLibro(req.usuario.establecimientoId, req.body, req.query.periodo, req.usuario.id, territorioId);
   await req.bitacora({
     accion: 'actualizar',
     entidad: 'reporte_servicio',

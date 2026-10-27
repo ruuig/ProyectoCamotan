@@ -108,7 +108,7 @@ const mediciones = require('../controllers/mediciones.controller');
 
 router.post(
   '/mediciones',
-  autorizar('admin', 'preconsulta', 'medico'),
+  autorizar.conAdmin('admin', 'preconsulta', 'medico'),
   validar(z.object({
     tipo: z.enum(['registro', 'consulta']),
     pantalla: z.string().trim().max(40).optional().nullable(),

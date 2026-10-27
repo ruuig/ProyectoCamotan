@@ -22,6 +22,10 @@ const logo = useLogoStore();
 logo.cargar();
 const router = useRouter();
 const route = useRoute();
+// Fuera de Administración, Consolidados y su panel, el director solo consulta:
+// se esconden los botones que cambian algo (el servidor tampoco los acepta).
+const soloConsulta = computed(() => auth.soloConsulta
+  && !['/administracion', '/consolidado', '/tiempos', auth.rutaPanel].some((r) => route.path.startsWith(r)));
 const menuAbierto = ref(false);
 // La barra lateral se abre al pasar el mouse (o al llegar con el teclado) y el
 // contenido se corre con ella.
@@ -76,15 +80,36 @@ const GRUPOS = [
     titulo: 'Farmacia y bodega',
     enlaces: [
       // Farmacia: entregar todo el día, ver el estante, cerrar el día y, una vez al mes, el BRES y el pedido.
-      { ruta: '/dispensacion', etiqueta: 'Entregar', icono: 'dispensacion', roles: ['admin', 'farmacia'], exacto: true },
-      { ruta: '/dispensacion/estante', etiqueta: 'Estante', icono: 'inventario', roles: ['admin', 'farmacia'] },
-      { ruta: '/dispensacion/cierre', etiqueta: 'Cierre del día', icono: 'correcto', roles: ['admin', 'farmacia'] },
-      { ruta: '/dispensacion/mes', etiqueta: 'Requisición', icono: 'trasladar', roles: ['admin', 'farmacia'] },
-      { ruta: '/dispensacion/requisiciones', etiqueta: 'Mis requisiciones', icono: 'imprimir', roles: ['admin', 'farmacia'] },
+      { ruta: '/dispensacion', etiqueta: 'Entregar', icono: 'dispensacion', roles: ['farmacia'], exacto: true },
+      { ruta: '/dispensacion/estante', etiqueta: 'Estante', icono: 'inventario', roles: ['farmacia'] },
+      { ruta: '/dispensacion/cierre', etiqueta: 'Cierre del día', icono: 'correcto', roles: ['farmacia'] },
+      { ruta: '/dispensacion/mes', etiqueta: 'Requisición', icono: 'trasladar', roles: ['farmacia'] },
+      { ruta: '/dispensacion/requisiciones', etiqueta: 'Mis requisiciones', icono: 'imprimir', roles: ['farmacia'] },
       // El BRES de farmacia mes por mes, con los meses de antes del sistema, y su kardex.
-      { ruta: '/dispensacion/bres', etiqueta: 'Balance', icono: 'consolidado', roles: ['admin', 'farmacia'] },
-      { ruta: '/dispensacion/kardex', etiqueta: 'Kardex', icono: 'hojaCalculo', roles: ['admin', 'farmacia'] },
-      { ruta: '/inventario', etiqueta: 'Bodega', icono: 'inventario', roles: ['admin'] },
+      { ruta: '/dispensacion/bres', etiqueta: 'Balance', icono: 'consolidado', roles: ['farmacia'] },
+      { ruta: '/dispensacion/kardex', etiqueta: 'Kardex', icono: 'hojaCalculo', roles: ['farmacia'] },
+    ],
+  },
+  // Director: consulta farmacia y bodega sin trabajar en ellas.
+  {
+    titulo: 'Farmacia',
+    enlaces: [
+      { ruta: '/dispensacion/estante', etiqueta: 'Estante de farmacia', icono: 'dispensacion', roles: ['admin'] },
+      { ruta: '/dispensacion/requisiciones', etiqueta: 'Requisiciones de farmacia', icono: 'imprimir', roles: ['admin'] },
+      { ruta: '/dispensacion/bres', etiqueta: 'Balance de farmacia', icono: 'consolidado', roles: ['admin'] },
+      { ruta: '/dispensacion/kardex', etiqueta: 'Kardex de farmacia', icono: 'hojaCalculo', roles: ['admin'] },
+    ],
+  },
+  {
+    titulo: 'Bodega',
+    enlaces: [
+      { ruta: '/inventario/bres', etiqueta: 'BRES', icono: 'hojaCalculo', roles: ['admin'] },
+      { ruta: '/inventario/productos', etiqueta: 'Existencias de bodega', icono: 'inventario', roles: ['admin'], tambien: ['/inventario/semaforo'] },
+      { ruta: '/inventario/kardex', etiqueta: 'Kardex de bodega', icono: 'hojaCalculo', roles: ['admin'] },
+      { ruta: '/inventario/informes', etiqueta: 'Consumo de puestos', icono: 'consolidado', roles: ['admin'] },
+      { ruta: '/inventario/trazadores', etiqueta: 'Trazadores', icono: 'crecimiento', roles: ['admin'] },
+      { ruta: '/inventario/cierre', etiqueta: 'Inventario de cierre', icono: 'correcto', roles: ['admin'] },
+      { ruta: '/inventario/bajas', etiqueta: 'Bajas y retiros', icono: 'quitar', roles: ['admin'] },
     ],
   },
   // Bodega: el ciclo del mes en el orden en que se trabaja (pedir a la DDRISS,
@@ -361,12 +386,19 @@ function cambiarTamano(paso) {
 
       <BarraConexion />
 
-      <main class="contenido-principal px-5 py-bloque lg:px-8">
+      <main class="contenido-principal px-5 py-bloque lg:px-8" :class="{ 'solo-consulta': soloConsulta }">
         <RouterView :key="route.path" />
       </main>
     </div>
   </div>
 </template>
+
+<style>
+/* Director en modo consulta: sin botones de guardar, entregar, subir ni borrar. */
+.solo-consulta :is([data-accion], button[type="submit"], .b-btn.primario, .boton-primario, .b-btn.peligro, label.subir, input[type="file"]):not([data-consulta]) {
+  display: none !important;
+}
+</style>
 
 <style scoped>
 /* Tamaño de la letra y pantalla completa: mismo alto y borde que el botón de salir. */

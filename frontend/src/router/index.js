@@ -65,7 +65,7 @@ import VistaAdministracion from '../views/admin/VistaAdministracion.vue';
 
 // Farmacia no entra al expediente clinico.
 const CLINICOS = ['admin', 'preconsulta', 'medico'];
-const REGISTRO = ['admin', 'preconsulta'];
+const REGISTRO = ['preconsulta'];
 // Bodega maneja el inventario; farmacia dispensa a los pacientes.
 const BODEGA = ['admin', 'bodega'];
 const FARMACIA = ['admin', 'farmacia'];
@@ -113,13 +113,13 @@ const router = createRouter({
           path: ':id',
           name: 'consulta',
           component: VistaConsulta,
-          meta: { roles: ['admin', 'medico'] },
+          meta: { roles: ['medico'] },
         },
         {
           path: ':id/referencia',
           name: 'consulta-referencia',
           component: FormularioReferencia,
-          meta: { roles: ['admin', 'medico'] },
+          meta: { roles: ['medico'] },
         },
       ],
     },
@@ -133,7 +133,7 @@ const router = createRouter({
           children: [
             { path: '', name: 'bodega-inicio', component: VistaBodegaInicio, meta: { roles: BODEGA } },
             { path: 'productos', name: 'inventario', component: VistaInventario, meta: { roles: BODEGA } },
-            { path: 'nuevo', name: 'insumo-nuevo', component: NuevoInsumo, meta: { roles: BODEGA } },
+            { path: 'nuevo', name: 'insumo-nuevo', component: NuevoInsumo, meta: { roles: ['bodega'] } },
             // Las rutas fijas van antes que ':id', o este se las traga.
             { path: 'cierre', name: 'inventario-cierre', component: InventarioCierre, meta: { roles: BODEGA } },
             { path: 'bres', name: 'bres', component: VistaBres, meta: { roles: BODEGA } },
@@ -142,12 +142,12 @@ const router = createRouter({
             // El traslado es la requisicion: el enlace viejo lleva a ella.
             { path: 'traslados', redirect: '/inventario/requisiciones' },
             // Farmacia pide a bodega con requisición, como los demás servicios.
-            { path: 'requisiciones', name: 'requisiciones', component: VistaRequisiciones, meta: { roles: BODEGA } },
+            { path: 'requisiciones', name: 'requisiciones', component: VistaRequisiciones, meta: { roles: ['bodega'] } },
             { path: 'kardex', name: 'kardex', component: VistaKardex, meta: { roles: BODEGA } },
             // El inicio reemplaza a "Hoy": el enlace viejo lleva a él.
             { path: 'hoy', redirect: '/inventario' },
-            { path: 'recibir', name: 'recibir', component: VistaRecibir, meta: { roles: BODEGA } },
-            { path: 'pedir-ddriss', name: 'pedir-ddriss', component: VistaPedirDdriss, meta: { roles: BODEGA } },
+            { path: 'recibir', name: 'recibir', component: VistaRecibir, meta: { roles: ['bodega'] } },
+            { path: 'pedir-ddriss', name: 'pedir-ddriss', component: VistaPedirDdriss, meta: { roles: ['bodega'] } },
             { path: 'trazabilidad', name: 'trazabilidad', component: VistaTrazabilidad, meta: { roles: BODEGA } },
             { path: 'informes', name: 'informes-servicios', component: VistaInformes, meta: { roles: BODEGA } },
             // El balance quedo dentro del BRES como "Detalle por servicio".
@@ -175,11 +175,11 @@ const router = createRouter({
       path: '/dispensacion',
       component: LayoutPrincipal,
       children: [
-        { path: '', name: 'dispensacion', component: VistaDispensacion, meta: { roles: FARMACIA } },
+        { path: '', name: 'dispensacion', component: VistaDispensacion, meta: { roles: ['farmacia'] } },
         // Lo del día (estante y cierre) y lo del mes (BRES y pedido a bodega).
         { path: 'estante', name: 'estante-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA, pestana: 'estante' } },
-        { path: 'cierre', name: 'cierre-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA, pestana: 'dia' } },
-        { path: 'mes', name: 'mes-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA, pestana: 'mes' } },
+        { path: 'cierre', name: 'cierre-farmacia', component: VistaControlFarmacia, meta: { roles: ['farmacia'], pestana: 'dia' } },
+        { path: 'mes', name: 'mes-farmacia', component: VistaControlFarmacia, meta: { roles: ['farmacia'], pestana: 'mes' } },
         { path: 'requisiciones', name: 'requisiciones-farmacia', component: VistaControlFarmacia, meta: { roles: FARMACIA, pestana: 'hechas' } },
         // El kardex y el BRES de farmacia se ven en pantalla antes de imprimirlos.
         { path: 'kardex', name: 'kardex-farmacia', component: VistaKardex, meta: { roles: FARMACIA, ubicacion: 'farmacia' } },

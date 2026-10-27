@@ -29,8 +29,8 @@ const motivoCancelacion = ref('');
 // En la lista, las acciones de cada paciente se abren al tocarlo.
 const abierto = ref(null);
 
-const puedeRegistrar = computed(() => ['admin', 'preconsulta'].includes(auth.rol));
-const puedeConsultar = computed(() => ['admin', 'medico'].includes(auth.rol));
+const puedeRegistrar = computed(() => auth.rol === 'preconsulta');
+const puedeConsultar = computed(() => auth.rol === 'medico');
 
 // Un color por nivel, el mismo en la tarjeta, la etiqueta y el resumen.
 const NIVEL = {
@@ -318,7 +318,7 @@ onUnmounted(() => clearInterval(temporizador));
           <Icono nombre="reloj" :tamano="18" :grosor="2.2" />
           {{ datos.resumen.superan90 }} llevan más de 90 minutos
         </p>
-        <div v-if="anteriores.length" class="aviso-lado neutro anteriores">
+        <div v-if="anteriores.length && puedeRegistrar" class="aviso-lado neutro anteriores">
           <button type="button" class="flex w-full items-start gap-2 text-left" :aria-expanded="verAnteriores" @click="verAnteriores = !verAnteriores">
             <Icono nombre="informacion" :tamano="18" :grosor="2.2" />
             <span>{{ anteriores.length }} {{ anteriores.length === 1 ? 'quedó' : 'quedaron' }} de otro día. Ver y cerrar</span>

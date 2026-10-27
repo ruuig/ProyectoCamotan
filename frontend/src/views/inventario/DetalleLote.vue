@@ -42,7 +42,7 @@ const usado = computed(() => (datos.value ? 1 - datos.value.lote.cantidadActual 
 
     <div v-if="datos.retiroActivo" class="b-aviso error mb-4 items-center justify-between">
       <span>Bajo retiro sanitario · {{ datos.retiroActivo.referencia }} · {{ datos.retiroActivo.motivo }}</span>
-      <RouterLink :to="`/inventario/retiros/${datos.retiroActivo.id}`" class="b-btn peligro chico">Ver a quién localizar</RouterLink>
+      <RouterLink :to="`/inventario/retiros/${datos.retiroActivo.id}`" data-consulta class="b-btn peligro chico">Ver a quién localizar</RouterLink>
     </div>
 
     <!-- El lote como boleto grande -->

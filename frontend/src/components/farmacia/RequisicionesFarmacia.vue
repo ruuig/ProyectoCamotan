@@ -97,7 +97,7 @@ async function cancelar(r) {
           <span><span class="estado" :class="ESTADO[r.estado]?.clase">{{ ESTADO[r.estado]?.texto ?? r.estado }}</span></span>
           <span class="acciones" @click.stop>
             <RouterLink :to="`/imprimir/requisicion/${r.id}`" target="_blank" class="b-btn secundario chico"><Icono nombre="imprimir" :tamano="16" /> Imprimir</RouterLink>
-            <button v-if="r.estado === 'solicitada'" type="button" class="b-btn secundario chico" :disabled="cancelando === r.id" @click="cancelar(r)">Cancelar</button>
+            <button v-if="r.estado === 'solicitada'" type="button" data-accion class="b-btn secundario chico" :disabled="cancelando === r.id" @click="cancelar(r)">Cancelar</button>
             <span class="chev"><Icono :nombre="abierta === r.id ? 'cerrar' : 'irA'" :tamano="18" :grosor="2.4" /></span>
           </span>
         </div>

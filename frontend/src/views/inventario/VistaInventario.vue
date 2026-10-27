@@ -160,7 +160,7 @@ const filasServicio = computed(() => {
         <div class="b-segmentado" role="radiogroup" aria-label="Vista">
           <button v-for="v in VISTAS" :key="v[0]" type="button" role="radio" :aria-checked="vista === v[0]" :class="vista === v[0] ? 'on' : ''" @click="cambiarVista(v[0])">{{ v[1] }}</button>
         </div>
-        <RouterLink to="/inventario/nuevo" class="b-btn secundario"><Icono nombre="agregar" :tamano="20" /> Nuevo insumo</RouterLink>
+        <RouterLink to="/inventario/nuevo" data-accion class="b-btn secundario"><Icono nombre="agregar" :tamano="20" /> Nuevo insumo</RouterLink>
       </div>
     </header>
 

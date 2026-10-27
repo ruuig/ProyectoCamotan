@@ -12,6 +12,7 @@ import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
 import { miles } from '../../components/bodega/diseno/PiezasBodega';
 import { fecha } from '../../dominio/bodega';
 import AtenderPedido from '../../components/bodega/AtenderPedido.vue';
+import VentanaConfirmar from '../../components/comunes/VentanaConfirmar.vue';
 
 /**
  * Requisiciones: la bodega registra lo que entrega y el sistema genera la
@@ -178,7 +179,11 @@ async function llenarSugerido() {
 
 const noAlcanza = computed(() => renglones.value.filter((r) => (r.enBodega != null && r.enBodega < entero(r.cantidad)) || (loteDe(r) && loteDe(r).cantidad < entero(r.cantidad))));
 
+// Antes de registrar la salida, el resumen.
+const confirmando = ref(false);
+const nombreLugar = computed(() => lugares.value.find((l) => l.id === Number(nueva.ubicacionId))?.nombre ?? '');
 async function entregar() {
+  confirmando.value = false;
   error.value = '';
   aviso.value = '';
   enviando.value = true;
@@ -310,7 +315,7 @@ onMounted(() => {
 
     <!-- Entregar sin pedido -->
     <div v-if="vista === 'nueva'" class="rejilla mt-5">
-      <form class="space-y-4" @submit.prevent="entregar">
+      <form class="space-y-4" @submit.prevent="confirmando = true">
         <div class="grid gap-3 sm:grid-cols-12">
           <div class="sm:col-span-5">
             <label for="lugar" class="b-etiqueta">Se entrega a</label>
@@ -448,6 +453,18 @@ onMounted(() => {
         </div>
       </aside>
     </div>
+
+    <VentanaConfirmar
+      v-if="confirmando"
+      :titulo="`Entrega a ${nombreLugar}`"
+      :detalle="`${renglones.length} productos · recibe ${nueva.solicitante}${nueva.numero.trim() ? ` · formulario ${nueva.numero.trim()}` : ''}`"
+      :filas="renglones.map((r) => ({ nombre: r.descripcion, cantidad: entero(r.cantidad), unidad: r.unidadMedida }))"
+      confirmar="Entregar e imprimir"
+      icono="imprimir"
+      :ocupado="enviando"
+      @cerrar="confirmando = false"
+      @confirmar="entregar"
+    />
 
     <!-- Entregadas -->
     <div v-if="vista === 'registradas'" class="rejilla-lista mt-5">

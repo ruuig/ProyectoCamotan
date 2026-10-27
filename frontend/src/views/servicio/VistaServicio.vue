@@ -9,6 +9,7 @@ import { useAuthStore } from '../../stores/auth';
 import { nuevaClaveIdempotencia } from '../../services/almacenLocal';
 import Icono from '../../components/comunes/Icono.vue';
 import EditorPedido from '../../components/bodega/EditorPedido.vue';
+import VentanaConfirmar from '../../components/comunes/VentanaConfirmar.vue';
 import { miles, estiloTono } from '../../components/bodega/diseno/PiezasBodega';
 
 /**
@@ -97,8 +98,12 @@ function nuevoRenglon(i) {
 }
 const erroresRenglon = ref({});
 const aEnviar = computed(() => lineas.value.filter((l) => entero(l.cantidad) > 0));
+// Antes de mandar, el resumen: un clic de más no envía nada.
+const confirmando = ref(null);
+const resumenPedido = computed(() => aEnviar.value.map((l) => ({ nombre: l.nombre, cantidad: entero(l.cantidad), unidad: l.unidad })));
 
 async function enviar() {
+  confirmando.value = null;
   erroresRenglon.value = {};
   error.value = '';
   enviando.value = true;
@@ -152,31 +157,37 @@ async function cancelar(r) {
 }
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-GT', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
 
-// --- Informe del mes -------------------------------------------------------------------
+// --- Informe del mes de cada lugar -------------------------------------------------------
+// Las mismas columnas del Excel del balance: el encargado solo llena lo
+// entregado a usuarios y lo no entregado; lo demás ya viene.
 const PERIODOS = [periodoMenos(1), periodoMenos(0), periodoMenos(2)];
 const periodo = ref(PERIODOS[0]);
 const informe = ref(null);
 const soloLosMios = ref(true);
 const guardando = ref(false);
-const vacio = (v) => v === null || v === undefined || v === '';
+// De qué lugar se informa: cada lugar de su territorio tiene su informe.
+const lugarInforme = ref(null);
+const lugaresInforme = computed(() => (territorio.value?.ubicaciones?.length ? territorio.value.ubicaciones : ubicacion.value ? [ubicacion.value] : []));
+const lugarActual = computed(() => lugaresInforme.value.find((l) => l.id === lugarInforme.value) ?? ubicacion.value);
 
 async function cargarInforme() {
-  if (!ubicacion.value) return;
+  const id = lugarActual.value?.id;
+  if (!id) return;
   informe.value = null;
   try {
-    const f = await bodega.informe(ubicacion.value.id, periodo.value);
+    const f = await bodega.informe(id, periodo.value);
     for (const r of f.renglones) {
       r.entregado = r.capturado ? String(r.entregado) : '';
       r.noEntregado = r.capturado && r.noEntregado ? String(r.noEntregado) : '';
-      r.saldoInformado = vacio(r.saldoInformado) ? '' : String(r.saldoInformado);
     }
-    recuperarBorrador(f);
+    // Ya enviado no se cambia: se ve como quedó.
+    if (!f.informe) recuperarBorrador(f);
     informe.value = f;
   } catch (fallo) {
     error.value = fallo.message;
   }
 }
-watch([periodo, () => ubicacion.value?.id], () => { if (ver.value === 'informe') cargarInforme(); });
+watch([periodo, () => lugarActual.value?.id], () => { if (ver.value === 'informe') cargarInforme(); });
 
 // El Excel de su territorio (todos sus lugares), como el que le daba la bodega.
 const bajandoExcel = ref(false);
@@ -202,7 +213,8 @@ async function subirExcel(evento) {
   try {
     const r = await bodega.subirExcelConsumo(periodo.value, archivo);
     const sinRepartir = r.sinRepartir?.length ? ` Sin repartir de lo entregado al territorio: ${r.sinRepartir.map((x) => `${x.nombre} (${x.entregado - x.repartido})`).join(', ')}.` : '';
-    aviso.value = `Cargado: ${r.lugares.map((l) => `${l.nombre} (${l.renglones})`).join(', ')}.${sinRepartir}`;
+    const yaEnviados = r.yaEnviados?.length ? ` Ya enviados, no se cambiaron: ${r.yaEnviados.join(', ')}.` : '';
+    aviso.value = `Cargado: ${r.lugares.map((l) => `${l.nombre} (${l.renglones})`).join(', ')}.${sinRepartir}${yaEnviados}`;
     await cargarInforme();
   } catch (fallo) {
     error.value = fallo.message;
@@ -222,15 +234,15 @@ const visibles = computed(() => {
   return (informe.value?.renglones ?? []).filter((r) => (!soloLosMios.value || r.maneja || entero(r.entregado) || q)
     && (!q || `${r.nombre} ${r.concentracion ?? ''}`.toLowerCase().includes(q)));
 });
-const lleno = (r) => r.entregado !== '' || r.noEntregado !== '' || r.saldoInformado !== '';
+const lleno = (r) => r.entregado !== '' || r.noEntregado !== '';
 const llenos = computed(() => visibles.value.filter(lleno).length);
 // En el celular se puede cerrar la página sin querer: lo escrito se guarda en
 // el equipo hasta enviarlo.
-const claveBorrador = computed(() => `camotan_informe_${ubicacion.value?.id}_${periodo.value}`);
+const claveBorrador = computed(() => `camotan_informe_${lugarActual.value?.id}_${periodo.value}`);
 function guardarBorrador() {
   if (!informe.value) return;
   const datos = Object.fromEntries(informe.value.renglones.filter(lleno)
-    .map((r) => [r.insumoId, [r.entregado, r.noEntregado, r.saldoInformado]]));
+    .map((r) => [r.insumoId, [r.entregado, r.noEntregado]]));
   try { localStorage.setItem(claveBorrador.value, JSON.stringify(datos)); } catch { /* sin almacenamiento */ }
 }
 function recuperarBorrador(f) {
@@ -239,32 +251,31 @@ function recuperarBorrador(f) {
   if (!datos) return;
   for (const r of f.renglones) {
     const d = datos[r.insumoId];
-    if (d) [r.entregado, r.noEntregado, r.saldoInformado] = d;
+    if (d) [r.entregado, r.noEntregado] = d;
   }
 }
 watch(() => informe.value?.renglones, guardarBorrador, { deep: true });
 const saldo = (r) => r.saldoAnterior + r.entradas - entero(r.entregado);
-const difiere = (r) => !vacio(r.saldoInformado) && entero(r.saldoInformado) !== saldo(r);
 
+// Enviado una vez, el encargado ya no lo cambia: lo corrige bodega (responde por el BRES).
+const enviado = computed(() => Boolean(informe.value?.informe));
+const resumenInforme = computed(() => (informe.value?.renglones ?? [])
+  .filter((x) => entero(x.entregado) || entero(x.noEntregado))
+  .map((x) => ({ nombre: [x.nombre, x.concentracion].filter(Boolean).join(' '), cantidad: entero(x.entregado), unidad: x.unidadEntrega })));
 async function guardarInforme() {
+  confirmando.value = null;
   error.value = '';
   guardando.value = true;
   try {
-    const r = await bodega.guardarInforme(ubicacion.value.id, periodo.value, {
+    await bodega.guardarInforme(lugarActual.value.id, periodo.value, {
       renglones: informe.value.renglones
-        .filter((x) => x.maneja || entero(x.entregado) || entero(x.noEntregado) || !vacio(x.saldoInformado))
-        .map((x) => ({
-          insumoId: x.insumoId,
-          entregado: entero(x.entregado),
-          noEntregado: entero(x.noEntregado),
-          saldoInformado: vacio(x.saldoInformado) ? null : entero(x.saldoInformado),
-        })),
+        .filter((x) => x.maneja || entero(x.entregado) || entero(x.noEntregado))
+        .map((x) => ({ insumoId: x.insumoId, entregado: entero(x.entregado), noEntregado: entero(x.noEntregado) })),
     });
-    aviso.value = r.diferencias
-      ? `Informe de ${nombreMes(periodo.value)} enviado. ${r.diferencias} insumo(s) no cuadran: bodega los revisará con usted.`
-      : `Informe de ${nombreMes(periodo.value)} enviado. Todo cuadra.`;
+    aviso.value = `Informe enviado: ${lugarActual.value.nombre}, ${nombreMes(periodo.value)}.`;
     try { localStorage.removeItem(claveBorrador.value); } catch { /* sin almacenamiento */ }
     await cargarInforme();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (fallo) {
     error.value = fallo.message;
   } finally {
@@ -367,7 +378,7 @@ onMounted(async () => {
           <div><label for="sol" class="b-etiqueta">Solicita</label><input id="sol" v-model="cabecera.solicitante" class="b-campo" /></div>
           <div><label for="jefe" class="b-etiqueta">Visto bueno <span class="b-opcional">opcional</span></label><input id="jefe" v-model="cabecera.jefe" class="b-campo" placeholder="Coordinador o director" /></div>
           <div><label for="obs" class="b-etiqueta">Observaciones <span class="b-opcional">opcional</span></label><textarea id="obs" v-model="cabecera.observaciones" rows="2" class="b-campo" /></div>
-          <button type="button" class="b-btn primario enviar" :disabled="enviando || !aEnviar.length || cabecera.solicitante.trim().length < 3 || !ubicacion" @click="enviar">
+          <button type="button" class="b-btn primario enviar" :disabled="enviando || !aEnviar.length || cabecera.solicitante.trim().length < 3 || !ubicacion" @click="confirmando = 'pedido'">
             <Icono nombre="trasladar" :tamano="22" /> {{ enviando ? 'Enviando…' : `Enviar a bodega (${aEnviar.length})` }}
           </button>
         </aside>
@@ -389,49 +400,88 @@ onMounted(async () => {
           <label class="flex items-center gap-2 text-sm font-semibold"><input v-model="soloLosMios" type="checkbox" /> Solo lo que manejo</label>
         </div>
       </div>
-      <p v-if="informe?.informe" class="mt-2 text-sm font-semibold text-apagado">
-        Enviado el {{ new Date(informe.informe.capturadoEn).toLocaleDateString('es-GT') }}<template v-if="informe.informe.revisado"> · revisado por bodega</template>
+      <!-- De qué lugar es el informe -->
+      <div v-if="lugaresInforme.length > 1" class="mt-4 flex flex-wrap items-center gap-3">
+        <span class="b-etiqueta m-0">Lugar</span>
+        <div class="b-segmentado flex-wrap" role="radiogroup" aria-label="Lugar del informe">
+          <button
+            v-for="l in lugaresInforme" :key="l.id" type="button" role="radio"
+            :aria-checked="lugarActual?.id === l.id" :class="lugarActual?.id === l.id ? 'on' : ''"
+            @click="lugarInforme = l.id"
+          >{{ l.nombre }}</button>
+        </div>
+      </div>
+      <h2 class="titulo-informe">{{ lugarActual?.nombre }} · {{ nombreMes(periodo) }}</h2>
+
+      <p v-if="enviado" class="b-aviso ok mt-2 text-[15px]">
+        <Icono nombre="correcto" :tamano="20" />
+        <span>Enviado el {{ new Date(informe.informe.capturadoEn).toLocaleDateString('es-GT') }}<template v-if="informe.informe.revisado"> · revisado por bodega</template>. Para corregir algo, avise a bodega.</span>
       </p>
 
-      <form v-if="informe" class="mt-3" @submit.prevent="guardarInforme">
+      <form v-if="informe" class="mt-3" @submit.prevent="!enviado && (confirmando = 'informe')">
         <label class="buscar-insumo">
           <Icono nombre="buscar" :tamano="20" />
           <input v-model="buscarInsumo" type="search" placeholder="Buscar producto" aria-label="Buscar producto" />
         </label>
         <p class="avance">{{ llenos }} de {{ visibles.length }} productos llenos</p>
 
-        <ul class="productos">
-          <li v-for="(r, i) in visibles" :key="r.insumoId" class="producto" :class="{ lleno: lleno(r) }">
-            <b class="prod-nombre">{{ [r.nombre, r.concentracion].filter(Boolean).join(' ') }}</b>
-            <p class="prod-datos">
-              Tenía <b>{{ miles(r.saldoAnterior) }}</b> · Le llegó <b>{{ miles(r.entradas) }}</b> · Le queda
-              <b :class="saldo(r) < 0 ? 'text-[#C03535]' : ''">{{ miles(saldo(r)) }}</b> {{ r.unidadEntrega }}
-            </p>
-            <div class="prod-campos">
-              <label class="campo-grande">
-                <span>Entregó en el mes</span>
-                <input :id="`i-${i}-e`" v-model="r.entregado" type="text" inputmode="numeric" enterkeyhint="next" placeholder="0" @keydown.enter="bajar($event, i)" />
-              </label>
-              <label class="campo-chico">
-                <span>Pidieron y no tenía</span>
-                <input v-model="r.noEntregado" type="text" inputmode="numeric" placeholder="0" />
-              </label>
-              <label class="campo-chico">
-                <span>Contó en el estante</span>
-                <input v-model="r.saldoInformado" type="text" inputmode="numeric" :placeholder="String(Math.max(0, saldo(r)))" :class="{ difiere: difiere(r) }" />
-              </label>
-            </div>
-            <p v-if="difiere(r)" class="prod-aviso">Contado {{ miles(entero(r.saldoInformado)) }} · según el sistema {{ miles(saldo(r)) }}</p>
-          </li>
-          <li v-if="!visibles.length" class="b-vacio">{{ buscarInsumo ? 'Ningún producto con ese nombre.' : 'Bodega aún no le ha despachado nada. Quite «Solo lo que manejo» para informar cualquier producto.' }}</li>
-        </ul>
+        <div class="marco-informe">
+          <table class="tabla-informe">
+            <thead>
+              <tr>
+                <th class="prod">Producto</th>
+                <th>Saldo anterior</th>
+                <th>Entradas</th>
+                <th class="llena">Entregado a usuarios</th>
+                <th class="llena">No entregado</th>
+                <th>Saldo siguiente</th>
+                <th>Promedio</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, i) in visibles" :key="r.insumoId" :class="{ lleno: lleno(r) }">
+                <td class="prod">{{ [r.nombre, r.concentracion].filter(Boolean).join(' ') }} <small>{{ r.unidadEntrega }}</small></td>
+                <td class="n">{{ miles(r.saldoAnterior) }}</td>
+                <td class="n">{{ miles(r.entradas) }}</td>
+                <td class="celda"><input :id="`i-${i}-e`" v-model="r.entregado" :readonly="enviado" type="text" inputmode="numeric" enterkeyhint="next" placeholder="0" :aria-label="`Entregado a usuarios de ${r.nombre}`" @keydown.enter="bajar($event, i)" /></td>
+                <td class="celda"><input v-model="r.noEntregado" :readonly="enviado" type="text" inputmode="numeric" placeholder="0" :aria-label="`No entregado de ${r.nombre}`" /></td>
+                <td class="n saldo" :class="{ negativo: saldo(r) < 0 }">{{ miles(saldo(r)) }}</td>
+                <td class="n">{{ miles(r.promedio ?? 0) }}</td>
+              </tr>
+              <tr v-if="!visibles.length"><td colspan="7" class="b-vacio">{{ buscarInsumo ? 'Ningún producto con ese nombre.' : 'Este lugar no ha manejado productos. Quite «Solo lo que manejo» para informar cualquiera.' }}</td></tr>
+            </tbody>
+          </table>
+        </div>
 
-        <div class="barra-enviar">
-          <button type="submit" class="b-btn primario" :disabled="guardando"><Icono nombre="guardar" :tamano="20" /> {{ guardando ? 'Enviando…' : `Enviar informe de ${nombreMes(periodo).split(' ')[0]}` }}</button>
+        <div v-if="!enviado" class="barra-enviar">
+          <button type="submit" class="b-btn primario" :disabled="guardando"><Icono nombre="guardar" :tamano="20" /> {{ guardando ? 'Enviando…' : `Enviar informe de ${lugarActual?.nombre}` }}</button>
         </div>
       </form>
       <p v-else-if="!error" class="b-vacio mt-4">Cargando el informe…</p>
     </template>
+
+    <VentanaConfirmar
+      v-if="confirmando === 'informe'"
+      :titulo="`Informe de ${lugarActual?.nombre}`"
+      :detalle="`${nombreMes(periodo)} · entregado a usuarios en ${resumenInforme.length} productos. Ya enviado no se puede cambiar.`"
+      :filas="resumenInforme"
+      confirmar="Enviar informe"
+      icono="guardar"
+      :ocupado="guardando"
+      @cerrar="confirmando = null"
+      @confirmar="guardarInforme"
+    />
+    <VentanaConfirmar
+      v-if="confirmando === 'pedido'"
+      titulo="Requisición a bodega"
+      :detalle="`Para ${sugPedido?.ubicacion?.nombre === ubicacion?.nombre ? ubicacion?.nombre : sugPedido?.ubicacion?.tipo === 'territorio' ? 'todo el territorio' : sugPedido?.ubicacion?.nombre} · ${resumenPedido.length} productos · solicita ${cabecera.solicitante}`"
+      :filas="resumenPedido"
+      confirmar="Enviar e imprimir"
+      icono="trasladar"
+      :ocupado="enviando"
+      @cerrar="confirmando = null"
+      @confirmar="enviar"
+    />
   </section>
 </template>
 
@@ -480,22 +530,23 @@ onMounted(async () => {
 .buscar-insumo { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 14px; border: 2px solid #CBD5E1; border-radius: 14px; background: #fff; color: #64748B; }
 .buscar-insumo input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; font-size: 17px; color: #14244A; background: transparent; }
 .avance { margin: 8px 2px 10px; font-size: 13px; font-weight: 700; color: #64748B; }
-.productos { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
-.producto { display: grid; gap: 8px; padding: 14px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 18px; background: #fff; }
-.producto.lleno { border-color: #9BD3B5; background: #F6FCF8; }
-.prod-nombre { font-size: 17px; font-weight: 900; line-height: 1.25; color: #14244A; overflow-wrap: anywhere; }
-.prod-datos { font-size: 14px; font-weight: 600; color: #475569; }
-.prod-datos b { font-weight: 900; color: #14244A; }
-.prod-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.prod-campos label { display: grid; gap: 4px; }
-.prod-campos span { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #64748B; }
-.prod-campos input { width: 100%; border: 2px solid #CBD5E1; border-radius: 12px; background: #fff; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; color: #14244A; }
-.prod-campos input:focus { outline: none; border-color: #172A5A; box-shadow: 0 0 0 3px #DCE4F5; }
-.prod-campos input.difiere { border-color: #E8930C; background: #FFF7E6; }
-.campo-grande { grid-column: 1 / -1; }
-.campo-grande input { height: 58px; font-size: 26px; }
-.campo-chico input { height: 46px; font-size: 18px; }
-.prod-aviso { font-size: 13px; font-weight: 700; color: #8A4B00; }
+.titulo-informe { margin-top: 14px; font-size: 22px; font-weight: 900; color: #14244A; }
+.marco-informe { overflow-x: auto; border: 2px solid #E2E8F0; border-radius: 16px; background: #fff; }
+.tabla-informe { width: 100%; min-width: 860px; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+.tabla-informe th { position: sticky; top: 0; z-index: 1; padding: 10px 8px; background: #F1F5F9; font-size: 12.5px; font-weight: 900; text-transform: uppercase; letter-spacing: .03em; color: #475569; text-align: right; }
+.tabla-informe th.prod, .tabla-informe td.prod { text-align: left; }
+.tabla-informe th.llena { color: #14244A; background: #E3ECF8; }
+.tabla-informe td { padding: 6px 8px; border-top: 1px solid #EEF2F6; font-size: 15px; font-weight: 700; color: #1E293B; }
+.tabla-informe td.prod { min-width: 240px; font-weight: 800; color: #14244A; }
+.tabla-informe td.prod small { margin-left: 4px; font-size: 12px; font-weight: 700; color: #64748B; }
+.tabla-informe td.n { text-align: right; white-space: nowrap; }
+.tabla-informe td.saldo { color: #14244A; background: #F5F9FE; }
+.tabla-informe td.negativo { color: #C03535; }
+.tabla-informe tr.lleno td.prod { box-shadow: inset 4px 0 0 #2E9E6A; }
+.tabla-informe td.celda { width: 130px; background: #FAFCFF; }
+.tabla-informe td.celda input { width: 100%; height: 42px; padding: 0 10px; border: 2px solid #CBD5E1; border-radius: 10px; background: #fff; text-align: right; font-size: 17px; font-weight: 800; color: #14244A; }
+.tabla-informe td.celda input:focus { outline: none; border-color: #172A5A; box-shadow: 0 0 0 3px #DCE4F5; }
+.tabla-informe td.celda input[readonly] { border-color: #E2E8F0; background: #F8FAFC; color: #475569; }
 .barra-enviar { position: sticky; bottom: 0; margin-top: 12px; padding: 12px 0; background: linear-gradient(transparent, #fff 30%); }
 .barra-enviar .b-btn { width: 100%; height: 58px; font-size: 18px; border-radius: 16px; }
 /* Celular: una columna, botones y campos al ancho de la pantalla. */
@@ -503,7 +554,6 @@ onMounted(async () => {
   .tarea { min-height: 140px; padding: 18px; }
   .tarea .ic { width: 62px; height: 62px; }
   .tarea b { font-size: 24px; }
-  .productos { grid-template-columns: 1fr; }
   .linea { grid-template-columns: minmax(0, 1fr) 36px; }
   .linea .cantidad { grid-column: 1 / -1; }
   .mia { flex-wrap: wrap; }

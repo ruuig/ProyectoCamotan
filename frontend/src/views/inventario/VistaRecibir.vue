@@ -6,6 +6,7 @@ import { RouterLink, useRoute } from 'vue-router';
 import bodega from '../../services/bodega';
 import inventario from '../../services/inventario';
 import Icono from '../../components/comunes/Icono.vue';
+import VentanaConfirmar from '../../components/comunes/VentanaConfirmar.vue';
 import BuscadorInsumo from '../../components/bodega/diseno/BuscadorInsumo.vue';
 import RecibirRequisicion from '../../components/bodega/RecibirRequisicion.vue';
 import { miles } from '../../components/bodega/diseno/PiezasBodega';
@@ -75,7 +76,9 @@ async function cargar() {
   }
 }
 
+const confirmando = ref(false);
 async function registrar() {
+  confirmando.value = false;
   error.value = '';
   aviso.value = '';
   enviando.value = true;
@@ -169,7 +172,7 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
     </div>
 
     <!-- Caso especial: sin requisición -->
-    <form v-if="vista === 'nueva' && sinRequisicion" class="mt-5 space-y-4" @submit.prevent="registrar">
+    <form v-if="vista === 'nueva' && sinRequisicion" class="mt-5 space-y-4" @submit.prevent="confirmando = true">
       <button type="button" class="enlace-origen" @click="sinRequisicion = false">← Por requisición</button>
       <div class="documento">
         <!-- Todo llega por despacho de la DDRISS; otro origen solo en un caso concreto. -->
@@ -333,6 +336,17 @@ onMounted(() => { if (borrador.recuperar()) sinRequisicion.value = true; cargar(
         <button type="button" class="llego-cancelar" @click="reponiendo = null">Cancelar</button>
       </div>
     </div>
+    <VentanaConfirmar
+      v-if="confirmando"
+      :titulo="`Recepción de ${doc.remitente || 'donación'}`"
+      :detalle="`${renglones.length} productos${doc.numeroDocumento.trim() ? ` · documento ${doc.numeroDocumento.trim()}` : ''}`"
+      :filas="renglones.map((x) => ({ nombre: `${x.nombre} · lote ${x.numeroLote}`, cantidad: x.cantidadRecibida === '' ? entero(x.cantidadDocumento) : entero(x.cantidadRecibida), unidad: x.unidad }))"
+      confirmar="Registrar recepción"
+      icono="recibir"
+      :ocupado="enviando"
+      @cerrar="confirmando = false"
+      @confirmar="registrar"
+    />
   </section>
 </template>
 

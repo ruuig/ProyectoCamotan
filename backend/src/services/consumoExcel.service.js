@@ -316,7 +316,7 @@ const texto = (valor) => (valor && typeof valor === 'object' ? valor.richText?.m
  * Sin territorio (territorioId null) es el balance completo del mes, como lo
  * lleva la bodega: todos los lugares y post-consulta, cada uno por su nombre.
  */
-async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territorioId) {
+async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territorioId, { soloNuevos = false } = {}) {
   const libro = new ExcelJS.Workbook();
   try {
     await libro.xlsx.load(buffer);
@@ -369,6 +369,17 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
     if (bloques.some((x) => x.u.id === u.id)) { lugaresNoReconocidos.push(`${b.nombre} (repetido)`); return; }
     bloques.push({ c: b.c, u });
   });
+  // El encargado no cambia lo que ya envió: eso lo corrige bodega.
+  const yaEnviados = [];
+  if (soloNuevos) {
+    const enviados = new Set((await prisma.informeServicio.findMany({
+      where: { periodo, ubicacionId: { in: bloques.map(({ u }) => u.id) } }, select: { ubicacionId: true },
+    })).map((x) => x.ubicacionId));
+    for (let k = bloques.length - 1; k >= 0; k -= 1) {
+      if (enviados.has(bloques[k].u.id)) { yaEnviados.unshift(bloques[k].u.nombre); bloques.splice(k, 1); }
+    }
+    if (!bloques.length) throw fallo(409, 'informe_enviado', 'Los informes de ese mes ya se enviaron. Para corregirlos, avise a bodega');
+  }
   if (!bloques.length) throw fallo(400, 'sin_lugares', `No se reconoció ningún centro o puesto${completo ? '' : ' del territorio'} en la fila 3 del Excel`);
 
   // Insumos por su nombre y por los nombres con que aparecen en los Excel.
@@ -438,7 +449,7 @@ async function cargarLibro(establecimientoId, buffer, periodo, usuarioId, territ
       sinRepartir.push({ insumoId, nombre: numero ? `${nombres.get(insumoId)} (territorio ${numero})` : nombres.get(insumoId), entregado: r.entregado, repartido: r.repartido });
     }
   }
-  return { periodo, lugares, noReconocidos, lugaresNoReconocidos, sinRepartir };
+  return { periodo, lugares, noReconocidos, lugaresNoReconocidos, sinRepartir, yaEnviados };
 }
 
-module.exports = { territorios, territorioDeUsuario, libroDelTerritorio, cargarLibro, nombreHoja };
+module.exports = { territorios, territorioDeUsuario, libroDelTerritorio, cargarLibro, nombreHoja, promedios };

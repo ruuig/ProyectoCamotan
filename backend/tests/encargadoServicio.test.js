@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
+import prisma from '../src/config/db.js';
 
 /**
  * Encargado de un centro o puesto de salud: pide a la bodega con la
@@ -127,16 +128,27 @@ describe('requisiciones del encargado', () => {
 });
 
 describe('informe del mes del encargado', () => {
-  it('ve y sube el informe de su ubicación', async () => {
+  it('envía el informe una sola vez; corregirlo le toca a bodega', async () => {
+    await prisma.informeServicio.deleteMany({ where: { ubicacionId: propio.id, periodo: periodo() } });
     const f = await con(tokenEncargado)(request(app).get(`/api/v1/bodega/informes/${propio.id}/${periodo()}`));
     expect(f.status).toBe(200);
-    const g = await con(tokenEncargado)(request(app).put(`/api/v1/bodega/informes/${propio.id}/${periodo()}`)).send({
+    const enviar = (t) => con(t)(request(app).put(`/api/v1/bodega/informes/${propio.id}/${periodo()}`)).send({
       renglones: [{ insumoId: insumo.id, entregado: 0, noEntregado: 2 }],
     });
-    expect(g.status).toBe(200);
+    expect((await enviar(tokenEncargado)).status).toBe(200);
+    const otraVez = await enviar(tokenEncargado);
+    expect(otraVez.status).toBe(409);
+    expect(otraVez.body.error.codigo).toBe('informe_enviado');
+    expect((await enviar(tokenBodega)).status).toBe(200);
   });
 
-  it('no ve el informe de otro lugar', async () => {
+  it('ve el informe de otro lugar de su territorio', async () => {
+    if (!vecino) return;
+    const r = await con(tokenEncargado)(request(app).get(`/api/v1/bodega/informes/${vecino.id}/${periodo()}`));
+    expect(r.status).toBe(200);
+  });
+
+  it('no ve el informe de un lugar de otro territorio', async () => {
     const r = await con(tokenEncargado)(request(app).get(`/api/v1/bodega/informes/${ajeno.id}/${periodo()}`));
     expect(r.status).toBe(403);
   });

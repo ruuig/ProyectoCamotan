@@ -254,11 +254,23 @@ async function obtenerInforme(req, res, next) {
   if (!datos.esServicioQueInforma(form.ubicacion) && form.ubicacion.tipo !== 'centro_salud') {
     return next({ status: 400, codigo: 'no_informa', mensaje: 'Esa ubicación no envía informe mensual' });
   }
+  // El promedio como sale en el Excel del balance.
+  const promedio = await consumoExcel.promedios([form.ubicacion.id], req.params.periodo);
+  for (const r of form.renglones) r.promedio = promedio(form.ubicacion.id, r.insumoId);
   res.json(form);
 }
 
 async function guardarInforme(req, res, next) {
   const ubicacionId = Number(req.params.ubicacionId);
+  const { periodo } = req.params;
+  const cerrado = await prisma.bres.findUnique({
+    where: { establecimientoId_periodo: { establecimientoId: req.usuario.establecimientoId, periodo } }, select: { estado: true },
+  });
+  if (cerrado?.estado === 'cerrado') return next({ status: 409, codigo: 'mes_cerrado', mensaje: 'El BRES de ese mes está cerrado: el informe ya no cambia' });
+  // El encargado lo envía una sola vez: corregirlo le toca a bodega, que responde por el BRES.
+  if (req.usuario.rol === 'servicio' && await prisma.informeServicio.findUnique({ where: { ubicacionId_periodo: { ubicacionId, periodo } } })) {
+    return next({ status: 409, codigo: 'informe_enviado', mensaje: 'Este informe ya se envió. Para corregirlo, avise a bodega' });
+  }
   const resultado = await datos.guardarInforme(
     req.usuario.establecimientoId, ubicacionId, req.params.periodo, req.body, req.usuario.id,
   );
@@ -771,7 +783,9 @@ async function excelConsumo(req, res) {
 async function subirExcelConsumo(req, res, next) {
   if (!Buffer.isBuffer(req.body) || !req.body.length) return next({ status: 400, codigo: 'archivo_vacio', mensaje: 'No llegó ningún archivo' });
   const territorioId = await territorioPedido(req);
-  const r = await consumoExcel.cargarLibro(req.usuario.establecimientoId, req.body, req.query.periodo, req.usuario.id, territorioId);
+  const r = await consumoExcel.cargarLibro(req.usuario.establecimientoId, req.body, req.query.periodo, req.usuario.id, territorioId, {
+    soloNuevos: req.usuario.rol === 'servicio',
+  });
   await req.bitacora({
     accion: 'actualizar',
     entidad: 'reporte_servicio',

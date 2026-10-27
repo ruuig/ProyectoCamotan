@@ -5,6 +5,7 @@ import { usarBorrador } from '../../dominio/borrador';
 import bodega from '../../services/bodega';
 import { nuevaClaveIdempotencia } from '../../services/almacenLocal';
 import Icono from '../comunes/Icono.vue';
+import VentanaConfirmar from '../comunes/VentanaConfirmar.vue';
 import { miles, estiloTono } from './diseno/PiezasBodega';
 
 /**
@@ -76,7 +77,9 @@ const marcados = computed(() => hoja.value.filter(({ g }) => tomados[g.id]).leng
 const editable = computed(() => ['solicitada', 'autorizada'].includes(r.value?.estado));
 const vence = (v) => new Date(v).toLocaleDateString('es-GT', { month: '2-digit', year: 'numeric', timeZone: 'UTC' });
 
+const confirmando = ref(false);
 async function despachar() {
+  confirmando.value = false;
   enviando.value = true;
   error.value = '';
   try {
@@ -165,7 +168,7 @@ const ESTADO = {
         <label><span>Recibe</span><input v-model="despacho.recibidoPor" class="b-campo" /></label>
         <div class="botones">
           <button type="button" class="b-btn secundario" :disabled="enviando" @click="rechazando = !rechazando">Rechazar</button>
-          <button type="button" class="b-btn exito" :disabled="enviando || !total || hayExceso || despacho.recibidoPor.trim().length < 3" @click="despachar">
+          <button type="button" class="b-btn exito" :disabled="enviando || !total || hayExceso || despacho.recibidoPor.trim().length < 3" @click="confirmando = true">
             <Icono nombre="imprimir" :tamano="20" /> {{ enviando ? 'Despachando…' : `Despachar e imprimir · ${miles(total)}` }}
           </button>
         </div>
@@ -178,6 +181,17 @@ const ESTADO = {
       <p v-else-if="r.estado === 'anulada'" class="b-aviso error">Rechazada · {{ r.motivoAnulacion }}</p>
       <p v-else class="b-aviso ok">Despachada {{ fecha(r.despachadaEn) }} · {{ r.despachadaPor }} · recibió {{ r.recibidoPor }}</p>
     </template>
+    <VentanaConfirmar
+      v-if="confirmando"
+      :titulo="`Despacho a ${r.unidadSeccion}`"
+      :detalle="`${miles(total)} unidades · recibe ${despacho.recibidoPor}`"
+      :filas="r.renglones.filter((g) => entero(cantidades[g.id])).map((g) => ({ nombre: g.descripcion, cantidad: entero(cantidades[g.id]), unidad: g.unidadMedida }))"
+      confirmar="Despachar e imprimir"
+      icono="imprimir"
+      :ocupado="enviando"
+      @cerrar="confirmando = false"
+      @confirmar="despachar"
+    />
   </article>
 </template>
 

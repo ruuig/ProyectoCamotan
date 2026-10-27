@@ -4,6 +4,7 @@ const autenticar = require('../middleware/auth');
 const autorizar = require('../middleware/rbac');
 const validar = require('../middleware/validar');
 const asincrono = require('../utils/asincrono');
+const prisma = require('../config/db');
 const idempotencia = require('../middleware/idempotencia');
 const bodega = require('../controllers/bodega.controller');
 const requisiciones = require('../controllers/requisiciones.controller');
@@ -305,11 +306,16 @@ router.post(
 // --- Informes de los servicios ---------------------------------------------------
 router.get('/informes', deBodega, validar(z.object({ periodo: periodo.optional() }), 'query'), asincrono(bodega.estadoInformes));
 const parametrosInforme = z.object({ ubicacionId: id, periodo });
-// El encargado de un centro o puesto ve y sube el informe de su ubicación.
+// El encargado ve y sube el informe de cada lugar de su territorio.
 const informePropio = [
   autorizar('admin', 'bodega', 'servicio'),
-  (req, _res, next) => (req.usuario.rol !== 'servicio' || Number(req.params.ubicacionId) === req.usuario.ubicacionId
-    ? next() : next({ status: 403, codigo: 'sin_permiso', mensaje: 'Solo puede ver el informe de su centro o puesto' })),
+  asincrono(async (req, _res, next) => {
+    if (req.usuario.rol !== 'servicio' || Number(req.params.ubicacionId) === req.usuario.ubicacionId) return next();
+    const lugar = req.usuario.territorioId != null
+      ? await prisma.ubicacion.findFirst({ where: { id: Number(req.params.ubicacionId), territorioId: req.usuario.territorioId } })
+      : null;
+    return lugar ? next() : next({ status: 403, codigo: 'sin_permiso', mensaje: 'Solo puede ver los informes de los lugares de su territorio' });
+  }),
 ];
 router.get('/informes/:ubicacionId/:periodo', informePropio, validar(parametrosInforme, 'params'), asincrono(bodega.obtenerInforme));
 router.put(

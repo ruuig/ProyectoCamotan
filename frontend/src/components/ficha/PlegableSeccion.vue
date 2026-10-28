@@ -20,6 +20,13 @@ const props = defineProps({
 const emit = defineEmits(['update:abierta']);
 
 const completa = computed(() => props.avance && props.avance.total > 0 && props.avance.respondidas === props.avance.total);
+// En palabras, para quien no lee porcentajes: «Lista», «Faltan 3», «Sin llenar».
+const faltan = computed(() => (props.avance?.total ? props.avance.total - props.avance.respondidas : 0));
+const sello = computed(() => {
+  if (completa.value) return { texto: 'Lista ✓', clase: 'lista' };
+  if (props.registrada && faltan.value) return { texto: `Faltan ${faltan.value}`, clase: 'faltan' };
+  return { texto: 'Sin llenar', clase: 'vacia' };
+});
 const porcentaje = computed(() => (props.avance?.total ? Math.round((props.avance.respondidas / props.avance.total) * 100) : 0));
 </script>
 
@@ -37,15 +44,21 @@ const porcentaje = computed(() => (props.avance?.total ? Math.round((props.avanc
           </span>
           <span class="mt-0.5 block text-[13px] font-semibold text-apagado">
             <template v-if="estado">{{ estado }}</template>
-            <template v-if="avance && avance.total"><template v-if="estado"> · </template>{{ avance.respondidas }} de {{ avance.total }}</template>
+            <span v-if="avance && avance.total" class="numeros-seccion"><template v-if="estado"> · </template>{{ avance.respondidas }} de {{ avance.total }}</span>
             <span v-if="sinGuardar" class="text-[#B7710A]"> · cambios sin guardar</span>
           </span>
         </span>
+        <span class="sello" :class="sello.clase">{{ sello.texto }}</span>
         <Icono nombre="irA" :tamano="20" :grosor="2.2" class="flecha" />
+        <!-- Tablet: dice con palabras que se toca para abrir o cerrar -->
+        <span class="accion" aria-hidden="true">{{ abierta ? 'Cerrar' : completa ? 'Ver' : 'Llenar' }}<b>{{ abierta ? '▲' : '▼' }}</b></span>
       </button>
     </h3>
     <div v-if="abierta" :id="`${id}-cuerpo`" class="cuerpo">
       <slot />
+      <button type="button" class="cerrar-abajo" @click="emit('update:abierta', false); $el.scrollIntoView({ block: 'start', behavior: 'smooth' })">
+        Cerrar «{{ titulo }}» ▲
+      </button>
     </div>
   </section>
 </template>
@@ -63,4 +76,20 @@ const porcentaje = computed(() => (props.avance?.total ? Math.round((props.avanc
 .cuerpo { padding: 18px 20px 20px; border-top: 2px solid #EEF2F6; }
 /* --- Relieve (estilo duo) --- */
 .plegable { border-bottom-width: 4px; border-radius: 18px; }
+.sello { display: none; flex-shrink: 0; padding: 4px 12px; border-radius: 10px; font-size: 15px; font-weight: 800; white-space: nowrap; }
+.sello.lista { background: #E3F5EC; color: #17784F; }
+.sello.faltan { background: #FFF1DB; color: #8A4B00; }
+.sello.vacia { background: #F1F5F9; color: #64748B; }
+.accion, .cerrar-abajo { display: none; }
+/* Tablet: la cabecera dice en palabras cómo está y qué pasa al tocarla. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .anillo, .flecha { display: none; }
+  .sello { display: inline-block; }
+  .accion { display: inline-flex; flex-shrink: 0; align-items: center; gap: 8px; min-height: 52px; padding: 0 16px; border: 2px solid #172A5A; border-bottom-width: 4px; border-radius: 14px; background: #fff; font-size: 18px; font-weight: 800; color: #172A5A; }
+  .abierta .accion { background: #172A5A; color: #fff; }
+  .cerrar-abajo { display: block; width: 100%; min-height: 58px; margin-top: 22px; border: 2px dashed #CBD5E1; border-radius: 14px; background: #F8FAFC; font-size: 17px; font-weight: 800; color: #475569; }
+  .cabeza { min-height: 84px; flex-wrap: wrap; }
+  .cabeza .text-\[17px\] { font-size: 20px; }
+  .cabeza .text-\[13px\] { font-size: 15.5px; }
+}
 </style>

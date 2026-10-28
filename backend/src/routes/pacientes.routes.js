@@ -22,6 +22,9 @@ const puedeEditarFicha = autorizar('admin', 'preconsulta', 'medico');
 
 router.get('/', puedeConsultar, validar(esquemas.listar, 'query'), asincrono(controlador.listar));
 
+router.get('/ficha-papel', puedeConsultar, validar(esquemas.fichaPapel, 'query'), asincrono(controlador.fichaPapel));
+router.get('/sugerir', puedeConsultar, validar(esquemas.sugerir, 'query'), asincrono(controlador.sugerir));
+
 router.post(
   '/revisar-duplicados',
   puedeEditar,

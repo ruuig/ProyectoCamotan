@@ -16,6 +16,9 @@ export default {
   cerrarEmbarazo: (id, motivo) =>
     http.patch(`/pacientes/${id}/embarazos/cerrar`, { motivo }),
   revisarDuplicados: (datos) => http.post('/pacientes/revisar-duplicados', datos),
+  // Ficha de papel que sigue (P-570) y quiénes ya tienen una ficha.
+  fichaPapel: (parametros) => http.get(`/pacientes/ficha-papel?${new URLSearchParams(Object.entries(parametros).filter(([, v]) => v))}`),
+  sugerir: (parametros) => http.get(`/pacientes/sugerir?${new URLSearchParams(parametros)}`),
 
   // Ficha completa, por secciones.
   ficha: (id) => http.get(`/pacientes/${id}/ficha`),

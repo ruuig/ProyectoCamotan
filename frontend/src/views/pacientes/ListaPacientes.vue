@@ -25,6 +25,8 @@ const lugares = ref([]);
 const cargando = ref(false);
 const error = ref('');
 
+// Tablet: los filtros van guardados detrás de «Filtrar»; primero se ven los pacientes.
+const verFiltros = ref(false);
 const filtros = reactive({
   buscar: '',
   lugarPobladoId: '',
@@ -157,8 +159,17 @@ function abrirFicha(id) {
       <button v-if="filtrosActivos > 0 || filtros.buscar" type="button" class="limpiar" @click="limpiar"><Icono nombre="cerrar" :tamano="16" :grosor="2.4" /> Limpiar</button>
     </label>
 
+    <button type="button" class="boton-filtrar mt-3" :class="{ on: verFiltros || filtrosActivos }" :aria-expanded="verFiltros" @click="verFiltros = !verFiltros">
+      <span class="ic-filtro"><Icono nombre="filtro" :tamano="24" :grosor="2.2" /></span>
+      <span class="min-w-0 flex-1 text-left">
+        Filtros
+        <small>{{ filtrosActivos ? `${filtrosActivos} puesto${filtrosActivos === 1 ? '' : 's'}` : 'edad, sexo, comunidad' }}</small>
+      </span>
+      <span class="abre">{{ verFiltros ? 'Cerrar ▲' : 'Abrir ▼' }}</span>
+    </button>
+
     <!-- Filtros, en tres grupos con nombre -->
-    <div class="filtros mt-4">
+    <div class="filtros mt-4" :class="{ abiertos: verFiltros }">
       <div class="grupo-filtro etapas">
         <span class="g-titulo">Etapa de vida</span>
         <div class="fichas-etapa">
@@ -350,5 +361,26 @@ function abrirFicha(id) {
   .avatar { width: 46px; height: 46px; font-size: 17px; }
   .flecha { display: none; }
   .comunidad { width: 100%; }
+}
+.boton-filtrar { display: none; }
+/* Tablet: los filtros detrás de un botón y la lista en grande. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .boton-filtrar { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px; padding: 8px 12px 8px 10px; border: 2px solid #9FCDEC; border-bottom-width: 5px; border-radius: 18px; background: #F4F9FE; font-size: 19px; font-weight: 800; color: #174E80; }
+  .boton-filtrar small { display: block; font-size: 15px; font-weight: 700; color: #475569; }
+  .boton-filtrar.on { border-color: #2F83C4; background: #EAF3FB; }
+  .ic-filtro { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 14px; background: #2F83C4; color: #fff; }
+  .abre { flex-shrink: 0; padding: 10px 16px; border-radius: 12px; background: #174E80; color: #fff; font-size: 17px; }
+  .filtros:not(.abiertos) { display: none; }
+  .edad { width: 150px; height: 60px; }
+  .comunidad { width: 100%; height: 60px; }
+  .buscador input { font-size: 20px; }
+  .tarjeta-p { flex-wrap: wrap; min-height: 100px; padding: 16px; }
+  .nombre { font-size: 21px; }
+  .linea { font-size: 16px; }
+  .estado-ficha { font-size: 15px; }
+}
+/* Tablet: lo chico del cuadro de la ficha también se lee. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .codigo .et, .codigo small { font-size: 12.5px; }
 }
 </style>

@@ -143,7 +143,7 @@ onUnmounted(() => clearInterval(temporizador));
 <template>
   <div class="cola mx-auto max-w-[1280px]">
     <header class="cabeza">
-      <h1 class="titulo-pagina">Cola de atención</h1>
+      <h1 class="titulo-pagina">{{ auth.rol === 'preconsulta' ? 'Fila de hoy' : 'Cola de atención' }}</h1>
       <button type="button" class="b-btn secundario actualizar" :disabled="cargando" @click="cargar">
         <Icono nombre="actualizar" :tamano="20" :class="cargando ? 'animate-spin' : ''" />
         <span>Actualizar<small v-if="horaActualizada"> · {{ horaActualizada }}</small></span>
@@ -451,4 +451,8 @@ onUnmounted(() => clearInterval(temporizador));
 .anteriores { display: grid; gap: 8px; }
 .anteriores ul { display: grid; gap: 2px; padding-left: 26px; font-size: 14px; font-weight: 700; }
 .anteriores small { font-weight: 600; opacity: .8; }
+/* Tablet: el aviso de los de otro día se toca bien. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .anteriores > button { min-height: 44px; align-items: center; font-size: 16px; }
+}
 </style>

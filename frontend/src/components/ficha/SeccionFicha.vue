@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch } from 'vue';
 import servicio from '../../services/pacientes';
 import Icono from '../comunes/Icono.vue';
 import CampoSiNo from './CampoSiNo.vue';
+import SelectorFecha from '../comunes/SelectorFecha.vue';
 import HistorialSeccion from './HistorialSeccion.vue';
 import {
   aplica, clavesDe, avance, marcarRestoComoNo, siNoPendientes, etiquetas, clasificacionPesoNacer,
@@ -257,12 +258,11 @@ defineExpose({ hayCambios, progreso });
           <span class="text-apagado">onz</span>
         </div>
 
-        <input
+        <SelectorFecha
           v-else-if="c.tipo === 'fecha'"
           :id="`${seccion.clave}-${c.clave}`"
           v-model="form[c.clave]"
-          type="date"
-          class="campo w-48"
+          :sin-futuro="false"
         />
 
         <textarea

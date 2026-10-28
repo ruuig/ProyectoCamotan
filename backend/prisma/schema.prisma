@@ -14,17 +14,17 @@ datasource db {
 }
 
 model Establecimiento {
-  id           Int      @id @default(autoincrement())
-  codigo       String   @unique
-  nombre       String
-  municipio    String
-  departamento String
+  id            Int      @id @default(autoincrement())
+  codigo        String   @unique
+  nombre        String
+  municipio     String
+  departamento  String
   // Encabezado de los formularios SIGSA. Si faltan, se usan el departamento y el municipio.
-  areaSalud     String? @map("area_salud")
-  distritoSalud String? @map("distrito_salud")
-  tipo         String // centro_salud_a | centro_salud_b | puesto_salud
-  activo       Boolean  @default(true)
-  creadoEn     DateTime @default(now()) @map("creado_en")
+  areaSalud     String?  @map("area_salud")
+  distritoSalud String?  @map("distrito_salud")
+  tipo          String // centro_salud_a | centro_salud_b | puesto_salud
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en")
 
   usuarios                  Usuario[]
   territorios               Territorio[]
@@ -72,47 +72,47 @@ model Usuario {
   totpSecret        String?  @map("totp_secret")
   creadoEn          DateTime @default(now()) @map("creado_en")
 
-  establecimiento      Establecimiento          @relation(fields: [establecimientoId], references: [id])
-  ubicacion            Ubicacion?               @relation(fields: [ubicacionId], references: [id], onDelete: SetNull)
-  bitacora             Bitacora[]
-  dispensaciones       Dispensacion[]
-  movimientos          MovimientoInsumo[]
-  signosEditados       SignoPeligro[]           @relation("SignoActualizadoPor")
-  alertasGestionadas   Alerta[]                 @relation("AlertaEstadoPor")
-  lotesEstado          Lote[]                   @relation("LoteEstadoPor")
-  configLogistica      ConfiguracionLogistica[] @relation("ConfigLogisticaPor")
-  demandasRegistradas  DemandaNoAtendida[]      @relation("DemandaRegistradaPor")
-  inventariosIniciados InventarioFisico[]       @relation("InventarioIniciadoPor")
-  inventariosCerrados  InventarioFisico[]       @relation("InventarioCerradoPor")
-  inventariosAutoriza  InventarioFisico[]       @relation("InventarioAutorizadoPor")
-  conteos              ConteoFisico[]           @relation("ConteoPor")
-  bresGenerados        Bres[]                   @relation("BresGeneradoPor")
-  retirosRegistrados   RetiroSanitario[]        @relation("RetiroRegistradoPor")
-  retiroPacientes      RetiroPaciente[]         @relation("RetiroPacientePor")
-  oficiosSolicitados   OficioBaja[]             @relation("OficioSolicitadoPor")
-  oficiosAutorizados   OficioBaja[]             @relation("OficioAutorizadoPor")
-  notasCorreccion      NotaCorreccion[]         @relation("NotaRegistradaPor")
-  seccionesFicha       SeccionPaciente[]        @relation("SeccionActualizadaPor")
-  cambiosFicha         CambioFicha[]            @relation("CambioFichaPor")
-  archivosSubidos      ArchivoPaciente[]        @relation("ArchivoSubidoPor")
-  traslados            Traslado[]               @relation("TrasladoEntregadoPor")
-  informesServicio     InformeServicio[]        @relation("InformeCapturadoPor")
-  operaciones          OperacionIdempotente[]
-  atencionesAtendidas  Atencion[]               @relation("AtencionAtendidaPor")
-  atencionesCanceladas Atencion[]               @relation("AtencionCanceladaPor")
-  constanciasEntrega   ConstanciaEntrega[]      @relation("ConstanciaRegistradaPor")
-  cierresFarmacia      CierreFarmacia[]         @relation("CierreFarmaciaPor")
-  recetasExternas      RecetaExterna[]          @relation("RecetaExternaPor")
-  referencias          Referencia[]             @relation("ReferenciaCreadaPor")
-  contrarreferencias   Referencia[]             @relation("ContrarreferenciaPor")
-  requisicionesRegistradas Requisicion[]        @relation("RequisicionRegistradaPor")
-  requisicionesAutorizadas Requisicion[]        @relation("RequisicionAutorizadaPor")
-  requisicionesDespachadas Requisicion[]        @relation("RequisicionDespachadaPor")
-  requisicionesAnuladas    Requisicion[]        @relation("RequisicionAnuladaPor")
+  establecimiento          Establecimiento          @relation(fields: [establecimientoId], references: [id])
+  ubicacion                Ubicacion?               @relation(fields: [ubicacionId], references: [id], onDelete: SetNull)
+  bitacora                 Bitacora[]
+  dispensaciones           Dispensacion[]
+  movimientos              MovimientoInsumo[]
+  signosEditados           SignoPeligro[]           @relation("SignoActualizadoPor")
+  alertasGestionadas       Alerta[]                 @relation("AlertaEstadoPor")
+  lotesEstado              Lote[]                   @relation("LoteEstadoPor")
+  configLogistica          ConfiguracionLogistica[] @relation("ConfigLogisticaPor")
+  demandasRegistradas      DemandaNoAtendida[]      @relation("DemandaRegistradaPor")
+  inventariosIniciados     InventarioFisico[]       @relation("InventarioIniciadoPor")
+  inventariosCerrados      InventarioFisico[]       @relation("InventarioCerradoPor")
+  inventariosAutoriza      InventarioFisico[]       @relation("InventarioAutorizadoPor")
+  conteos                  ConteoFisico[]           @relation("ConteoPor")
+  bresGenerados            Bres[]                   @relation("BresGeneradoPor")
+  retirosRegistrados       RetiroSanitario[]        @relation("RetiroRegistradoPor")
+  retiroPacientes          RetiroPaciente[]         @relation("RetiroPacientePor")
+  oficiosSolicitados       OficioBaja[]             @relation("OficioSolicitadoPor")
+  oficiosAutorizados       OficioBaja[]             @relation("OficioAutorizadoPor")
+  notasCorreccion          NotaCorreccion[]         @relation("NotaRegistradaPor")
+  seccionesFicha           SeccionPaciente[]        @relation("SeccionActualizadaPor")
+  cambiosFicha             CambioFicha[]            @relation("CambioFichaPor")
+  archivosSubidos          ArchivoPaciente[]        @relation("ArchivoSubidoPor")
+  traslados                Traslado[]               @relation("TrasladoEntregadoPor")
+  informesServicio         InformeServicio[]        @relation("InformeCapturadoPor")
+  operaciones              OperacionIdempotente[]
+  atencionesAtendidas      Atencion[]               @relation("AtencionAtendidaPor")
+  atencionesCanceladas     Atencion[]               @relation("AtencionCanceladaPor")
+  constanciasEntrega       ConstanciaEntrega[]      @relation("ConstanciaRegistradaPor")
+  cierresFarmacia          CierreFarmacia[]         @relation("CierreFarmaciaPor")
+  recetasExternas          RecetaExterna[]          @relation("RecetaExternaPor")
+  referencias              Referencia[]             @relation("ReferenciaCreadaPor")
+  contrarreferencias       Referencia[]             @relation("ContrarreferenciaPor")
+  requisicionesRegistradas Requisicion[]            @relation("RequisicionRegistradaPor")
+  requisicionesAutorizadas Requisicion[]            @relation("RequisicionAutorizadaPor")
+  requisicionesDespachadas Requisicion[]            @relation("RequisicionDespachadaPor")
+  requisicionesAnuladas    Requisicion[]            @relation("RequisicionAnuladaPor")
   mediciones               MedicionTiempo[]
   recepciones              Recepcion[]
-  parametrosPriorizacion   ParametroPriorizacion[] @relation("ParametroPriorizacionPor")
-  configRespaldo       ConfiguracionRespaldo[]  @relation("ConfigRespaldoPor")
+  parametrosPriorizacion   ParametroPriorizacion[]  @relation("ParametroPriorizacionPor")
+  configRespaldo           ConfiguracionRespaldo[]  @relation("ConfigRespaldoPor")
 
   @@index([establecimientoId, rol])
   @@index([ubicacionId], map: "usuario_ubicacion")
@@ -173,10 +173,14 @@ model Paciente {
   discapacidad           String?
 
   // --- Responsable o referente adulto (obligatorio en menores de 18) -------
-  responsableNombre     String? @map("responsable_nombre")
-  responsableParentesco String? @map("responsable_parentesco")
-  responsableTelefono   String? @map("responsable_telefono")
-  responsableDpi        String? @map("responsable_dpi")
+  responsableNombre     String?    @map("responsable_nombre")
+  responsableParentesco String?    @map("responsable_parentesco")
+  responsableTelefono   String?    @map("responsable_telefono")
+  responsableDpi        String?    @map("responsable_dpi")
+  // Si el responsable también es paciente (madre, padre), su ficha.
+  responsableId         Int?       @map("responsable_id")
+  responsable           Paciente?  @relation("ResponsableDe", fields: [responsableId], references: [id], onDelete: SetNull)
+  dependientes          Paciente[] @relation("ResponsableDe")
 
   // --- Datos sensibles: solo rol medico y administrador, con bitacora ------
   orientacionSexual    String? @map("orientacion_sexual")
@@ -205,7 +209,8 @@ model Paciente {
   archivos          ArchivoPaciente[]
 
   // El expediente es correlativo interno: unico por establecimiento, no global.
-  mediciones        MedicionTiempo[]
+  mediciones MedicionTiempo[]
+
   @@unique([establecimientoId, expediente])
   @@index([establecimientoId, apellidos, nombres])
   @@index([establecimientoId, comunidad])
@@ -530,6 +535,7 @@ model Insumo {
 
   // El codigo MSPAS es nacional y se repite entre establecimientos.
   renglonesRequisicion RequisicionRenglon[]
+
   @@unique([establecimientoId, codigoMspas])
   @@index([establecimientoId, nombreGenerico])
   @@index([componente])
@@ -537,23 +543,23 @@ model Insumo {
 }
 
 model Lote {
-  id               Int       @id @default(autoincrement())
-  insumoId         Int       @map("insumo_id")
-  numeroLote       String    @map("numero_lote")
-  fechaVence       DateTime  @map("fecha_vence")
-  fechaFabricacion DateTime? @map("fecha_fabricacion") @db.Date
-  cantidadInicial  Int       @map("cantidad_inicial")
+  id                 Int       @id @default(autoincrement())
+  insumoId           Int       @map("insumo_id")
+  numeroLote         String    @map("numero_lote")
+  fechaVence         DateTime  @map("fecha_vence")
+  fechaFabricacion   DateTime? @map("fecha_fabricacion") @db.Date
+  cantidadInicial    Int       @map("cantidad_inicial")
   // Lo que hay del lote en el centro: bodega mas farmacia.
-  cantidadActual   Int       @map("cantidad_actual")
+  cantidadActual     Int       @map("cantidad_actual")
   // La parte que esta en la farmacia (post-consulta). En bodega: la diferencia.
-  cantidadFarmacia Int       @default(0) @map("cantidad_farmacia")
-  recibidoEn       DateTime  @default(now()) @map("recibido_en")
+  cantidadFarmacia   Int       @default(0) @map("cantidad_farmacia")
+  recibidoEn         DateTime  @default(now()) @map("recibido_en")
   // Si entro por una requisicion a la DDRISS.
-  requisicionId    Int?      @map("requisicion_id")
+  requisicionId      Int?      @map("requisicion_id")
   // Documento con el que llego (despacho de la DDRISS, acta de donacion).
-  recepcionId      Int?      @map("recepcion_id")
+  recepcionId        Int?      @map("recepcion_id")
   // Lo que dice el documento y no llego: cuenta en el saldo, no se entrega.
-  cantidadPorReponer Int     @default(0) @map("cantidad_por_reponer")
+  cantidadPorReponer Int       @default(0) @map("cantidad_por_reponer")
 
   // Procedencia y datos que exige la auditoria.
   fabricante        String?
@@ -613,15 +619,15 @@ model Prescripcion {
 }
 
 model Dispensacion {
-  id             Int      @id @default(autoincrement())
-  prescripcionId Int      @map("prescripcion_id")
-  cantidad       Int
-  parcial        Boolean  @default(false)
-  anulada        Boolean  @default(false)
+  id                 Int      @id @default(autoincrement())
+  prescripcionId     Int      @map("prescripcion_id")
+  cantidad           Int
+  parcial            Boolean  @default(false)
+  anulada            Boolean  @default(false)
   // Inyectable o método de planificación puesto en el centro, no llevado a casa.
-  aplicadaEnServicio Boolean @default(false) @map("aplicada_en_servicio")
-  usuarioId      Int      @map("usuario_id")
-  registradaEn   DateTime @default(now()) @map("registrada_en")
+  aplicadaEnServicio Boolean  @default(false) @map("aplicada_en_servicio")
+  usuarioId          Int      @map("usuario_id")
+  registradaEn       DateTime @default(now()) @map("registrada_en")
 
   prescripcion Prescripcion       @relation(fields: [prescripcionId], references: [id])
   usuario      Usuario            @relation(fields: [usuarioId], references: [id])
@@ -1180,15 +1186,15 @@ model Requisicion {
   anuladaEn         DateTime? @map("anulada_en")
   motivoAnulacion   String?   @map("motivo_anulacion")
 
-  establecimiento   Establecimiento      @relation(fields: [establecimientoId], references: [id])
-  ubicacion         Ubicacion            @relation(fields: [ubicacionId], references: [id])
-  usuarioRegistro   Usuario              @relation("RequisicionRegistradaPor", fields: [registradaPor], references: [id])
-  usuarioAutoriza   Usuario?             @relation("RequisicionAutorizadaPor", fields: [autorizadaPor], references: [id])
-  usuarioDespacha   Usuario?             @relation("RequisicionDespachadaPor", fields: [despachadaPor], references: [id])
-  usuarioAnula      Usuario?             @relation("RequisicionAnuladaPor", fields: [anuladaPor], references: [id])
-  renglones         RequisicionRenglon[]
-  traslado          Traslado?
-  lotes             Lote[]
+  establecimiento Establecimiento      @relation(fields: [establecimientoId], references: [id])
+  ubicacion       Ubicacion            @relation(fields: [ubicacionId], references: [id])
+  usuarioRegistro Usuario              @relation("RequisicionRegistradaPor", fields: [registradaPor], references: [id])
+  usuarioAutoriza Usuario?             @relation("RequisicionAutorizadaPor", fields: [autorizadaPor], references: [id])
+  usuarioDespacha Usuario?             @relation("RequisicionDespachadaPor", fields: [despachadaPor], references: [id])
+  usuarioAnula    Usuario?             @relation("RequisicionAnuladaPor", fields: [anuladaPor], references: [id])
+  renglones       RequisicionRenglon[]
+  traslado        Traslado?
+  lotes           Lote[]
 
   @@unique([establecimientoId, numero], map: "requisicion_numero_unico")
   @@index([ubicacionId, fechaSolicitud], map: "requisicion_ubicacion_fecha")
@@ -1221,14 +1227,14 @@ model RequisicionRenglon {
 /// Informe mensual de un servicio. La tabla de la base conserva su nombre original
 /// (reporte_servicio): cambiarlo exige una migración en el servidor.
 model InformeServicio {
-  id           Int      @id @default(autoincrement())
-  ubicacionId  Int      @map("ubicacion_id")
-  periodo      String   @db.Char(7)
-  capturadoPor Int      @map("capturado_por")
-  capturadoEn  DateTime @default(now()) @map("capturado_en")
-  revisado     Boolean  @default(false)
+  id           Int       @id @default(autoincrement())
+  ubicacionId  Int       @map("ubicacion_id")
+  periodo      String    @db.Char(7)
+  capturadoPor Int       @map("capturado_por")
+  capturadoEn  DateTime  @default(now()) @map("capturado_en")
+  revisado     Boolean   @default(false)
   observacion  String?
-  importado    Boolean  @default(false)
+  importado    Boolean   @default(false)
   // El encargado puede guardarlo a medias; al enviarlo ya no lo cambia él.
   enviadoEn    DateTime? @map("enviado_en")
 
@@ -1435,9 +1441,9 @@ model Referencia {
   contraFechaAlta       DateTime? @map("contra_fecha_alta") @db.Date
   contraRegistradaPor   Int?      @map("contra_registrada_por")
 
-  atencion          Atencion @relation(fields: [atencionId], references: [id])
-  usuario           Usuario  @relation("ReferenciaCreadaPor", fields: [creadaPor], references: [id])
-  usuarioContra     Usuario? @relation("ContrarreferenciaPor", fields: [contraRegistradaPor], references: [id])
+  atencion      Atencion @relation(fields: [atencionId], references: [id])
+  usuario       Usuario  @relation("ReferenciaCreadaPor", fields: [creadaPor], references: [id])
+  usuarioContra Usuario? @relation("ContrarreferenciaPor", fields: [contraRegistradaPor], references: [id])
 
   @@unique([establecimientoId, anio, correlativo], map: "referencia_correlativo_key")
   @@map("referencia")

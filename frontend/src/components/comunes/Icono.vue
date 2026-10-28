@@ -44,6 +44,8 @@ const ICONOS = {
 
   // --- Acciones ---
   buscar: [['circle', '11 11 6.5'], ['path', 'M20 20l-4.3-4.3']],
+  // Embudo de filtrar: distinto de la lupa de buscar.
+  filtro: [['path', 'M4 5h16l-6 7.5V19l-4-2v-4.5L4 5Z']],
   irA: [['path', 'M9.5 5.5l6.5 6.5-6.5 6.5']],
   volver: [['path', 'M14.5 5.5L8 12l6.5 6.5']],
   agregar: [['path', 'M12 5v14M5 12h14']],

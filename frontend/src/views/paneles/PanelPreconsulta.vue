@@ -150,8 +150,13 @@ onUnmounted(() => {
       <span class="text-tinta-2">{{ datos.resumen.superan90 }} {{ datos.resumen.superan90 === 1 ? 'paciente lleva' : 'pacientes llevan' }} más de 90 minutos esperando. La espera más larga: {{ textoEspera(datos.resumen.esperaMaxima) }}.</span>
     </p>
 
-    <!-- Buscador grande: solo si el paciente no aparece en la fila -->
-    <div class="tarjeta p-3">
+    <!-- Paciente nuevo: lo que más se hace, arriba y grande -->
+    <RouterLink to="/pacientes/nuevo" class="boton-primario nuevo flex min-h-[64px] w-full text-lg">
+      <Icono nombre="agregar" :tamano="26" /> Paciente nuevo
+    </RouterLink>
+
+    <!-- Buscador grande: se busca mientras se escribe, con errores y en cualquier orden -->
+    <div class="tarjeta buscador p-3">
       <div class="relative">
         <Icono
           nombre="buscar"
@@ -192,9 +197,10 @@ onUnmounted(() => {
         </li>
       </ul>
 
-      <p v-else-if="buscar.trim().length >= 2" class="px-4 py-3 text-apagado">
-        Sin coincidencias.
-      </p>
+      <div v-else-if="buscar.trim().length >= 2" class="sin-resultado">
+        <span>No aparece «{{ buscar.trim() }}»</span>
+        <RouterLink to="/pacientes/nuevo" class="boton-secundario">Registrarlo como nuevo</RouterLink>
+      </div>
     </div>
 
     <!-- Fila de hoy: lo que de verdad se usa -->
@@ -272,16 +278,8 @@ onUnmounted(() => {
       </ul>
     </div>
 
-    <!-- Paciente nuevo: ancho completo, al fondo -->
-    <RouterLink
-      to="/pacientes/nuevo"
-      class="boton-primario flex min-h-[64px] w-full text-lg"
-    >
-      <Icono nombre="agregar" :tamano="24" /> Paciente nuevo
-    </RouterLink>
-
     <!-- Para organizar el día, no para atender: va plegado -->
-    <div v-if="series" class="panel">
+    <div v-if="series" class="panel analisis">
       <button
         type="button"
         class="flex min-h-tocable w-full items-center justify-between gap-2 px-relleno py-4 text-left"
@@ -309,3 +307,24 @@ onUnmounted(() => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.sin-resultado { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 8px; color: #64748B; }
+/* Tablet: letra y botones grandes para quien no ve bien. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .titulo-pagina { font-size: 32px; }
+  .nuevo { min-height: 84px; font-size: 24px; border-radius: 18px; }
+  .buscador input { height: 68px; font-size: 21px; }
+  .buscador li button { min-height: 88px; }
+  .buscador li .text-lg, .lista .text-lg { font-size: 21px; }
+  .buscador li .text-apagado, .lista .text-apagado { font-size: 17px; }
+  .lista a { min-height: 88px; }
+  .sin-resultado { font-size: 18px; }
+  .enlace { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 12px; background: #EAF3FB; font-size: 17px; }
+  .sin-resultado a { min-height: 56px; font-size: 18px; }
+}
+/* Tablet: lo que no sirve para atender no se muestra. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .analisis { display: none; }
+}
+</style>

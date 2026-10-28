@@ -160,7 +160,7 @@ async function guardar() {
           <template v-else>
             <label :for="`campo-${c.clave}`" class="etiqueta-campo flex flex-wrap items-center gap-x-2">
               {{ c.etiqueta }}
-              <span v-if="c.requerido && vacio(form[c.clave])" class="text-sm font-bold text-advertencia">· mínimo SIGSA</span>
+              <span v-if="c.requerido && vacio(form[c.clave])" class="text-sm font-bold text-advertencia">· falta para el SIGSA</span>
               <span v-if="c.sensible" class="inline-flex items-center gap-1 text-sm font-normal text-apagado">
                 <Icono nombre="escudo" :tamano="14" /> Dato sensible
               </span>

@@ -263,7 +263,7 @@ const ESTADO_PUNTO = { atendido: 'p-bien', en_espera: 'p-atencion', en_atencion:
         <template v-if="puedeRegistrar">
           <RouterLink v-if="atencionAbierta && !atencionAbierta.preconsulta" :to="`/preconsulta/${atencionAbierta.id}`" class="b-btn primario grande"><Icono nombre="agregar" :tamano="22" :grosor="2.4" /> Registrar preconsulta</RouterLink>
           <button v-else-if="!atencionAbierta" type="button" class="b-btn primario grande" :disabled="abriendo" @click="abrirAtencion">
-            <Icono nombre="agregar" :tamano="22" :grosor="2.4" /> {{ abriendo ? 'Abriendo…' : 'Abrir atención' }}
+            <Icono nombre="agregar" :tamano="22" :grosor="2.4" /> {{ abriendo ? 'Abriendo…' : auth.rol === 'preconsulta' ? 'Tomar signos' : 'Abrir atención' }}
           </button>
         </template>
         <RouterLink :to="`/pacientes/${$route.params.id}/ficha`" class="b-btn secundario grande"><Icono nombre="lapiz" :tamano="20" /> Ficha</RouterLink>
@@ -286,10 +286,20 @@ const ESTADO_PUNTO = { atendido: 'p-bien', en_espera: 'p-atencion', en_atencion:
         <span class="d-et"><Icono nombre="llamar" :tamano="15" :grosor="2.2" /> Teléfono</span>
         <span class="d-valor" :class="paciente.telefono ? '' : 'vacio'">{{ paciente.telefono || 'Sin teléfono' }}</span>
       </div>
-      <div v-if="paciente.responsableNombre" class="dato">
+      <component
+        :is="paciente.responsable ? RouterLink : 'div'" v-if="paciente.responsableNombre"
+        :to="paciente.responsable ? `/pacientes/${paciente.responsable.id}` : undefined" class="dato" :class="{ enlace: paciente.responsable }"
+      >
         <span class="d-et"><Icono nombre="usuario" :tamano="15" :grosor="2.2" /> Responsable</span>
         <span class="d-valor">{{ paciente.responsableNombre }}</span>
-        <span v-if="paciente.responsableParentesco" class="d-sub">{{ paciente.responsableParentesco }}</span>
+        <span class="d-sub">{{ [paciente.responsableParentesco, paciente.responsable?.expedientePapel ? `ficha ${paciente.responsable.expedientePapel}` : ''].filter(Boolean).join(' · ') }}<template v-if="paciente.responsable"> · ver su expediente</template></span>
+      </component>
+      <!-- Los hijos que tiene a cargo, cada uno con su expediente -->
+      <div v-if="paciente.dependientes?.length" class="dato">
+        <span class="d-et"><Icono nombre="pacientes" :tamano="15" :grosor="2.2" /> A su cargo</span>
+        <RouterLink v-for="h in paciente.dependientes" :key="h.id" :to="`/pacientes/${h.id}`" class="hijo">
+          {{ h.nombres }} {{ h.apellidos }}<small v-if="h.expedientePapel"> · {{ h.expedientePapel }}</small>
+        </RouterLink>
       </div>
       <div class="dato">
         <span class="d-et"><Icono nombre="reloj" :tamano="15" :grosor="2.2" /> Última atención</span>
@@ -405,7 +415,7 @@ const ESTADO_PUNTO = { atendido: 'p-bien', en_espera: 'p-atencion', en_atencion:
               <span class="min-w-0 flex-1">
                 <b class="block nombre-completo text-tinta">{{ e.insumo.nombreGenerico }}</b>
                 <small>
-                  Lote <RouterLink :to="`/inventario/trazabilidad?lote=${e.lote.id}`" class="font-mono hover:underline">{{ e.lote.numeroLote }}</RouterLink>
+                  Lote <RouterLink :to="`/inventario/trazabilidad?lote=${e.lote.id}`" class="enlace-lote font-mono hover:underline">{{ e.lote.numeroLote }}</RouterLink>
                   · {{ fecha(e.fecha) }}<template v-if="e.entregadoPor"> · entregó {{ e.entregadoPor }}</template>
                 </small>
                 <small v-if="e.medico || e.diagnostico">Recetó {{ e.medico ?? '—' }}<template v-if="e.diagnostico"> · {{ e.diagnostico }}</template></small>
@@ -489,6 +499,9 @@ const ESTADO_PUNTO = { atendido: 'p-bien', en_espera: 'p-atencion', en_atencion:
 .d-valor { font-size: 18px; font-weight: 800; color: #14244A; }
 .d-valor.vacio { color: #94A3B8; }
 .d-sub { font-size: 13px; font-weight: 700; color: #64748B; }
+.dato.enlace:hover { border-color: #2F83C4; }
+.hijo { font-size: 16px; font-weight: 800; color: #174E80; text-decoration: underline; text-underline-offset: 3px; }
+.hijo small { font-weight: 700; color: #64748B; }
 
 /* --- Tareas: lo que pide hacer algo ------------------------------------------- */
 .tareas { display: flex; flex-direction: column; gap: 10px; }
@@ -542,5 +555,10 @@ const ESTADO_PUNTO = { atendido: 'p-bien', en_espera: 'p-atencion', en_atencion:
   .nombre { font-size: 24px; }
   .avatar { width: 64px; height: 64px; font-size: 24px; }
   .heroe-cuerpo, .heroe-acciones { padding-left: 16px; padding-right: 16px; }
+}
+/* Tablet: letras chicas legibles. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .codigo small, .dia small { font-size: 12.5px; }
+  .dato .d-et, .d-sub { font-size: 13px; }
 }
 </style>

@@ -161,7 +161,7 @@ onMounted(cargar);
         <p class="text-sm font-semibold text-apagado">{{ datos.ficha.rango }}</p>
       </div>
       <div v-if="datos.faltantes.length" class="faltan">
-        <p class="b-subtitulo">Mínimos del SIGSA que faltan</p>
+        <p class="b-subtitulo">Falta para el SIGSA</p>
         <div class="mt-1.5 flex flex-wrap gap-1.5">
           <button v-for="f in datos.faltantes" :key="f.campo" type="button" class="b-chip faltante" @click="irAFaltante(f.campo)">{{ f.etiqueta }}</button>
         </div>
@@ -175,8 +175,9 @@ onMounted(cargar);
     <div class="rejilla mt-5">
       <!-- Índice -->
       <nav class="b-panel indice" aria-label="Secciones de la ficha">
-        <p class="b-subtitulo px-2">Secciones<template v-if="datos.secciones.length"> · {{ registradas }} de {{ datos.secciones.length }}</template></p>
-        <button type="button" class="b-btn secundario chico mx-2 mt-2 w-[calc(100%-16px)]" @click="abrirTodo()">{{ todasAbiertas ? 'Cerrar todo' : 'Abrir todo para llenar' }}</button>
+        <p class="b-subtitulo solo-escritorio px-2">Secciones<template v-if="datos.secciones.length"> · {{ registradas }} de {{ datos.secciones.length }}</template></p>
+        <p class="indice-titulo px-2">Toque una parte de la ficha para llenarla</p>
+        <button type="button" class="abrir-todo b-btn secundario chico mx-2 mt-2 w-[calc(100%-16px)]" @click="abrirTodo()">{{ todasAbiertas ? 'Cerrar todo' : 'Abrir todo para llenar' }}</button>
         <ol class="mt-2">
           <li v-for="s in indice" :key="s.id">
             <button type="button" class="entrada" @click="ir(s.id)">
@@ -189,6 +190,9 @@ onMounted(cargar);
                 </span>
               </span>
               <span class="progreso" :class="porcentaje(s.avance) === 100 ? 'lleno' : ''"><span :style="{ width: `${s.registrada ? porcentaje(s.avance) : 0}%` }" /></span>
+              <span class="sello-indice" :class="porcentaje(s.avance) === 100 ? 'lista' : s.registrada ? 'faltan' : 'vacia'">
+                {{ porcentaje(s.avance) === 100 ? 'Lista ✓' : s.registrada && s.avance ? `Faltan ${s.avance.total - s.avance.respondidas}` : 'Sin llenar' }}
+              </span>
             </button>
           </li>
         </ol>
@@ -301,14 +305,42 @@ onMounted(cargar);
 .b-chip.faltante { height: 32px; padding: 0 10px; border-color: #F5D58A; background: #FFF7E6; color: #7A4F05; }
 .b-chip.faltante:hover { border-color: #D98208; }
 .rejilla { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 20px; align-items: start; }
-@media (max-width: 1099px) { .rejilla { grid-template-columns: 1fr; } }
 .indice { position: sticky; top: 90px; padding: 14px 10px; }
+/* Pantalla angosta: el índice va arriba, sin quedarse pegado tapando lo que se llena. */
+@media (max-width: 1099px) {
+  .rejilla { grid-template-columns: 1fr; }
+  .indice { position: static; }
+  /* El título no se aprieta contra los datos que faltan: van debajo. */
+  .faltan { flex-basis: 100%; max-width: none; }
+  .indice ol { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 10px; }
+}
+@media (pointer: coarse) and (min-width: 600px) {
+  .entrada { min-height: 60px; padding: 10px 12px; border: 2px solid #EEF2F6; }
+  .entrada .text-sm { font-size: 17px; }
+  .entrada .text-xs { font-size: 15px; }
+  /* Abajo están las mismas secciones con su estado: el índice sobra y confunde. */
+  .indice { display: none; }
+  .grupo { text-transform: none; letter-spacing: 0; font-size: 18px; font-weight: 800; color: #334155; }
+  .sello-indice { display: inline-block; }
+  .indice-titulo { display: block; margin-bottom: 8px; }
+  .solo-escritorio { display: none; }
+  .b-chip.faltante { height: 44px; padding: 0 14px; font-size: 16px; }
+  .grupo { font-size: 16px; }
+}
 .entrada { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border-radius: 10px; text-align: left; }
 .entrada:hover { background: #F1F5F9; }
 .progreso { flex-shrink: 0; width: 44px; height: 6px; border-radius: 3px; background: #E2E8F0; overflow: hidden; }
 .progreso span { display: block; height: 100%; background: #172A5A; }
 .progreso.lleno span { background: #22A06B; }
+.indice-titulo { display: none; font-size: 19px; font-weight: 800; color: #14244A; }
+.sello-indice { display: none; flex-shrink: 0; padding: 3px 10px; border-radius: 9px; font-size: 14px; font-weight: 800; white-space: nowrap; }
+.sello-indice.lista { background: #E3F5EC; color: #17784F; }
+.sello-indice.faltan { background: #FFF1DB; color: #8A4B00; }
+.sello-indice.vacia { background: #F1F5F9; color: #64748B; }
 .grupo { padding: 14px 4px 2px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #64748B; }
 /* --- Relieve (estilo duo) --- */
 .codigo { border-bottom-width: 4px; border-radius: 14px; }
+@media (pointer: coarse) and (min-width: 600px) {
+  .codigo small { font-size: 12.5px; }
+}
 </style>

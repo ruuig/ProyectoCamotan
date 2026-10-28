@@ -7,7 +7,7 @@ import { useLogoStore } from '../stores/logo';
 import BarraConexion from '../components/comunes/BarraConexion.vue';
 import LogoInstitucional from '../components/comunes/LogoInstitucional.vue';
 import BotonInstalar from '../components/comunes/BotonInstalar.vue';
-import { TAMANOS, tamanoActual, aplicarTamano, completa, alternarPantallaCompleta } from '../dominio/ampliar';
+import { TAMANOS, tamanoActual, aplicarTamano, completa, alternarPantallaCompleta, tactil } from '../dominio/ampliar';
 import Icono from '../components/comunes/Icono.vue';
 import CambiarContrasena from '../components/comunes/CambiarContrasena.vue';
 import bodega from '../services/bodega';
@@ -211,6 +211,46 @@ async function salir() {
 
 onMounted(() => establecimiento.cargar());
 
+// --- Tablet: botones abajo, como en una aplicación ---------------------------
+// Con pocos módulos (preconsulta tiene tres) van siempre a la vista abajo, con
+// su nombre; con muchos se sigue usando el menú.
+const NOMBRE_CORTO = { 'Panel de inicio': 'Inicio', 'Cola de atención': 'Fila' };
+const enlacesAbajo = computed(() => gruposVisibles.value.flatMap((g) => g.enlaces));
+const barraAbajo = computed(() => tactil.value && !completa.value && enlacesAbajo.value.length <= 5);
+// Los botones fijos de abajo (Registrar, Guardar) se paran encima de la barra.
+watch(barraAbajo, (si) => document.documentElement.classList.toggle('con-barra', si), { immediate: true });
+// Lo pensado para preconsulta (personas mayores) se activa solo con su usuario.
+watch(() => auth.rol, (rol, antes) => {
+  if (antes) document.documentElement.classList.remove(`rol-${antes}`);
+  if (rol) document.documentElement.classList.add(`rol-${rol}`);
+}, { immediate: true });
+
+// Gestos: deslizar desde la orilla izquierda abre el menú; hacia la izquierda lo cierra.
+let toque = null;
+function alTocar(e) {
+  const t = e.touches[0];
+  toque = { x: t.clientX, y: t.clientY };
+}
+function alSoltar(e) {
+  if (!toque) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - toque.x;
+  const dy = Math.abs(t.clientY - toque.y);
+  if (dy < 60) {
+    if (!menuAbierto.value && toque.x < 40 && dx > 70) menuAbierto.value = true;
+    else if (menuAbierto.value && dx < -70) menuAbierto.value = false;
+  }
+  toque = null;
+}
+onMounted(() => {
+  window.addEventListener('touchstart', alTocar, { passive: true });
+  window.addEventListener('touchend', alSoltar, { passive: true });
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('touchstart', alTocar);
+  window.removeEventListener('touchend', alSoltar);
+});
+
 const tamano = ref(tamanoActual());
 function cambiarTamano(paso) {
   const i = Math.min(TAMANOS.length - 1, Math.max(0, TAMANOS.indexOf(tamano.value) + paso));
@@ -281,10 +321,13 @@ function cambiarTamano(paso) {
     />
     <aside
       v-if="menuAbierto"
-      class="fixed inset-y-0 left-0 z-50 w-[248px] overflow-y-auto border-r border-linea
+      class="menu-movil fixed inset-y-0 left-0 z-50 w-[248px] overflow-y-auto border-r border-linea
              bg-superficie panel:hidden"
       aria-label="Módulos del sistema"
     >
+      <button type="button" class="cerrar-menu" @click="menuAbierto = false">
+        <Icono nombre="cerrar" :tamano="22" :grosor="2.4" /> Cerrar
+      </button>
       <div class="marca-lateral">
         <img :src="logo.horizontal" alt="Ministerio de Salud Pública y Asistencia Social" class="marca-logo" />
         <span class="marca-centro">
@@ -336,15 +379,17 @@ function cambiarTamano(paso) {
             </span>
           </template>
           <button
-            v-else
+            v-else-if="!barraAbajo"
             type="button"
-            class="rounded-control border border-linea p-2.5 text-tinta-2 panel:hidden"
+            class="boton-menu rounded-control border border-linea p-2.5 text-tinta-2 panel:hidden"
             aria-label="Abrir menú"
             @click="menuAbierto = true"
           >
             <Icono nombre="cola" :tamano="20" />
+            <span class="texto-menu">Menú</span>
           </button>
-          <p class="truncate text-apagado">{{ hoy }}</p>
+          <p v-if="!tactil" class="truncate text-apagado">{{ hoy }}</p>
+          <span v-else-if="barraAbajo" class="nombre-centro">{{ establecimiento.nombre || 'Centro de Salud' }}</span>
         </div>
 
         <div class="flex shrink-0 items-center gap-3">
@@ -355,6 +400,7 @@ function cambiarTamano(paso) {
             <button type="button" title="Letra más grande" aria-label="Letra más grande" :disabled="tamano === TAMANOS[TAMANOS.length - 1]" @click="cambiarTamano(1)">A+</button>
           </div>
           <button
+            v-if="!tactil"
             type="button"
             class="boton-completa hidden sm:inline-flex"
             :title="completa ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'"
@@ -396,9 +442,28 @@ function cambiarTamano(paso) {
 
       <BarraConexion />
 
-      <main class="contenido-principal px-5 py-bloque lg:px-8" :class="{ 'solo-consulta': soloConsulta }">
+      <main class="contenido-principal px-5 py-bloque lg:px-8" :class="{ 'solo-consulta': soloConsulta, 'con-barra-abajo': barraAbajo }">
         <RouterView :key="route.path" />
       </main>
+
+      <!-- Tablet: los módulos abajo, siempre a la vista, con ícono y nombre -->
+      <nav v-if="barraAbajo" class="barra-abajo" aria-label="Módulos">
+        <RouterLink
+          v-for="enlace in enlacesAbajo"
+          :key="enlace.ruta"
+          :to="enlace.ruta"
+          class="boton-abajo"
+          :active-class="enlace.exacto ? '' : 'activo'"
+          exact-active-class="activo"
+          :class="{ activo: enlace.tambien?.some((p) => route.path.startsWith(p)) }"
+        >
+          <span class="ic-abajo">
+            <Icono :nombre="enlace.icono" :tamano="28" :grosor="2.2" />
+            <span v-if="enlace.contador && contadores[enlace.contador]" class="contador-abajo">{{ contadores[enlace.contador] }}</span>
+          </span>
+          {{ NOMBRE_CORTO[enlace.etiqueta] ?? enlace.etiqueta }}
+        </RouterLink>
+      </nav>
     </div>
   </div>
 </template>
@@ -417,6 +482,26 @@ function cambiarTamano(paso) {
 .tamano-letra button:hover:not(:disabled) { background: #EEF3F9; }
 .tamano-letra button:disabled { color: #B8C2D0; }
 .tamano-letra .pct { min-width: 48px; text-align: center; font-size: 13px; font-weight: 700; line-height: 44px; color: #64748B; border-inline: 1px solid #E2E8F0; }
+.boton-menu { display: inline-flex; align-items: center; gap: 8px; }
+.nombre-centro { font-size: 17px; font-weight: 800; color: #14244A; }
+.barra-abajo { position: fixed; inset: auto 0 0 0; z-index: 35; display: flex; gap: 6px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); border-top: 2px solid #E2E8F0; background: #fff; box-shadow: 0 -6px 20px -12px rgba(15, 23, 42, .35); }
+.boton-abajo { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 76px; border-radius: 16px; font-size: 18px; font-weight: 800; color: #475569; }
+.boton-abajo.activo { background: #EAF3FB; color: #174E80; box-shadow: inset 0 -4px 0 #2F83C4; }
+.ic-abajo { position: relative; display: grid; place-items: center; }
+.contador-abajo { position: absolute; top: -6px; right: -14px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; background: #D64545; color: #fff; font-size: 13px; line-height: 24px; text-align: center; }
+.con-barra-abajo { padding-bottom: 120px !important; }
+.cerrar-menu { display: flex; align-items: center; gap: 6px; margin: 10px 12px 0 auto; padding: 8px 12px; border: 1px solid #D5DCE6; border-radius: 12px; font-size: 14px; font-weight: 800; color: #172A5A; }
+.texto-menu { display: none; }
+/* Tablet: el menú se ve y se toca sin atinarle a un cuadrito. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .boton-menu { height: 56px; padding: 0 18px 0 14px; border-width: 2px; border-bottom-width: 4px; border-radius: 14px; color: #172A5A; }
+  .boton-menu svg { width: 26px; height: 26px; }
+  .texto-menu { display: inline; font-size: 18px; font-weight: 800; }
+  .menu-movil { width: 320px; }
+  .cerrar-menu { min-height: 52px; padding: 0 16px; border-width: 2px; font-size: 18px; }
+  .menu-movil .menu-enlace { min-height: 60px; font-size: 19px; font-weight: 700; }
+  .menu-movil .menu-enlace svg { width: 26px; height: 26px; }
+}
 .boton-completa { align-items: center; gap: 8px; height: 44px; padding: 0 13px; border: 1px solid #D5DCE6; border-radius: 12px; font-size: 14px; font-weight: 700; color: #172A5A; }
 .boton-completa:hover { background: #EEF3F9; }
 /* Marca de la barra lateral: el logo del Ministerio completo y, debajo, el

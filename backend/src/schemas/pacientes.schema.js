@@ -63,6 +63,8 @@ const crear = z
     responsableParentesco: texto(20),
     responsableTelefono: texto(20),
     responsableDpi: texto(20),
+    // La madre o el padre que también es paciente.
+    responsableId: z.coerce.number().int().positive().optional().nullable(),
     confirmarDuplicado: z.boolean().default(false),
   })
   .refine(
@@ -110,6 +112,7 @@ const fichaCompleta = z.object({
   responsableParentesco: texto(20),
   responsableTelefono: texto(20),
   responsableDpi: texto(20),
+  responsableId: z.coerce.number().int().positive().optional().nullable(),
   // Sensibles: el controlador rechaza si el rol no corresponde.
   orientacionSexual: texto(10),
   identidadGenero: texto(40),
@@ -154,6 +157,19 @@ const listar = z.object({
   limite: z.coerce.number().int().min(1).max(100).default(25),
 });
 
+// Ficha de papel que le toca a quien se registra, y quiénes ya tienen una.
+const fichaPapel = z.object({
+  apellidos: z.string().trim().max(120).optional(),
+  ficha: z.string().trim().max(30).optional(),
+  excluir: z.coerce.number().int().positive().optional(),
+});
+
+// Lo que se está escribiendo en nombres o apellidos, para sugerir.
+const sugerir = z.object({
+  campo: z.enum(['nombres', 'apellidos']),
+  texto: z.string().trim().min(1).max(120),
+});
+
 const parametroId = z.object({
   id: z.coerce.number().int().positive('Identificador de paciente inválido'),
 });
@@ -194,6 +210,8 @@ module.exports = {
   actualizar,
   fichaCompleta,
   listar,
+  fichaPapel,
+  sugerir,
   parametroId,
   parametroSeccion,
   parametroArchivo,

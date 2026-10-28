@@ -21,6 +21,7 @@ const { etapaDeVida, camposVisibles } = require('../services/etapaVida.service')
 const { describirEpisodio, fechaProbableParto } = require('../services/embarazo.service');
 const { CAMPOS_SENSIBLES } = require('../schemas/pacientes.schema');
 const { analizarCui } = require('../services/cui.service');
+const { siguienteFicha, duenosDeFicha, sugerirPalabras } = require('../services/fichaPapel.service');
 
 const MOTIVO_CUI = {
   verificador: 'El CUI no es válido: el dígito verificador no corresponde. Revise los números.',
@@ -193,6 +194,21 @@ async function buscarPosiblesDuplicados(establecimientoId, datos, idExcluido = n
   return detectarDuplicados(candidatos, datos);
 }
 
+// Letras de diferencia que se toleran según el largo de lo escrito.
+const toleranciaDe = (palabra) => (palabra.length <= 3 ? 0 : palabra.length <= 5 ? 1 : 2);
+
+/**
+ * Letras de diferencia entre lo escrito (w) y una palabra del nombre (p).
+ * Si el nombre empieza con lo escrito es 0 (se está terminando de escribir).
+ * Dos letras al revés cuentan como una: «jaun» está a 1 de «juan».
+ */
+const distanciaPalabra = (w) => Prisma.sql`CASE
+  WHEN p LIKE ${w + '%'} THEN 0
+  WHEN length(p) = ${w.length}::int AND (SELECT string_agg(c, '' ORDER BY c) FROM regexp_split_to_table(p, '') c) = ${[...w].sort().join('')}
+    THEN LEAST(1, levenshtein(${w}, p))
+  ELSE levenshtein(${w}, left(p, ${w.length + 2}::int))
+END`;
+
 async function listar(req, res) {
   const {
     buscar, comunidad, lugarPobladoId, sexo, edadMinima, edadMaxima, etapa,
@@ -245,11 +261,25 @@ async function listar(req, res) {
     // constructor de consultas: se resuelve aparte y se filtra por id.
     await prisma.$executeRawUnsafe(`SET pg_trgm.similarity_threshold = ${SIMILITUD_MINIMA}`);
 
+    // Palabra por palabra, en cualquier orden y con errores: «juan peres» o
+    // «jaun perez» encuentran a «Pérez López, Juan». Cada palabra escrita se
+    // compara con la más parecida del nombre: cuántas letras hay que cambiar.
+    const palabras = interpretado.valor.split(/\s+/).filter((w) => w.length >= 2).slice(0, 6);
+    const distancia = (w) => Prisma.sql`(SELECT MIN(${distanciaPalabra(w)}) FROM unnest(string_to_array(nombre_busqueda, ' ')) AS p)`;
+    const porPalabras = palabras.length
+      ? Prisma.join(palabras.map((w) => Prisma.sql`${distancia(w)} <= ${toleranciaDe(w)}::int`), ' AND ')
+      : Prisma.sql`FALSE`;
+    // 1 si todas empiezan igual; baja con cada letra de diferencia.
+    const puntajePalabras = palabras.length
+      ? Prisma.sql`1 - (${Prisma.join(palabras.map(distancia), ' + ')})::float / ${palabras.length * 4}::int`
+      : Prisma.sql`0`;
+
     const filas = await prisma.$queryRaw`
       SELECT id,
              GREATEST(
                similarity(nombre_busqueda, ${interpretado.valor}),
-               similarity(responsable_busqueda, ${interpretado.valor})
+               similarity(responsable_busqueda, ${interpretado.valor}),
+               ${puntajePalabras}
              ) AS puntaje
       FROM paciente
       WHERE establecimiento_id = ${establecimientoId}
@@ -257,7 +287,8 @@ async function listar(req, res) {
         AND (nombre_busqueda % ${interpretado.valor}
              OR nombre_busqueda LIKE ${'%' + interpretado.valor + '%'}
              OR responsable_busqueda % ${interpretado.valor}
-             OR responsable_busqueda LIKE ${'%' + interpretado.valor + '%'})
+             OR responsable_busqueda LIKE ${'%' + interpretado.valor + '%'}
+             OR (${porPalabras}))
       ORDER BY puntaje DESC
       LIMIT 500`;
 
@@ -354,6 +385,9 @@ async function obtener(req, res, next) {
       },
       embarazos: { where: { estado: 'activo' } },
       lugarPoblado: true,
+      // La madre o el padre con su propia ficha, y los hijos que tiene a cargo.
+      responsable: { select: { id: true, nombres: true, apellidos: true, expedientePapel: true } },
+      dependientes: { where: { activo: true }, select: { id: true, nombres: true, apellidos: true, expedientePapel: true, fechaNacimiento: true }, orderBy: { fechaNacimiento: 'desc' } },
     },
   });
 
@@ -455,6 +489,8 @@ async function crear(req, res, next) {
 
   const cuiRegistrado = await errorCuiRegistrado(datos.cui, establecimientoId);
   if (cuiRegistrado) return next(cuiRegistrado);
+  const fallaResponsable = await errorResponsable(datos.responsableId, establecimientoId);
+  if (fallaResponsable) return next(fallaResponsable);
 
   const duplicados = await buscarPosiblesDuplicados(establecimientoId, datos);
 
@@ -539,6 +575,9 @@ async function actualizar(req, res, next) {
 
   // Sin trabajo no hay nada que especificar.
   if (datos.trabaja === false) datos.trabajoEspecifique = null;
+
+  const fallaResponsable = await errorResponsable(datos.responsableId, establecimientoId, req.params.id);
+  if (fallaResponsable) return next(fallaResponsable);
 
   if (edadDeclarada) {
     const nacimiento = resolverNacimiento({ ...datos, edadDeclarada });
@@ -726,4 +765,39 @@ async function historial(req, res, next) {
   res.json({ atenciones });
 }
 
-module.exports = { listar, obtener, crear, actualizar, revisarDuplicados, historial };
+/**
+ * La ficha de papel que sigue para esos apellidos (P-570 después de P-569) y,
+ * si se escribió una, quiénes ya la tienen: una familia puede compartirla.
+ */
+async function fichaPapel(req, res) {
+  const establecimientoId = req.usuario.establecimientoId;
+  const { apellidos, ficha, excluir } = req.query;
+  const [siguiente, duenos] = await Promise.all([
+    apellidos ? siguienteFicha(establecimientoId, apellidos) : null,
+    ficha ? duenosDeFicha(establecimientoId, ficha, excluir) : [],
+  ]);
+  res.json({
+    siguiente,
+    duenos: duenos.map((d) => ({ id: d.id, nombre: `${d.nombres} ${d.apellidos}`, edad: calcularEdad(d.fechaNacimiento) })),
+  });
+}
+
+/** Nombres o apellidos ya registrados parecidos a lo que se escribe. */
+async function sugerir(req, res) {
+  res.json({ palabras: await sugerirPalabras(req.usuario.establecimientoId, req.query.campo, req.query.texto) });
+}
+
+/**
+ * El responsable que también es paciente: debe ser de este centro y no puede
+ * ser el mismo paciente. Devuelve el error o null.
+ */
+async function errorResponsable(responsableId, establecimientoId, idPropio = null) {
+  if (!responsableId) return null;
+  if (responsableId === idPropio) {
+    return { status: 400, codigo: 'responsable_invalido', mensaje: 'El paciente no puede ser su propio responsable' };
+  }
+  const existe = await prisma.paciente.findFirst({ where: { id: responsableId, establecimientoId }, select: { id: true } });
+  return existe ? null : { status: 400, codigo: 'responsable_invalido', mensaje: 'El responsable elegido no está registrado en este centro' };
+}
+
+module.exports = { listar, obtener, crear, actualizar, revisarDuplicados, historial, fichaPapel, sugerir };

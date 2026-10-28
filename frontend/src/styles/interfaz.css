@@ -235,3 +235,43 @@ a.b-boleto:hover, button.b-boleto:hover { border-color: #64748B; }
   .b-titulo { font-size: 25px; }
   .b-cabecera { gap: 8px 12px; }
 }
+
+/* --- Tablet (pantalla táctil de 600 px o más) ---------------------------------
+   Preconsulta trabaja en una tablet y la usan personas mayores: todo lo que se
+   toca y se lee, más grande. En la computadora y en el celular no cambia nada. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .b-volver {
+    min-height: 52px; padding: 0 18px 0 12px; margin-bottom: 12px; border: 2px solid #CBD5E1; border-bottom-width: 4px;
+    border-radius: 14px; background: #fff; font-size: 18px; font-weight: 800; color: #172A5A;
+  }
+  .b-volver svg { width: 24px; height: 24px; }
+  .b-titulo { font-size: 30px; }
+  .b-etiqueta { margin-bottom: 8px; font-size: 15px; }
+  .b-opcional { font-size: 14px; }
+  .b-campo, .campo { height: 60px; padding: 0 16px; border-radius: 14px; font-size: 20px; }
+  textarea.b-campo, textarea.campo { min-height: 110px; padding: 14px 16px; font-size: 19px; }
+  select.b-campo, select.campo { padding-right: 40px; }
+  .b-btn { height: 58px; padding: 0 24px; border-radius: 14px; font-size: 18px; }
+  .b-btn svg { width: 22px; height: 22px; }
+  .b-btn.chico { height: 48px; padding: 0 16px; font-size: 16px; }
+  .b-segmentado button, .b-segmentado a { padding: 14px 22px; font-size: 17px; }
+  .b-chip { min-height: 44px; font-size: 16px; }
+  .b-form-seccion { grid-template-columns: 1fr; gap: 14px; padding: 24px 0; }
+  .b-form-seccion > header h2 { font-size: 20px; font-weight: 800; }
+  .b-rejilla { gap: 20px 18px; }
+  .b-aviso { font-size: 17px; }
+  /* Enlaces de texto (historial, lote): con espacio para el dedo. */
+  .enlace, .enlace-lote { display: inline-flex; align-items: center; min-height: 40px; padding: 0 10px; }
+  /* Etiquetas como se escribe normalmente, no en MAYÚSCULAS grises. */
+  .b-etiqueta, .etiqueta-campo, .b-subtitulo { font-size: 17px; font-weight: 800; letter-spacing: 0; text-transform: none; color: #1E293B; }
+}
+
+/* Con la barra de botones abajo (tablet), lo fijo de abajo se para encima. */
+html.con-barra { --abajo: 94px; }
+
+/* --- Solo el usuario de preconsulta (personas mayores) ------------------------ */
+/* La ficha: el sello ya dice cuánto falta; no se repite «3 de 17». */
+html.rol-preconsulta .numeros-seccion { display: none; }
+/* Fila: los números son datos, no botones; el aviso de otro día sí es botón. */
+html.rol-preconsulta .cifra, html.rol-preconsulta .cifra.principal { border: 0; box-shadow: none; background: transparent; }
+html.rol-preconsulta .anteriores > button { padding: 10px 14px; border: 2px solid #CBD5E1; border-bottom-width: 4px; border-radius: 14px; background: #fff; color: #174E80; font-weight: 800; }

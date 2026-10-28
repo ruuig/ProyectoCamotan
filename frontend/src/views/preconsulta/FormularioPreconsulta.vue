@@ -108,7 +108,7 @@ const COLOR_CLASIFICACION = {
 // Agrupados por como se toman en la practica, no como columnas de una tabla.
 const GRUPOS_CAMPOS = [
   {
-    titulo: 'Antropometría',
+    titulo: 'Talla',
     icono: 'crecimiento',
     // El peso se captura aparte, con su selector de unidad.
     campos: [
@@ -120,20 +120,19 @@ const GRUPOS_CAMPOS = [
     icono: 'alerta',
     campos: [
       { clave: 'temperatura', etiqueta: 'Temperatura', unidad: '°C', paso: '0.1' },
-      { clave: 'frecCardiaca', etiqueta: 'Frec. cardíaca', unidad: 'lpm', paso: '1' },
-      { clave: 'frecRespiratoria', etiqueta: 'Frec. respiratoria', unidad: 'rpm', paso: '1' },
-      { clave: 'satOxigeno', etiqueta: 'Saturación O2', unidad: '%', paso: '1' },
-      { clave: 'presionSis', etiqueta: 'Presión sistólica', unidad: '', paso: '1' },
-      { clave: 'presionDia', etiqueta: 'Presión diastólica', unidad: '', paso: '1' },
+      { clave: 'frecCardiaca', etiqueta: 'Frecuencia cardíaca', unidad: 'por minuto', paso: '1' },
+      { clave: 'frecRespiratoria', etiqueta: 'Frecuencia respiratoria', unidad: 'por minuto', paso: '1' },
+      { clave: 'satOxigeno', etiqueta: 'Saturación de oxígeno', unidad: '%', paso: '1' },
+      { clave: 'presionSis', etiqueta: 'Presión: el de arriba', unidad: 'sistólica', paso: '1' },
+      { clave: 'presionDia', etiqueta: 'Presión: el de abajo', unidad: 'diastólica', paso: '1' },
     ],
   },
   {
     titulo: 'Solo en menores de 5 años',
     icono: 'pacientes',
-    nota: 'El perímetro braquial es el indicador mas directo de desnutrición aguda.',
     campos: [
-      { clave: 'perimetroBraquial', etiqueta: 'Perim. braquial', unidad: 'mm', paso: '1' },
-      { clave: 'perimetroCefalico', etiqueta: 'Perim. cefálico', unidad: 'cm', paso: '0.1' },
+      { clave: 'perimetroBraquial', etiqueta: 'Perímetro del brazo', unidad: 'mm', paso: '1' },
+      { clave: 'perimetroCefalico', etiqueta: 'Perímetro de la cabeza', unidad: 'cm', paso: '0.1' },
     ],
   },
 ];
@@ -462,7 +461,7 @@ onMounted(async () => {
           <span class="font-normal text-apagado">· Exp. {{ paciente.expedientePapel || paciente.expediente }}</span>
         </p>
         <div class="mt-2 flex flex-wrap gap-2">
-          <button v-if="esNueva" type="button" class="b-btn secundario chico" @click="volver">Salir sin abrir la atención</button>
+          <button v-if="esNueva" type="button" class="b-btn secundario chico" @click="volver">Salir sin guardar</button>
           <button v-else-if="!cancelando" type="button" class="b-btn secundario chico" @click="cancelando = true">Cancelar atención</button>
         </div>
         <div v-if="cancelando" class="tarjeta mt-2 flex flex-wrap items-end gap-3 p-4">
@@ -491,8 +490,7 @@ onMounted(async () => {
 
       <!-- Pueblo: solo si falta en la ficha -->
       <div v-if="faltaPueblo" class="tarjeta p-5">
-        <h2 class="panel-titulo">Pueblo</h2>
-        <p class="mb-3 text-sm text-apagado">Dato que pide el SIGSA; queda en la ficha.</p>
+        <h2 class="panel-titulo mb-3">Pueblo <span class="falta-ficha">falta en la ficha</span></h2>
         <div class="pueblos" role="radiogroup" aria-label="Pueblo">
           <button v-for="o in OPCIONES_PUEBLO" :key="o.clave" type="button" role="radio" :aria-checked="puebloElegido === o.clave" :class="{ on: puebloElegido === o.clave }" @click="puebloElegido = puebloElegido === o.clave ? '' : o.clave">{{ o.texto }}</button>
         </div>
@@ -601,7 +599,7 @@ onMounted(async () => {
           <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
             <fieldset>
               <legend class="etiqueta-campo">Nivel de conciencia</legend>
-              <div class="b-segmentado flex-wrap" role="radiogroup" aria-label="Nivel de conciencia">
+              <div class="conciencia" role="radiogroup" aria-label="Nivel de conciencia">
                 <button
                   v-for="[valor, texto] in CONCIENCIA"
                   :key="valor"
@@ -641,26 +639,22 @@ onMounted(async () => {
             <Etiqueta tono="urgente">{{ seleccionados.length }} marcado(s)</Etiqueta>
           </span>
         </h2>
-        <p class="mb-3 text-slate-500">
-          Cada signo sube la prioridad.
-        </p>
+        <p class="mb-3 text-slate-600">Toque los que tenga.</p>
 
         <div class="grid gap-2 sm:grid-cols-2">
           <label
             v-for="signo in signosDelPaciente"
             :key="signo.id"
-            class="flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition"
-            :class="seleccionados.includes(signo.codigo)
-              ? 'border-mspas-700 bg-slate-50'
-              : 'border-slate-200 hover:border-mspas-300 hover:bg-slate-50'"
+            class="signo-peligro"
+            :class="{ marcado: seleccionados.includes(signo.codigo) }"
           >
             <input
               v-model="seleccionados"
               type="checkbox"
               :value="signo.codigo"
-              class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-mspas-700
-                     focus:ring-celeste-300"
+              class="sr-only"
             />
+            <span class="cuadro" aria-hidden="true">{{ seleccionados.includes(signo.codigo) ? '✓' : '' }}</span>
             <span class="min-w-0">
               <span class="font-medium text-slate-800">{{ signo.descripcion }}</span>
               <span v-if="signo.grupoEtario !== 'todos'" class="block text-sm text-slate-500">
@@ -732,13 +726,22 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="mt-3">
+      <div class="mt-3 registrar-original">
         <button type="submit" :disabled="guardando" class="boton-primario w-full">
           <Icono nombre="guardar" :tamano="19" />
           {{ guardando ? 'Guardando...' : `Registrar · ${ESTILO_NIVEL[gravedadFinal].texto}` }}
         </button>
       </div>
       </aside>
+
+      <!-- Siempre a la vista: el nivel y el botón de registrar, sin bajar hasta el final -->
+      <div class="barra-registrar">
+        <span class="nivel-actual" :class="`nivel-${gravedadFinal}`">{{ ESTILO_NIVEL[gravedadFinal].texto }}</span>
+        <button type="submit" :disabled="guardando" class="boton-primario">
+          <Icono nombre="guardar" :tamano="22" />
+          {{ guardando ? 'Guardando...' : 'Registrar' }}
+        </button>
+      </div>
     </form>
   </section>
 </template>
@@ -808,4 +811,33 @@ onMounted(async () => {
 .pueblos button { min-height: 52px; padding: 0 18px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 14px; background: #fff; font-size: 16px; font-weight: 800; color: #334155; }
 .pueblos button:hover { border-color: #9FCDEC; }
 .pueblos button.on { border-color: #2F83C4; background: #EAF3FB; color: #174E80; }
+/* Tablet: letras chicas legibles. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .niveles button small, .triaje-sello { font-size: 12.5px; }
+}
+/* --- Para personas mayores --- */
+.falta-ficha { margin-left: 8px; padding: 2px 10px; border-radius: 8px; background: #FFF1DB; color: #8A4B00; font-size: 14px; font-weight: 800; }
+.conciencia { display: flex; flex-wrap: wrap; gap: 8px; }
+.conciencia button { min-height: 52px; padding: 0 18px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 14px; background: #fff; font-size: 16px; font-weight: 800; color: #334155; }
+.conciencia button.on { border-color: #2F83C4; background: #EAF3FB; color: #174E80; }
+.signo-peligro { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 12px 14px; border: 2px solid #E2E8F0; border-bottom-width: 4px; border-radius: 16px; background: #fff; cursor: pointer; }
+.signo-peligro .font-medium { font-size: 17px; font-weight: 700; }
+.signo-peligro .cuadro { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border: 3px solid #94A3B8; border-radius: 10px; font-size: 22px; font-weight: 900; color: #fff; }
+.signo-peligro.marcado { border-color: #C03535; background: #FDECEC; }
+.signo-peligro.marcado .cuadro { border-color: #C03535; background: #C03535; }
+.signo-peligro:focus-within { box-shadow: 0 0 0 3px #DCE4F5; }
+.barra-registrar { display: none; }
+@media (pointer: coarse) and (min-width: 600px) {
+  .registrar-original { display: none; }
+  .barra-registrar { position: fixed; left: 0; right: 0; bottom: var(--abajo, 0px); z-index: 30; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 2px solid #E2E8F0; background: #fff; box-shadow: 0 -8px 20px -14px rgba(15, 23, 42, .4); }
+  .barra-registrar .boton-primario { flex: 1; min-height: 64px; font-size: 21px; }
+  form { padding-bottom: 100px; }
+  .nivel-actual { flex-shrink: 0; min-width: 130px; padding: 12px 16px; border-radius: 14px; font-size: 19px; font-weight: 900; text-align: center; color: #fff; }
+  .nivel-actual.nivel-leve { background: #1E8E5E; }
+  .nivel-actual.nivel-moderado { background: #D98208; }
+  .nivel-actual.nivel-urgente { background: #C03535; }
+  .conciencia button { min-height: 60px; font-size: 18px; }
+  .signo-peligro { min-height: 72px; }
+  .signo-peligro .font-medium { font-size: 18px; }
+}
 </style>

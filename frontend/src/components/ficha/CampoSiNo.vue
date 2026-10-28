@@ -53,4 +53,9 @@ function elegir(valor) {
 .sino button { border-radius: 10px; font-weight: 800; }
 .sino button.si { box-shadow: inset 0 -3px 0 #0B163A; }
 .sino button.no { box-shadow: inset 0 -3px 0 #C5CEDB; }
+/* Tablet: Sí / No grandes para el dedo. */
+@media (pointer: coarse) and (min-width: 600px) {
+  .sino { padding: 4px; }
+  .sino button { min-width: 80px; height: 52px; font-size: 18px; }
+}
 </style>
